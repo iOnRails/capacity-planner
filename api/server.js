@@ -159,8 +159,11 @@ app.put('/api/verticals/:key/state', (req, res) => {
   res.json({ success: true });
 });
 
-// ── Save projects for a vertical ──
-app.put('/api/verticals/:key/projects', (req, res) => {
+// ── Save projects for a vertical (POST + PUT for compatibility) ──
+app.post('/api/verticals/:key/projects', saveProjectsHandler);
+app.put('/api/verticals/:key/projects', saveProjectsHandler);
+
+function saveProjectsHandler(req, res) {
   const { projects } = req.body;
   if (!Array.isArray(projects)) {
     return res.status(400).json({ error: 'Projects must be an array' });
@@ -207,7 +210,7 @@ app.put('/api/verticals/:key/projects', (req, res) => {
     console.error('Save projects error:', err);
     res.status(500).json({ error: 'Failed to save projects' });
   }
-});
+}
 
 // ── Start ──
 app.listen(PORT, '0.0.0.0', () => {
