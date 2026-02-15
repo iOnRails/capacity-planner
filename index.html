@@ -1167,6 +1167,7 @@ function App() {
   };
 
   const renderGhostBlock = (p, splitSizing, trackKey, homeTrack) => {
+    if (!p || !splitSizing) return null;
     const totalSp = (splitSizing.backend || 0) + (splitSizing.frontend || 0) + (splitSizing.natives || 0) + (splitSizing.qa || 0);
     const w = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, totalSp * PX_PER_SPRINT));
     const homeLabel = TRACKS.find(t => t.key === homeTrack)?.label || homeTrack;
@@ -1207,13 +1208,15 @@ function App() {
   const ghostsByTrack = useMemo(() => {
     const result = {};
     for (const t of TRACKS) result[t.key] = [];
+    if (!splits || typeof splits !== 'object') return result;
     for (const [pidStr, trackSplits] of Object.entries(splits)) {
+      if (!trackSplits || typeof trackSplits !== 'object') continue;
       const pid = parseInt(pidStr) || pidStr;
       const p = projectById[pid];
       if (!p) continue;
       for (const [targetTrack, sizing] of Object.entries(trackSplits)) {
-        if (result[targetTrack]) {
-          result[targetTrack].push({ project: p, sizing, homeTrack: getProjectHomeTrack(pid)?.key });
+        if (result[targetTrack] && sizing && typeof sizing === 'object') {
+          result[targetTrack].push({ project: p, sizing, homeTrack: getProjectHomeTrack(pid)?.key || '' });
         }
       }
     }
@@ -1269,6 +1272,7 @@ function App() {
       }, { backend: 0, frontend: 0, natives: 0, qa: 0 });
       // Add ghost split sizings
       const fromGhosts = (ghostsByTrack[t.key] || []).reduce((acc, g) => {
+        if (!g || !g.sizing) return acc;
         return { backend: acc.backend + (g.sizing.backend || 0), frontend: acc.frontend + (g.sizing.frontend || 0), natives: acc.natives + (g.sizing.natives || 0), qa: acc.qa + (g.sizing.qa || 0) };
       }, { backend: 0, frontend: 0, natives: 0, qa: 0 });
       result[t.key] = {
@@ -1312,6 +1316,7 @@ function App() {
       }
       // Check ghost blocks
       for (const g of (ghostsByTrack[t.key] || [])) {
+        if (!g || !g.sizing) continue;
         for (const d of ['backend','frontend','natives','qa']) running[d] += (g.sizing[d] || 0);
         const exceeded = [];
         for (const d of ['backend','frontend','natives','qa']) {
