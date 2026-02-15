@@ -1206,21 +1206,35 @@ function App() {
 
   // Compute ghost blocks per track
   const ghostsByTrack = useMemo(() => {
-    const result = {};
-    for (const t of TRACKS) result[t.key] = [];
-    if (!splits || typeof splits !== 'object') return result;
-    for (const [pidStr, trackSplits] of Object.entries(splits)) {
-      if (!trackSplits || typeof trackSplits !== 'object') continue;
-      const pid = parseInt(pidStr) || pidStr;
-      const p = projectById[pid];
-      if (!p) continue;
-      for (const [targetTrack, sizing] of Object.entries(trackSplits)) {
-        if (result[targetTrack] && sizing && typeof sizing === 'object') {
-          result[targetTrack].push({ project: p, sizing, homeTrack: getProjectHomeTrack(pid)?.key || '' });
+    try {
+      const result = {};
+      for (const t of TRACKS) result[t.key] = [];
+      if (!splits || typeof splits !== 'object' || Array.isArray(splits)) return result;
+      const entries = Object.entries(splits);
+      for (let ei = 0; ei < entries.length; ei++) {
+        const pidStr = entries[ei][0];
+        const trackSplits = entries[ei][1];
+        if (!trackSplits || typeof trackSplits !== 'object') continue;
+        const pid = parseInt(pidStr);
+        if (isNaN(pid)) continue;
+        const p = projectById[pid];
+        if (!p) continue;
+        const tsEntries = Object.entries(trackSplits);
+        for (let ti = 0; ti < tsEntries.length; ti++) {
+          const targetTrack = tsEntries[ti][0];
+          const sizing = tsEntries[ti][1];
+          if (result[targetTrack] && sizing && typeof sizing === 'object') {
+            result[targetTrack].push({ project: p, sizing, homeTrack: getProjectHomeTrack(pid)?.key || '' });
+          }
         }
       }
+      return result;
+    } catch (err) {
+      console.error('ghostsByTrack error:', err, 'splits:', JSON.stringify(splits));
+      const result = {};
+      for (const t of TRACKS) result[t.key] = [];
+      return result;
     }
-    return result;
   }, [splits, projectById, getProjectHomeTrack]);
 
   const FilterDropdown = ({ filterKey, label }) => {
@@ -1252,6 +1266,15 @@ function App() {
     for (const p of currentData) m[p.id] = p;
     return m;
   }, [currentData]);
+
+  // Debug: log once to find the '11' error
+  useEffect(() => {
+    if (currentData.length > 0) {
+      console.log('DEBUG splits type:', typeof splits, 'value:', JSON.stringify(splits).slice(0,200));
+      console.log('DEBUG projectById sample:', typeof projectById, Object.keys(projectById).slice(0,5));
+      console.log('DEBUG tracks:', typeof tracks, Object.keys(tracks));
+    }
+  }, [currentData.length > 0]);
 
   const trackProjects = useMemo(() => {
     const result = {};
