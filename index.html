@@ -620,12 +620,19 @@ function App() {
     try {
       setSaving(true);
       setSaveStatus(null);
-      const res = await fetch(`${API_URL}/api/verticals/${key}/projects`, {
+      const url = `${API_URL}/api/verticals/${encodeURIComponent(key)}/projects`;
+      console.log('Saving to:', url, 'projects:', projects.length);
+      const res = await fetch(url, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projects }),
       });
-      const data = await res.json();
+      let data;
+      try { data = await res.json(); } catch (jsonErr) {
+        const text = await res.text().catch(() => '');
+        setSaveStatus({ type: 'error', msg: `Save failed (${res.status}): not JSON - ${text.slice(0,100)}` });
+        return;
+      }
       if (!res.ok) {
         setSaveStatus({ type: 'error', msg: `Save failed: ${data.error || res.status}` });
         console.error('Save projects failed:', data);
