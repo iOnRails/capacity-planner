@@ -29,7 +29,7 @@ function getProjectsFile(key) { return `projects_${key}.json`; }
 function getStateFile(key) { return `state_${key}.json`; }
 
 const DEFAULT_CAPACITY = { backend: 40, frontend: 30, natives: 25, qa: 20 };
-const DEFAULT_TRACKS = { 'core-bonus': [], 'gateway': [] };
+const DEFAULT_TRACKS = { 'core-bonus': [], 'gateway': [], 'seo-aff': [] };
 
 // ── Seed Growth data if empty ──
 if (!fs.existsSync(path.join(DATA_DIR, getProjectsFile('growth')))) {

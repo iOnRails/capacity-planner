@@ -563,6 +563,7 @@ function migrateTracks(tracks) {
   // Ensure all expected keys exist
   if (!result['core-bonus']) result['core-bonus'] = [];
   if (!result['gateway']) result['gateway'] = [];
+  if (!result['seo-aff']) result['seo-aff'] = [];
   return result;
 }
 
@@ -589,13 +590,14 @@ function App() {
   const TRACKS = [
     { key: 'core-bonus', label: 'Core Bonus', gradient: 'linear-gradient(180deg, #fdcb6ecc, #fdcb6e88)', borderColor: 'rgba(253,203,110,0.4)' },
     { key: 'gateway', label: 'Gateway', gradient: 'linear-gradient(180deg, #e84393cc, #e8439388)', borderColor: 'rgba(232,67,147,0.4)' },
+    { key: 'seo-aff', label: 'SEO & AFF', gradient: 'linear-gradient(180deg, #00b894cc, #00b89488)', borderColor: 'rgba(0,184,148,0.4)' },
   ];
 
   // Data loaded from API
   const [verticalData, setVerticalData] = useState({});
   const [verticalStates, setVerticalStates] = useState(() => {
     const state = {};
-    for (const v of VERTICALS) state[v.key] = { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gateway': [] } };
+    for (const v of VERTICALS) state[v.key] = { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gateway': [], 'seo-aff': [] } };
     return state;
   });
 
@@ -611,7 +613,7 @@ function App() {
         ...prev,
         [key]: {
           capacity: stateRes.capacity || {...DEFAULT_CAPACITY},
-          tracks: migrateTracks(stateRes.tracks || { 'core-bonus': [], 'gateway': [] }),
+          tracks: migrateTracks(stateRes.tracks || { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }),
         }
       }));
     } catch (e) {
@@ -691,7 +693,7 @@ function App() {
   }, [saveProjects]);
 
   const currentData = verticalData[activeVertical] || [];
-  const currentState = verticalStates[activeVertical] || { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gateway': [] } };
+  const currentState = verticalStates[activeVertical] || { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gateway': [], 'seo-aff': [] } };
   const capacity = currentState.capacity;
   const tracks = currentState.tracks;
 
