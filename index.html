@@ -348,6 +348,70 @@
     height: 3px; width: 100%; opacity: 0.8;
   }
 
+  /* ── Ghost block (split allocation) ── */
+  .project-block.ghost-block {
+    border: 2px dashed rgba(162,155,254,0.6) !important;
+    opacity: 0.75;
+    background: repeating-linear-gradient(
+      -45deg, transparent, transparent 4px, rgba(0,0,0,0.08) 4px, rgba(0,0,0,0.08) 8px
+    ) !important;
+  }
+  .project-block.ghost-block:hover { opacity: 0.9; }
+  .ghost-origin {
+    position: absolute; bottom: 3px; left: 6px; font-size: 8px; font-weight: 700;
+    color: rgba(162,155,254,0.9); pointer-events: none; letter-spacing: 0.3px;
+  }
+  .ghost-link-icon {
+    position: absolute; top: 3px; left: 3px; font-size: 10px; z-index: 10;
+    pointer-events: none;
+  }
+
+  /* ── Split button on block ── */
+  .block-split {
+    position: absolute; top: 4px; right: 26px; width: 20px; height: 20px;
+    border-radius: 50%; border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; opacity: 0; transition: opacity 0.15s;
+    background: rgba(0,0,0,0.5); color: white;
+  }
+  .project-block:hover .block-split { opacity: 1; }
+  .block-split:hover { background: var(--accent); }
+
+  /* ── Split modal ── */
+  .split-modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    z-index: 300; display: flex; align-items: center; justify-content: center;
+  }
+  .split-modal {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px; min-width: 340px;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+  }
+  .split-modal h3 { font-size: 14px; margin-bottom: 12px; }
+  .split-modal-fields { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+  .split-field-row { display: flex; align-items: center; gap: 10px; }
+  .split-field-row label { width: 70px; font-size: 12px; font-weight: 500; }
+  .split-field-row select, .split-field-row input {
+    flex: 1; padding: 6px 8px; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 4px; color: var(--text); font-size: 12px;
+  }
+  .split-modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+  .split-modal-actions button {
+    padding: 6px 16px; border-radius: 6px; border: 1px solid var(--border);
+    font-size: 12px; cursor: pointer; transition: all 0.15s;
+  }
+  .split-modal-actions .btn-save { background: var(--accent); color: white; border-color: var(--accent); }
+  .split-modal-actions .btn-save:hover { opacity: 0.8; }
+  .split-modal-actions .btn-cancel { background: var(--surface); color: var(--text); }
+  .split-modal-actions .btn-cancel:hover { background: var(--surface2); }
+  .split-modal-actions .btn-remove { background: var(--red); color: white; border-color: var(--red); }
+  .split-modal-actions .btn-remove:hover { opacity: 0.8; }
+  .split-existing { margin-bottom: 12px; padding: 8px; background: var(--bg); border-radius: 6px; }
+  .split-existing-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 4px 0; font-size: 11px;
+  }
+
   /* ── Move button on block ── */
   .block-move {
     position: absolute; top: 4px; right: 4px; width: 20px; height: 20px;
@@ -641,6 +705,7 @@ function App() {
   const [bulkValue, setBulkValue] = useState('');
   const [saveStatus, setSaveStatus] = useState(null); // {type: 'ok'|'error', msg: '...'}
   const [buffer, setBuffer] = useState({ backend: 0, frontend: 0, natives: 0, qa: 0 });
+  const [splitModal, setSplitModal] = useState(null); // { projectId, projectName, existing: {...} }
 
   const TRACKS = [
     { key: 'core-bonus', label: 'Core Bonus', gradient: 'linear-gradient(180deg, #fdcb6ecc, #fdcb6e88)', borderColor: 'rgba(253,203,110,0.4)' },
@@ -652,7 +717,7 @@ function App() {
   const [verticalData, setVerticalData] = useState({});
   const [verticalStates, setVerticalStates] = useState(() => {
     const state = {};
-    for (const v of VERTICALS) state[v.key] = { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }, trackCapacity: JSON.parse(JSON.stringify(DEFAULT_TRACK_CAPACITY)) };
+    for (const v of VERTICALS) state[v.key] = { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }, trackCapacity: JSON.parse(JSON.stringify(DEFAULT_TRACK_CAPACITY)), splits: {} };
     return state;
   });
 
@@ -670,6 +735,7 @@ function App() {
           capacity: stateRes.capacity || {...DEFAULT_CAPACITY},
           tracks: migrateTracks(stateRes.tracks || { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }),
           trackCapacity: migrateTrackCapacity(stateRes.trackCapacity),
+          splits: stateRes.splits || {},
         }
       }));
     } catch (e) {
@@ -693,7 +759,7 @@ function App() {
       await fetch(`${API_URL}/api/verticals/${key}/state`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity }),
+        body: JSON.stringify({ capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits }),
       });
     } catch (e) {
       console.error('Failed to save state:', e);
@@ -749,10 +815,11 @@ function App() {
   }, [saveProjects]);
 
   const currentData = verticalData[activeVertical] || [];
-  const currentState = verticalStates[activeVertical] || { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }, trackCapacity: JSON.parse(JSON.stringify(DEFAULT_TRACK_CAPACITY)) };
+  const currentState = verticalStates[activeVertical] || { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }, trackCapacity: JSON.parse(JSON.stringify(DEFAULT_TRACK_CAPACITY)), splits: {} };
   const capacity = currentState.capacity;
   const tracks = currentState.tracks;
   const trackCapacity = currentState.trackCapacity || JSON.parse(JSON.stringify(DEFAULT_TRACK_CAPACITY));
+  const splits = currentState.splits || {};
 
   const roadmapIds = useMemo(() => {
     const s = new Set();
@@ -784,6 +851,32 @@ function App() {
         ...prev,
         [activeVertical]: { ...prev[activeVertical], trackCapacity: newTC }
       };
+      debouncedSave(activeVertical, newState[activeVertical]);
+      return newState;
+    });
+  };
+
+  const saveSplit = (projectId, targetTrack, sizings) => {
+    setVerticalStates(prev => {
+      const prevSplits = { ...(prev[activeVertical].splits || {}) };
+      if (!prevSplits[projectId]) prevSplits[projectId] = {};
+      prevSplits[projectId] = { ...prevSplits[projectId], [targetTrack]: sizings };
+      const newState = { ...prev, [activeVertical]: { ...prev[activeVertical], splits: prevSplits } };
+      debouncedSave(activeVertical, newState[activeVertical]);
+      return newState;
+    });
+  };
+
+  const removeSplit = (projectId, targetTrack) => {
+    setVerticalStates(prev => {
+      const prevSplits = { ...(prev[activeVertical].splits || {}) };
+      if (prevSplits[projectId]) {
+        const updated = { ...prevSplits[projectId] };
+        delete updated[targetTrack];
+        if (Object.keys(updated).length === 0) delete prevSplits[projectId];
+        else prevSplits[projectId] = updated;
+      }
+      const newState = { ...prev, [activeVertical]: { ...prev[activeVertical], splits: prevSplits } };
       debouncedSave(activeVertical, newState[activeVertical]);
       return newState;
     });
@@ -1015,12 +1108,21 @@ function App() {
     );
   };
 
+  // Find which track a project primarily lives in
+  const getProjectHomeTrack = useCallback((projectId) => {
+    for (const t of TRACKS) {
+      if ((tracks[t.key] || []).includes(projectId)) return t;
+    }
+    return null;
+  }, [tracks]);
+
   const renderBlock = (p, lane, trackKey, blockIndex) => {
     const s = projectSprints(p);
     const w = getBlockWidth(p);
     const isTrack = lane === 'roadmap' && trackKey;
     const overflowDisciplines = (isTrack && trackOverflow[trackKey] && trackOverflow[trackKey][p.id]) || null;
     const isOverflow = overflowDisciplines && overflowDisciplines.length > 0;
+    const hasSplits = splits[p.id] && Object.keys(splits[p.id]).length > 0;
     return (
       <div key={p.id}
         className={`project-block ${p.inProgress ? 'in-progress' : ''} ${isOverflow ? 'overflow-block' : ''}`}
@@ -1040,6 +1142,7 @@ function App() {
             ⚠ {overflowDisciplines.map(d => d.charAt(0).toUpperCase()).join('·')}
           </div>
         )}
+        {hasSplits && <div className="ghost-link-icon" title="Has split allocations">🔗</div>}
         <div className="block-content">
           <div className="block-title">{p.subTask}</div>
           <div className="block-bottom">
@@ -1047,6 +1150,13 @@ function App() {
             <span className="block-sprints">{s.total}sp</span>
           </div>
         </div>
+        {isTrack && (
+          <button className="block-split"
+            onClick={(e) => { e.stopPropagation(); setSplitModal({ projectId: p.id, projectName: p.subTask, homeTrack: trackKey }); }}
+            title="Split to another swimlane">
+            ⑂
+          </button>
+        )}
         <button className="block-move"
           onClick={(e) => { e.stopPropagation(); lane === 'backlog' ? moveToTrack(p.id, 'core-bonus') : moveToBacklog(p.id); }}
           title={lane === 'backlog' ? 'Add to Roadmap' : 'Remove from Roadmap'}>
@@ -1055,6 +1165,60 @@ function App() {
       </div>
     );
   };
+
+  const renderGhostBlock = (p, splitSizing, trackKey, homeTrack) => {
+    const totalSp = (splitSizing.backend || 0) + (splitSizing.frontend || 0) + (splitSizing.natives || 0) + (splitSizing.qa || 0);
+    const w = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, totalSp * PX_PER_SPRINT));
+    const homeLabel = TRACKS.find(t => t.key === homeTrack)?.label || homeTrack;
+    // Check overflow for ghost blocks too
+    const overflowDisciplines = (trackOverflow[trackKey] && trackOverflow[trackKey][`ghost-${p.id}`]) || null;
+    const isOverflow = overflowDisciplines && overflowDisciplines.length > 0;
+    return (
+      <div key={`ghost-${p.id}`}
+        className={`project-block ghost-block ${isOverflow ? 'overflow-block' : ''}`}
+        style={{ width: w, height: BLOCK_HEIGHT, background: getBlockBg(p.pillar) }}
+        onMouseEnter={(e) => handleMouseEnter(e, p)}
+        onMouseLeave={handleMouseLeave}
+      >
+        <div className="ghost-link-icon">🔗</div>
+        {isOverflow && (
+          <div className="overflow-badge" style={{left:'auto',right:3}} title={`Exceeds ${overflowDisciplines.join(', ')} capacity`}>
+            ⚠ {overflowDisciplines.map(d => d.charAt(0).toUpperCase()).join('·')}
+          </div>
+        )}
+        <div className="block-content">
+          <div className="block-title">{p.subTask}</div>
+          <div className="block-bottom">
+            <span className="block-jira">{p.nvrd}</span>
+            <span className="block-sprints">{totalSp}sp</span>
+          </div>
+        </div>
+        <div className="ghost-origin">↗ {homeLabel}</div>
+        <button className="block-move"
+          onClick={(e) => { e.stopPropagation(); removeSplit(p.id, trackKey); }}
+          title="Remove split">
+          ✕
+        </button>
+      </div>
+    );
+  };
+
+  // Compute ghost blocks per track
+  const ghostsByTrack = useMemo(() => {
+    const result = {};
+    for (const t of TRACKS) result[t.key] = [];
+    for (const [pidStr, trackSplits] of Object.entries(splits)) {
+      const pid = parseInt(pidStr) || pidStr;
+      const p = projectById[pid];
+      if (!p) continue;
+      for (const [targetTrack, sizing] of Object.entries(trackSplits)) {
+        if (result[targetTrack]) {
+          result[targetTrack].push({ project: p, sizing, homeTrack: getProjectHomeTrack(pid)?.key });
+        }
+      }
+    }
+    return result;
+  }, [splits, projectById, getProjectHomeTrack]);
 
   const FilterDropdown = ({ filterKey, label }) => {
     const values = uniqueValues[filterKey];
@@ -1095,17 +1259,27 @@ function App() {
     return result;
   }, [tracks, projectById, filterProjects, currentData]);
 
-  // Per-track used capacity
+  // Per-track used capacity (including ghost splits)
   const trackUsed = useMemo(() => {
     const result = {};
     for (const t of TRACKS) {
-      result[t.key] = (trackProjects[t.key] || []).reduce((acc, p) => {
+      const fromProjects = (trackProjects[t.key] || []).reduce((acc, p) => {
         const s = projectSprints(p);
         return { backend: acc.backend + s.backend, frontend: acc.frontend + s.frontend, natives: acc.natives + s.natives, qa: acc.qa + s.qa };
       }, { backend: 0, frontend: 0, natives: 0, qa: 0 });
+      // Add ghost split sizings
+      const fromGhosts = (ghostsByTrack[t.key] || []).reduce((acc, g) => {
+        return { backend: acc.backend + (g.sizing.backend || 0), frontend: acc.frontend + (g.sizing.frontend || 0), natives: acc.natives + (g.sizing.natives || 0), qa: acc.qa + (g.sizing.qa || 0) };
+      }, { backend: 0, frontend: 0, natives: 0, qa: 0 });
+      result[t.key] = {
+        backend: fromProjects.backend + fromGhosts.backend,
+        frontend: fromProjects.frontend + fromGhosts.frontend,
+        natives: fromProjects.natives + fromGhosts.natives,
+        qa: fromProjects.qa + fromGhosts.qa,
+      };
     }
     return result;
-  }, [trackProjects, projectSprints]);
+  }, [trackProjects, projectSprints, ghostsByTrack]);
 
   // Unallocated capacity per discipline
   const unallocated = useMemo(() => {
@@ -1126,6 +1300,7 @@ function App() {
       if (!hasAllocation) { result[t.key] = {}; continue; }
       const running = { backend:0, frontend:0, natives:0, qa:0 };
       const overflows = {};
+      // Check real projects
       for (const p of (trackProjects[t.key] || [])) {
         const s = projectSprints(p);
         for (const d of ['backend','frontend','natives','qa']) running[d] += s[d];
@@ -1135,10 +1310,19 @@ function App() {
         }
         if (exceeded.length > 0) overflows[p.id] = exceeded;
       }
+      // Check ghost blocks
+      for (const g of (ghostsByTrack[t.key] || [])) {
+        for (const d of ['backend','frontend','natives','qa']) running[d] += (g.sizing[d] || 0);
+        const exceeded = [];
+        for (const d of ['backend','frontend','natives','qa']) {
+          if (tc[d] > 0 && running[d] > tc[d]) exceeded.push(d);
+        }
+        if (exceeded.length > 0) overflows[`ghost-${g.project.id}`] = exceeded;
+      }
       result[t.key] = overflows;
     }
     return result;
-  }, [trackProjects, trackCapacity, projectSprints]);
+  }, [trackProjects, trackCapacity, projectSprints, ghostsByTrack]);
 
   const activeV = VERTICALS.find(v => v.key === activeVertical);
   const roadmapTotalSprints = currentData.filter(p => roadmapIds.has(p.id)).reduce((s, p) => s + projectSprints(p).total, 0);
@@ -1637,8 +1821,9 @@ function App() {
                     onDragLeave={handleDragLeave}
                     onDrop={(e) => handleDropOnTrack(e, track.key)}
                     style={{borderColor: track.borderColor}}>
-                    {(trackProjects[track.key] || []).length === 0 && <div className="track-empty">Drag projects here</div>}
+                    {(trackProjects[track.key] || []).length === 0 && (ghostsByTrack[track.key] || []).length === 0 && <div className="track-empty">Drag projects here</div>}
                     {(trackProjects[track.key] || []).map((p, idx) => renderBlock(p, 'roadmap', track.key, idx))}
+                    {(ghostsByTrack[track.key] || []).map(g => renderGhostBlock(g.project, g.sizing, track.key, g.homeTrack))}
                   </div>
                 </div>
               </React.Fragment>
@@ -1685,6 +1870,71 @@ function App() {
 
       {renderTooltip()}
       </>)}
+
+      {splitModal && (() => {
+        const { projectId, projectName, homeTrack } = splitModal;
+        const existingSplits = splits[projectId] || {};
+        const otherTracks = TRACKS.filter(t => t.key !== homeTrack);
+        const [targetTrack, setTargetTrack] = [
+          splitModal._targetTrack || otherTracks[0]?.key,
+          (v) => setSplitModal(prev => ({ ...prev, _targetTrack: v }))
+        ];
+        const [splitSizing, setSplitSizing] = [
+          splitModal._sizing || existingSplits[targetTrack] || { backend: 0, frontend: 0, natives: 0, qa: 0 },
+          (v) => setSplitModal(prev => ({ ...prev, _sizing: typeof v === 'function' ? v(prev._sizing || existingSplits[prev._targetTrack || otherTracks[0]?.key] || { backend:0,frontend:0,natives:0,qa:0 }) : v }))
+        ];
+        return (
+          <div className="split-modal-overlay" onClick={() => setSplitModal(null)}>
+            <div className="split-modal" onClick={e => e.stopPropagation()}>
+              <h3>Split: {projectName}</h3>
+              {Object.keys(existingSplits).length > 0 && (
+                <div className="split-existing">
+                  <div style={{fontSize:10,color:'var(--muted)',marginBottom:4,fontWeight:600}}>EXISTING SPLITS</div>
+                  {Object.entries(existingSplits).map(([tk, sz]) => {
+                    const tLabel = TRACKS.find(t => t.key === tk)?.label || tk;
+                    const total = (sz.backend||0) + (sz.frontend||0) + (sz.natives||0) + (sz.qa||0);
+                    return (
+                      <div key={tk} className="split-existing-item">
+                        <span>{tLabel}: B{sz.backend||0} F{sz.frontend||0} N{sz.natives||0} Q{sz.qa||0} = {total}sp</span>
+                        <button className="btn-sm" style={{fontSize:10,padding:'2px 6px',background:'var(--red)',color:'white',border:'none',borderRadius:3,cursor:'pointer'}}
+                          onClick={() => { removeSplit(projectId, tk); setSplitModal(prev => ({...prev})); }}>Remove</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <div className="split-modal-fields">
+                <div className="split-field-row">
+                  <label>Target Lane</label>
+                  <select value={targetTrack} onChange={e => {
+                    const newTrack = e.target.value;
+                    setSplitModal(prev => ({ ...prev, _targetTrack: newTrack, _sizing: existingSplits[newTrack] || { backend:0, frontend:0, natives:0, qa:0 } }));
+                  }}>
+                    {otherTracks.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+                  </select>
+                </div>
+                {['backend','frontend','natives','qa'].map(d => (
+                  <div key={d} className="split-field-row">
+                    <label>{d.charAt(0).toUpperCase()+d.slice(1)}</label>
+                    <input type="number" min="0" step="0.5" value={splitSizing[d] || 0}
+                      onChange={e => setSplitSizing(prev => ({...prev, [d]: parseFloat(e.target.value)||0}))} />
+                    <span style={{fontSize:10,color:'var(--muted)'}}> sprints</span>
+                  </div>
+                ))}
+              </div>
+              <div className="split-modal-actions">
+                <button className="btn-cancel" onClick={() => setSplitModal(null)}>Cancel</button>
+                <button className="btn-save" onClick={() => {
+                  const finalTarget = splitModal._targetTrack || otherTracks[0]?.key;
+                  const finalSizing = splitModal._sizing || existingSplits[finalTarget] || { backend:0,frontend:0,natives:0,qa:0 };
+                  saveSplit(projectId, finalTarget, finalSizing);
+                  setSplitModal(null);
+                }}>Save Split</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </>
   );
 }
