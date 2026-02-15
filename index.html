@@ -372,6 +372,70 @@
     width: 10px; height: 10px; border-radius: 3px;
   }
 
+  /* ── Tab Switcher ── */
+  .tab-switcher { display: flex; gap: 4px; background: var(--bg); border-radius: 8px; padding: 3px; }
+  .tab-btn {
+    padding: 6px 16px; border: none; border-radius: 6px; cursor: pointer;
+    font-size: 12px; font-weight: 600; transition: all 0.15s;
+    background: transparent; color: var(--text2);
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { background: var(--accent); color: white; }
+
+  /* ── Projects Table ── */
+  .projects-container {
+    padding: 20px 28px; overflow-y: auto;
+    max-height: calc(100vh - 70px);
+  }
+  .projects-toolbar {
+    display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap;
+  }
+  .projects-table {
+    width: 100%; border-collapse: collapse; font-size: 12px;
+  }
+  .projects-table th {
+    text-align: left; padding: 8px 6px; border-bottom: 2px solid var(--border);
+    background: var(--surface); font-size: 10px; text-transform: uppercase;
+    font-weight: 700; letter-spacing: 0.5px; color: var(--text2);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .projects-table td {
+    padding: 2px 3px; border-bottom: 1px solid var(--border);
+    max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .projects-table tbody tr:hover { background: var(--surface2); }
+  .projects-table tbody tr.editing-row { background: rgba(108,92,231,0.08); }
+
+  .cell-view {
+    padding: 4px 6px; cursor: pointer; border-radius: 4px;
+    min-height: 28px; display: flex; align-items: center;
+  }
+  .cell-view:hover { background: rgba(108,92,231,0.1); }
+  .cell-input {
+    width: 100%; padding: 4px 6px; background: var(--bg);
+    border: 1px solid var(--accent); border-radius: 4px;
+    color: var(--text); font-size: 12px; outline: none;
+    font-family: inherit;
+  }
+  .cell-select {
+    width: 100%; padding: 4px 4px; background: var(--bg);
+    border: 1px solid var(--accent); border-radius: 4px;
+    color: var(--text); font-size: 12px; outline: none; cursor: pointer;
+  }
+  .btn-icon {
+    width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--surface2); color: var(--text2); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; transition: all 0.15s;
+  }
+  .btn-icon:hover { border-color: var(--accent); color: var(--text); }
+  .btn-icon.danger:hover { border-color: var(--red); color: var(--red); background: rgba(225,112,85,0.1); }
+
+  .project-count-badge {
+    font-size: 11px; color: var(--text2); padding: 4px 10px;
+    background: var(--surface); border-radius: 6px;
+  }
+
   /* ── Drop Indicator ── */
   .drop-indicator {
     width: 3px; min-height: 70px; background: var(--accent);
@@ -440,7 +504,9 @@ function App() {
   const [tooltip, setTooltip] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [uploadStatus, setUploadStatus] = useState(null);
+  const [activeTab, setActiveTab] = useState('planner');
+  const [editingCell, setEditingCell] = useState(null);
+  const [editValue, setEditValue] = useState('');
 
   const TRACKS = [
     { key: 'core-bonus', label: 'Core Bonus', gradient: 'linear-gradient(180deg, #fdcb6ecc, #fdcb6e88)', borderColor: 'rgba(253,203,110,0.4)' },
@@ -505,29 +571,28 @@ function App() {
     saveTimer.current = setTimeout(() => saveState(key, state), 800);
   }, [saveState]);
 
-  // Upload Excel
-  const fileInputRef = useRef(null);
-  const handleUploadExcel = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setUploadStatus('Uploading...');
+  // Save projects to API
+  const projectSaveTimer = useRef(null);
+  const saveProjects = useCallback(async (key, projects) => {
     try {
-      const form = new FormData();
-      form.append('file', file);
-      const res = await fetch(`${API_URL}/api/verticals/${activeVertical}/upload`, { method: 'POST', body: form });
-      const data = await res.json();
-      if (data.success) {
-        setUploadStatus(`Imported ${data.projectsAdded} projects` + (data.warnings.length ? ` (${data.warnings.length} warnings)` : ''));
-        await loadVertical(activeVertical);
-      } else {
-        setUploadStatus(`Error: ${data.error}`);
-      }
-    } catch (err) {
-      setUploadStatus(`Upload failed: ${err.message}`);
+      setSaving(true);
+      const res = await fetch(`${API_URL}/api/verticals/${key}/projects`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projects }),
+      });
+      if (!res.ok) console.error('Save projects failed:', await res.json());
+    } catch (e) {
+      console.error('Save projects error:', e);
+    } finally {
+      setSaving(false);
     }
-    e.target.value = '';
-    setTimeout(() => setUploadStatus(null), 4000);
-  };
+  }, []);
+
+  const debouncedSaveProjects = useCallback((key, projects) => {
+    if (projectSaveTimer.current) clearTimeout(projectSaveTimer.current);
+    projectSaveTimer.current = setTimeout(() => saveProjects(key, projects), 800);
+  }, [saveProjects]);
 
   const currentData = verticalData[activeVertical] || [];
   const currentState = verticalStates[activeVertical] || { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gamification': [] } };
@@ -832,6 +897,138 @@ function App() {
   const activeV = VERTICALS.find(v => v.key === activeVertical);
   const roadmapTotalSprints = currentData.filter(p => roadmapIds.has(p.id)).reduce((s, p) => s + projectSprints(p).total, 0);
 
+  // ── Projects Table Component ──
+  const VALID_SIZES = ['', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'];
+  const VALID_IMPACTS = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'];
+
+  const updateProject = (projectId, field, value) => {
+    const updated = currentData.map(p => p.id === projectId ? { ...p, [field]: value } : p);
+    setVerticalData(prev => ({ ...prev, [activeVertical]: updated }));
+    debouncedSaveProjects(activeVertical, updated);
+    setEditingCell(null);
+  };
+
+  const addProject = () => {
+    const maxId = currentData.length > 0 ? Math.max(...currentData.map(p => p.id)) : 0;
+    const newProject = {
+      id: maxId + 1, nvrd: '', masterEpic: '', subTask: 'New Project',
+      pillar: '', targetMarket: '', targetKPI: '', impact: 'M',
+      backend: '', frontend: '', natives: '', qa: '', inProgress: false,
+    };
+    const updated = [...currentData, newProject];
+    setVerticalData(prev => ({ ...prev, [activeVertical]: updated }));
+    debouncedSaveProjects(activeVertical, updated);
+    setEditingCell({ id: newProject.id, field: 'subTask' });
+    setEditValue('New Project');
+  };
+
+  const deleteProject = (projectId) => {
+    if (!window.confirm('Delete this project?')) return;
+    const updated = currentData.filter(p => p.id !== projectId);
+    setVerticalData(prev => ({ ...prev, [activeVertical]: updated }));
+    // Also remove from tracks
+    setTracks(prev => removeFromTracks(prev, projectId));
+    debouncedSaveProjects(activeVertical, updated);
+  };
+
+  const startEdit = (id, field, value) => {
+    setEditingCell({ id, field });
+    setEditValue(value || '');
+  };
+
+  const commitEdit = () => {
+    if (editingCell) {
+      updateProject(editingCell.id, editingCell.field, editValue);
+    }
+  };
+
+  const dropdownFields = { impact: VALID_IMPACTS, backend: VALID_SIZES, frontend: VALID_SIZES, natives: VALID_SIZES, qa: VALID_SIZES };
+
+  const renderEditableCell = (p, field) => {
+    const isEditing = editingCell?.id === p.id && editingCell?.field === field;
+    const value = p[field] || '';
+
+    if (isEditing) {
+      if (dropdownFields[field]) {
+        return (
+          <select className="cell-select" value={editValue}
+            onChange={(e) => { updateProject(p.id, field, e.target.value); }}
+            onBlur={() => setEditingCell(null)}
+            onKeyDown={(e) => { if (e.key === 'Escape') setEditingCell(null); }}
+            autoFocus>
+            {dropdownFields[field].map(v => <option key={v} value={v}>{v || '—'}</option>)}
+          </select>
+        );
+      }
+      return (
+        <input className="cell-input" value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onBlur={commitEdit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commitEdit();
+            if (e.key === 'Escape') setEditingCell(null);
+          }}
+          autoFocus />
+      );
+    }
+    return (
+      <div className="cell-view" onClick={() => startEdit(p.id, field, value)}>
+        {value || '—'}
+      </div>
+    );
+  };
+
+  const TABLE_COLS = [
+    { key: 'nvrd', label: 'NVRD', width: '8%' },
+    { key: 'masterEpic', label: 'Epic', width: '12%' },
+    { key: 'subTask', label: 'Sub Task', width: '22%' },
+    { key: 'pillar', label: 'Pillar', width: '9%' },
+    { key: 'targetMarket', label: 'Market', width: '7%' },
+    { key: 'targetKPI', label: 'KPI', width: '8%' },
+    { key: 'impact', label: 'Impact', width: '6%' },
+    { key: 'backend', label: 'BE', width: '5%' },
+    { key: 'frontend', label: 'FE', width: '5%' },
+    { key: 'natives', label: 'Native', width: '5%' },
+    { key: 'qa', label: 'QA', width: '5%' },
+  ];
+
+  const ProjectsTable = () => (
+    <div className="projects-container">
+      <div className="projects-toolbar">
+        <button className="btn btn-primary" onClick={addProject}>+ Add Project</button>
+        <span className="project-count-badge">{currentData.length} projects</span>
+      </div>
+      <table className="projects-table">
+        <thead>
+          <tr>
+            <th style={{width:'3%'}}>#</th>
+            {TABLE_COLS.map(c => <th key={c.key} style={{width:c.width}}>{c.label}</th>)}
+            <th style={{width:'5%'}}></th>
+          </tr>
+        </thead>
+        <tbody>
+          {currentData.map((p, i) => (
+            <tr key={p.id} className={editingCell?.id === p.id ? 'editing-row' : ''}>
+              <td style={{color:'var(--text2)', fontSize:10}}>{i+1}</td>
+              {TABLE_COLS.map(c => <td key={c.key}>{renderEditableCell(p, c.key)}</td>)}
+              <td>
+                <button className="btn-icon danger" onClick={() => deleteProject(p.id)} title="Delete project">
+                  ×
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {currentData.length === 0 && (
+        <div style={{textAlign:'center', padding:'60px 40px', color:'var(--text2)'}}>
+          <p style={{fontSize:16, marginBottom:12}}>No projects yet</p>
+          <p style={{fontSize:13}}>Click <strong>"+ Add Project"</strong> to create your first project.</p>
+        </div>
+      )}
+    </div>
+  );
+
   const renderTooltip = () => {
     if (!tooltip) return null;
     const { p, x, y } = tooltip;
@@ -873,6 +1070,12 @@ function App() {
           {' '}{activeV.label} <span>Capacity Planner</span>
         </h1>
         <div className="header-right">
+          <div className="tab-switcher">
+            <button className={`tab-btn ${activeTab === 'planner' ? 'active' : ''}`}
+              onClick={() => setActiveTab('planner')}>Planner</button>
+            <button className={`tab-btn ${activeTab === 'projects' ? 'active' : ''}`}
+              onClick={() => setActiveTab('projects')}>Projects</button>
+          </div>
           <div className="vertical-selector">
             <label>Vertical</label>
             <select className="vertical-select" value={activeVertical}
@@ -883,12 +1086,7 @@ function App() {
             </select>
           </div>
           {saving && <span style={{fontSize:11, color:'var(--accent2)'}}>Saving...</span>}
-          {uploadStatus && <span style={{fontSize:11, color:'var(--green)', background:'rgba(0,184,148,0.15)', padding:'3px 10px', borderRadius:6}}>{uploadStatus}</span>}
-          <input type="file" ref={fileInputRef} accept=".xlsx,.xls,.csv" onChange={handleUploadExcel} style={{display:'none'}} />
-          <button className="btn" onClick={() => fileInputRef.current?.click()} title="Upload Excel to replace project data">
-            📁 Upload Excel
-          </button>
-          {currentData.length > 0 && (
+          {currentData.length > 0 && activeTab === 'planner' && (
             <span style={{fontSize:12, color:'var(--text2)'}}>
               {roadmapIds.size} in roadmap · {currentData.length - roadmapIds.size} in backlog
             </span>
@@ -901,14 +1099,13 @@ function App() {
           <div className="empty-vertical-icon" style={{animation:'pulse-indicator 1s ease-in-out infinite alternate'}}>⏳</div>
           <h2>Loading {activeV.label} data...</h2>
         </div>
+      ) : activeTab === 'projects' ? (
+        <ProjectsTable />
       ) : currentData.length === 0 ? (
         <div className="empty-vertical">
           <div className="empty-vertical-icon">{activeV.icon}</div>
           <h2>{activeV.label} Backlog</h2>
-          <p>No project data loaded for this vertical yet. Click <strong>Upload Excel</strong> above to import your backlog.</p>
-          <p style={{fontSize:11, color:'var(--text2)'}}>
-            Expected columns: <code>NVRD</code> <code>Master Epic</code> <code>Sub Tasks</code> <code>Pillar</code> <code>Target Market</code> <code>Target KPI</code> <code>Impact</code> <code>Backend</code> <code>Frontend</code> <code>Natives</code> <code>QA</code>
-          </p>
+          <p>No project data loaded for this vertical yet. Switch to the <strong>Projects</strong> tab above to add projects.</p>
         </div>
       ) : (<>
 
