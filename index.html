@@ -305,6 +305,24 @@
   .project-block.dragging { opacity: 0.3; transform: scale(0.95); }
   .project-block.in-progress { box-shadow: inset 0 0 0 2px var(--green); }
 
+  /* ── Overflow indicator ── */
+  .project-block.overflow-block {
+    border: 2px solid #ff4444 !important;
+    box-shadow: 0 0 12px rgba(255,68,68,0.5), inset 0 0 0 1px rgba(255,68,68,0.3);
+    animation: overflow-pulse 1.5s ease-in-out infinite alternate;
+  }
+  @keyframes overflow-pulse {
+    from { box-shadow: 0 0 8px rgba(255,68,68,0.4), inset 0 0 0 1px rgba(255,68,68,0.2); }
+    to { box-shadow: 0 0 16px rgba(255,68,68,0.7), inset 0 0 0 1px rgba(255,68,68,0.4); }
+  }
+  .overflow-badge {
+    position: absolute; top: 3px; left: 3px; z-index: 10;
+    background: #ff4444; color: white; font-size: 8px; font-weight: 800;
+    padding: 2px 5px; border-radius: 3px; letter-spacing: 0.3px;
+    text-shadow: 0 1px 1px rgba(0,0,0,0.3); line-height: 1.2;
+    pointer-events: none;
+  }
+
   .block-content {
     padding: 8px 10px; display: flex; flex-direction: column;
     height: 100%; overflow: hidden;
@@ -1001,9 +1019,11 @@ function App() {
     const s = projectSprints(p);
     const w = getBlockWidth(p);
     const isTrack = lane === 'roadmap' && trackKey;
+    const overflowDisciplines = (isTrack && trackOverflow[trackKey] && trackOverflow[trackKey][p.id]) || null;
+    const isOverflow = overflowDisciplines && overflowDisciplines.length > 0;
     return (
       <div key={p.id}
-        className={`project-block ${p.inProgress ? 'in-progress' : ''}`}
+        className={`project-block ${p.inProgress ? 'in-progress' : ''} ${isOverflow ? 'overflow-block' : ''}`}
         style={{ width: w, height: BLOCK_HEIGHT, background: getBlockBg(p.pillar) }}
         draggable
         onDragStart={(e) => handleDragStart(e, p.id, lane)}
@@ -1015,6 +1035,11 @@ function App() {
           onDrop: (e) => handleDropOnBlock(e, trackKey, p.id, blockIndex),
         } : {})}
       >
+        {isOverflow && (
+          <div className="overflow-badge" title={`Exceeds ${overflowDisciplines.join(', ')} capacity`}>
+            ⚠ {overflowDisciplines.map(d => d.charAt(0).toUpperCase()).join('·')}
+          </div>
+        )}
         <div className="block-content">
           <div className="block-title">{p.subTask}</div>
           <div className="block-bottom">
@@ -1091,6 +1116,29 @@ function App() {
     }
     return result;
   }, [capacity, trackCapacity]);
+
+  // Per-track overflow detection: which projects push a discipline over the track's allocation
+  const trackOverflow = useMemo(() => {
+    const result = {};
+    for (const t of TRACKS) {
+      const tc = trackCapacity[t.key] || { backend:0, frontend:0, natives:0, qa:0 };
+      const hasAllocation = Object.values(tc).some(v => v > 0);
+      if (!hasAllocation) { result[t.key] = {}; continue; }
+      const running = { backend:0, frontend:0, natives:0, qa:0 };
+      const overflows = {};
+      for (const p of (trackProjects[t.key] || [])) {
+        const s = projectSprints(p);
+        for (const d of ['backend','frontend','natives','qa']) running[d] += s[d];
+        const exceeded = [];
+        for (const d of ['backend','frontend','natives','qa']) {
+          if (tc[d] > 0 && running[d] > tc[d]) exceeded.push(d);
+        }
+        if (exceeded.length > 0) overflows[p.id] = exceeded;
+      }
+      result[t.key] = overflows;
+    }
+    return result;
+  }, [trackProjects, trackCapacity, projectSprints]);
 
   const activeV = VERTICALS.find(v => v.key === activeVertical);
   const roadmapTotalSprints = currentData.filter(p => roadmapIds.has(p.id)).reduce((s, p) => s + projectSprints(p).total, 0);
