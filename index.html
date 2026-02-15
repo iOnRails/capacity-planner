@@ -552,14 +552,14 @@ function App() {
 
   const TRACKS = [
     { key: 'core-bonus', label: 'Core Bonus', gradient: 'linear-gradient(180deg, #fdcb6ecc, #fdcb6e88)', borderColor: 'rgba(253,203,110,0.4)' },
-    { key: 'gamification', label: 'Gamification', gradient: 'linear-gradient(180deg, #e84393cc, #e8439388)', borderColor: 'rgba(232,67,147,0.4)' },
+    { key: 'gateway', label: 'Gateway', gradient: 'linear-gradient(180deg, #e84393cc, #e8439388)', borderColor: 'rgba(232,67,147,0.4)' },
   ];
 
   // Data loaded from API
   const [verticalData, setVerticalData] = useState({});
   const [verticalStates, setVerticalStates] = useState(() => {
     const state = {};
-    for (const v of VERTICALS) state[v.key] = { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gamification': [] } };
+    for (const v of VERTICALS) state[v.key] = { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gateway': [] } };
     return state;
   });
 
@@ -575,7 +575,7 @@ function App() {
         ...prev,
         [key]: {
           capacity: stateRes.capacity || {...DEFAULT_CAPACITY},
-          tracks: stateRes.tracks || { 'core-bonus': [], 'gamification': [] },
+          tracks: stateRes.tracks || { 'core-bonus': [], 'gateway': [] },
         }
       }));
     } catch (e) {
@@ -655,7 +655,7 @@ function App() {
   }, [saveProjects]);
 
   const currentData = verticalData[activeVertical] || [];
-  const currentState = verticalStates[activeVertical] || { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gamification': [] } };
+  const currentState = verticalStates[activeVertical] || { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gateway': [] } };
   const capacity = currentState.capacity;
   const tracks = currentState.tracks;
 

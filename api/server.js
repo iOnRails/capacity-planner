@@ -29,7 +29,7 @@ function getProjectsFile(key) { return `projects_${key}.json`; }
 function getStateFile(key) { return `state_${key}.json`; }
 
 const DEFAULT_CAPACITY = { backend: 40, frontend: 30, natives: 25, qa: 20 };
-const DEFAULT_TRACKS = { 'core-bonus': [], 'gamification': [] };
+const DEFAULT_TRACKS = { 'core-bonus': [], 'gateway': [] };
 
 // ── Seed Growth data if empty ──
 if (!fs.existsSync(path.join(DATA_DIR, getProjectsFile('growth')))) {
@@ -104,7 +104,7 @@ if (!fs.existsSync(path.join(DATA_DIR, getProjectsFile('growth')))) {
   const inProgressIds = SEED.filter(p => p.inProgress).map(p => p.id);
   saveJSON(getStateFile('growth'), {
     capacity: { ...DEFAULT_CAPACITY },
-    tracks: { 'core-bonus': inProgressIds, 'gamification': [] },
+    tracks: { 'core-bonus': inProgressIds, 'gateway': [] },
   });
   console.log(`Seeded ${SEED.length} Growth projects`);
 }
