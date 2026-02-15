@@ -243,8 +243,8 @@ app.post('/api/verticals/:key/upload', upload.single('file'), (req, res) => {
 });
 
 // ── Start ──
-app.listen(PORT, () => {
-  console.log(`Capacity Planner API running on port ${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Capacity Planner API running on 0.0.0.0:${PORT}`);
   console.log(`CORS origin: ${CORS_ORIGIN}`);
   console.log(`Data dir: ${DATA_DIR}`);
 });
