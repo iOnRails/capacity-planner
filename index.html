@@ -623,7 +623,7 @@ function App() {
       const url = `${API_URL}/api/verticals/${encodeURIComponent(key)}/projects`;
       console.log('Saving to:', url, 'projects:', projects.length);
       const res = await fetch(url, {
-        method: 'PUT',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projects }),
       });
