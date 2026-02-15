@@ -63,6 +63,12 @@
     background: var(--surface); border-bottom: 1px solid var(--border);
     padding: 14px 28px; display: flex; gap: 28px; align-items: flex-end; flex-wrap: wrap;
   }
+  .config-bar > .section-title { width: 100%; margin-bottom: 0; }
+  .section-title {
+    font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 10px;
+    letter-spacing: -0.2px;
+  }
+  .section-title .section-icon { margin-right: 6px; }
   .config-section h3 {
     font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
     color: var(--text2); margin-bottom: 6px; font-weight: 600;
@@ -91,6 +97,7 @@
     padding: 14px 28px; display: flex; gap: 14px; flex-wrap: wrap;
     background: var(--surface); border-bottom: 1px solid var(--border);
   }
+  .capacity-overview > .section-title { width: 100%; margin-bottom: 2px; }
   .cap-bar-container { flex: 1; min-width: 160px; }
   .cap-bar-label {
     display: flex; justify-content: space-between;
@@ -116,7 +123,7 @@
   .track-alloc-section {
     padding: 14px 28px; background: var(--surface); border-bottom: 1px solid var(--border);
   }
-  .track-alloc-section h3 { font-size: 12px; margin: 0 0 10px 0; color: var(--text); }
+  .track-alloc-section h3 { font-size: 15px; font-weight: 700; margin: 0 0 10px 0; color: var(--text); }
   .track-alloc-grid {
     display: grid; grid-template-columns: 120px repeat(4, 1fr) auto; gap: 6px 10px; align-items: center;
   }
@@ -139,6 +146,8 @@
   .demand-section {
     padding: 14px 28px; display: flex; gap: 16px; flex-wrap: wrap;
     background: var(--surface); border-bottom: 1px solid var(--border); align-items: stretch;
+  }
+  .demand-section > .section-title { width: 100%; margin-bottom: 2px; align-self: flex-start;
   }
   .demand-card {
     flex: 1; min-width: 150px; background: var(--surface2); border-radius: 8px;
@@ -218,7 +227,7 @@
     border-bottom: 1px solid var(--border);
   }
   .lane-header-row h2 {
-    font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px;
+    font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px;
   }
   .badge {
     font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 700;
@@ -263,14 +272,14 @@
     writing-mode: vertical-lr; text-orientation: mixed;
     transform: rotate(180deg);
     display: flex; align-items: center; justify-content: center;
-    font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
-    padding: 8px 6px; border-radius: 10px 0 0 10px;
-    min-width: 32px; text-align: center; white-space: nowrap;
+    font-size: 12px; font-weight: 700; letter-spacing: 0.5px;
+    padding: 10px 8px; border-radius: 10px 0 0 10px;
+    min-width: 36px; text-align: center; white-space: nowrap;
     color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.3);
   }
   .track-flow {
-    display: flex; flex-wrap: wrap; gap: 6px; padding: 10px;
-    min-height: 60px; border-radius: 0 10px 10px 0;
+    display: flex; flex-wrap: wrap; gap: 8px; padding: 12px;
+    min-height: 80px; border-radius: 0 10px 10px 0;
     background: var(--surface); border: 1px solid var(--border);
     border-left: none; flex: 1; transition: all 0.2s;
     align-content: flex-start;
@@ -280,11 +289,11 @@
     border-color: var(--accent);
   }
   .track-divider {
-    height: 1px; background: var(--border); margin: 0 0 0 32px; opacity: 0.5;
+    height: 1px; background: var(--border); margin: 2px 0 2px 36px; opacity: 0.5;
   }
   .track-empty {
     display: flex; align-items: center; justify-content: center;
-    width: 100%; min-height: 40px; color: var(--text2); font-size: 11px;
+    width: 100%; min-height: 50px; color: var(--text2); font-size: 12px;
     border: 1px dashed var(--border); border-radius: 6px;
     font-style: italic;
   }
@@ -316,19 +325,19 @@
     to { box-shadow: 0 0 16px rgba(255,68,68,0.7), inset 0 0 0 1px rgba(255,68,68,0.4); }
   }
   .overflow-badge {
-    position: absolute; top: 3px; left: 3px; z-index: 10;
-    background: #ff4444; color: white; font-size: 8px; font-weight: 800;
-    padding: 2px 5px; border-radius: 3px; letter-spacing: 0.3px;
+    position: absolute; top: 4px; left: 4px; z-index: 10;
+    background: #ff4444; color: white; font-size: 9px; font-weight: 800;
+    padding: 2px 6px; border-radius: 3px; letter-spacing: 0.3px;
     text-shadow: 0 1px 1px rgba(0,0,0,0.3); line-height: 1.2;
     pointer-events: none;
   }
 
   .block-content {
-    padding: 8px 10px; display: flex; flex-direction: column;
+    padding: 10px 12px; display: flex; flex-direction: column;
     height: 100%; overflow: hidden;
   }
   .block-title {
-    font-size: 11px; font-weight: 600; line-height: 1.25;
+    font-size: 12px; font-weight: 600; line-height: 1.3;
     overflow: hidden; text-overflow: ellipsis;
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
     color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.3);
@@ -338,11 +347,11 @@
     margin-top: auto; padding-top: 4px;
   }
   .block-jira {
-    font-size: 9px; color: rgba(255,255,255,0.7); font-weight: 600;
+    font-size: 10px; color: rgba(255,255,255,0.7); font-weight: 600;
   }
   .block-sprints {
-    font-size: 10px; font-weight: 800; color: white;
-    background: rgba(0,0,0,0.3); padding: 1px 6px; border-radius: 4px;
+    font-size: 11px; font-weight: 800; color: white;
+    background: rgba(0,0,0,0.3); padding: 2px 7px; border-radius: 4px;
   }
   .block-pillar-line {
     height: 3px; width: 100%; opacity: 0.8;
@@ -686,7 +695,7 @@ function migrateTrackCapacity(tc) {
   return result;
 }
 
-const BLOCK_HEIGHT = 80;
+const BLOCK_HEIGHT = 94;
 const MIN_WIDTH = 100;
 const MAX_WIDTH = 360;
 const PX_PER_SPRINT = 20;
@@ -1717,6 +1726,7 @@ function App() {
       ) : (<>
 
       <div className="config-bar">
+        <div className="section-title">⚙️ Configuration</div>
         <div className="config-section">
           <h3>Team Capacity (man-sprints)</h3>
           <div className="config-inputs">
@@ -1744,7 +1754,7 @@ function App() {
       </div>
 
       <div className="track-alloc-section">
-        <h3>Capacity Allocation per Swimlane</h3>
+        <h3>📊 Capacity Allocation per Swimlane</h3>
         <div className="track-alloc-grid">
           <div className="track-alloc-header"></div>
           {['backend','frontend','natives','qa'].map(d => (
@@ -1785,6 +1795,7 @@ function App() {
       </div>
 
       <div className="capacity-overview">
+        <div className="section-title">📈 Roadmap Capacity Usage</div>
         {renderCapBar('Backend', bufferedUsed.backend, capacity.backend)}
         {renderCapBar('Frontend', bufferedUsed.frontend, capacity.frontend)}
         {renderCapBar('Natives', bufferedUsed.natives, capacity.natives)}
@@ -1795,6 +1806,7 @@ function App() {
       </div>
 
       <div className="demand-section">
+        <div className="section-title">🎯 Total Demand & Buffer</div>
         {['backend', 'frontend', 'natives', 'qa'].map(k => (
           <div key={k} className="demand-card">
             <div className="demand-card-title">{k.charAt(0).toUpperCase() + k.slice(1)} Total Demand</div>
