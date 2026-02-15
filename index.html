@@ -690,11 +690,19 @@ function App() {
   const saveState = useCallback(async (key, state) => {
     try {
       setSaving(true);
-      await fetch(`${API_URL}/api/verticals/${key}/state`, {
+      const payload = { capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity };
+      console.log('Saving state:', key, 'trackCapacity:', JSON.stringify(payload.trackCapacity));
+      const res = await fetch(`${API_URL}/api/verticals/${key}/state`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity }),
+        body: JSON.stringify(payload),
       });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        console.error('State save failed:', res.status, text);
+      } else {
+        console.log('State saved OK');
+      }
     } catch (e) {
       console.error('Failed to save state:', e);
     } finally {
