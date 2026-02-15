@@ -801,8 +801,16 @@ function App() {
     }, { backend: 0, frontend: 0, natives: 0, qa: 0 });
   }, [roadmapIds, projectSprints, currentData]);
 
+  // Apply buffer to roadmap used capacity
+  const bufferedUsed = useMemo(() => ({
+    backend: Math.round(usedCapacity.backend * (1 + buffer.backend / 100) * 10) / 10,
+    frontend: Math.round(usedCapacity.frontend * (1 + buffer.frontend / 100) * 10) / 10,
+    natives: Math.round(usedCapacity.natives * (1 + buffer.natives / 100) * 10) / 10,
+    qa: Math.round(usedCapacity.qa * (1 + buffer.qa / 100) * 10) / 10,
+  }), [usedCapacity, buffer]);
+
   const totalCapacity = capacity.backend + capacity.frontend + capacity.natives + capacity.qa;
-  const totalUsed = usedCapacity.backend + usedCapacity.frontend + usedCapacity.natives + usedCapacity.qa;
+  const totalUsed = bufferedUsed.backend + bufferedUsed.frontend + bufferedUsed.natives + bufferedUsed.qa;
 
   // Total demand across ALL projects (not just roadmap)
   const totalDemand = useMemo(() => {
@@ -1360,10 +1368,10 @@ function App() {
       </div>
 
       <div className="capacity-overview">
-        {renderCapBar('Backend', usedCapacity.backend, capacity.backend)}
-        {renderCapBar('Frontend', usedCapacity.frontend, capacity.frontend)}
-        {renderCapBar('Natives', usedCapacity.natives, capacity.natives)}
-        {renderCapBar('QA', usedCapacity.qa, capacity.qa)}
+        {renderCapBar('Backend', bufferedUsed.backend, capacity.backend)}
+        {renderCapBar('Frontend', bufferedUsed.frontend, capacity.frontend)}
+        {renderCapBar('Natives', bufferedUsed.natives, capacity.natives)}
+        {renderCapBar('QA', bufferedUsed.qa, capacity.qa)}
         <div className="cap-total">
           {renderCapBar('Total Capacity', totalUsed, totalCapacity)}
         </div>
@@ -1432,7 +1440,7 @@ function App() {
             <div className="lane-stats">
               {['backend','frontend','natives','qa'].map(k => (
                 <span key={k} className="stat-chip">
-                  {k.charAt(0).toUpperCase()+k.slice(1)}: <strong>{usedCapacity[k]}</strong>/{capacity[k]}
+                  {k.charAt(0).toUpperCase()+k.slice(1)}: <strong>{bufferedUsed[k]}</strong>/{capacity[k]}
                 </span>
               ))}
             </div>
