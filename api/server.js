@@ -111,7 +111,11 @@ if (!fs.existsSync(path.join(DATA_DIR, getProjectsFile('growth')))) {
 
 // ── Express App ──
 const app = express();
-app.use(cors({ origin: CORS_ORIGIN === '*' ? true : CORS_ORIGIN.split(',') }));
+app.use(cors({
+  origin: CORS_ORIGIN === '*' ? true : CORS_ORIGIN.split(','),
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
 app.use(express.json({ limit: '5mb' }));
 
 // ── Health ──
