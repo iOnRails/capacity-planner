@@ -531,6 +531,19 @@ function getBlockBg(pillar) {
   return `linear-gradient(135deg, ${c}cc, ${c}88)`;
 }
 
+// Migrate old track keys to new ones
+function migrateTracks(tracks) {
+  const result = { ...tracks };
+  if ('gamification' in result && !('gateway' in result)) {
+    result['gateway'] = result['gamification'];
+    delete result['gamification'];
+  }
+  // Ensure all expected keys exist
+  if (!result['core-bonus']) result['core-bonus'] = [];
+  if (!result['gateway']) result['gateway'] = [];
+  return result;
+}
+
 const BLOCK_HEIGHT = 80;
 const MIN_WIDTH = 100;
 const MAX_WIDTH = 360;
@@ -575,7 +588,7 @@ function App() {
         ...prev,
         [key]: {
           capacity: stateRes.capacity || {...DEFAULT_CAPACITY},
-          tracks: stateRes.tracks || { 'core-bonus': [], 'gateway': [] },
+          tracks: migrateTracks(stateRes.tracks || { 'core-bonus': [], 'gateway': [] }),
         }
       }));
     } catch (e) {
