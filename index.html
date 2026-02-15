@@ -968,7 +968,8 @@ function App() {
     const updated = currentData.filter(p => p.id !== projectId);
     setVerticalData(prev => ({ ...prev, [activeVertical]: updated }));
     setTracks(prev => removeFromTracks(prev, projectId));
-    debouncedSaveProjects(activeVertical, updated);
+    // Save immediately — no debounce for deletes
+    saveProjects(activeVertical, updated);
   };
 
   // ── Bulk operations ──
@@ -998,7 +999,8 @@ function App() {
       for (const id of selectedIds) t = removeFromTracks(t, id);
       return t;
     });
-    debouncedSaveProjects(activeVertical, updated);
+    // Save immediately — no debounce for deletes
+    saveProjects(activeVertical, updated);
     setSelectedIds(new Set());
   };
 
