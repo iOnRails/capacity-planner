@@ -436,6 +436,44 @@
     background: var(--surface); border-radius: 6px;
   }
 
+  /* ── Bulk Actions ── */
+  .bulk-bar {
+    display: flex; gap: 10px; align-items: center; padding: 10px 16px;
+    background: rgba(108,92,231,0.12); border: 1px solid var(--accent);
+    border-radius: 8px; margin-bottom: 12px;
+  }
+  .bulk-bar .bulk-count {
+    font-size: 12px; font-weight: 700; color: var(--accent2);
+  }
+  .bulk-bar .bulk-sep {
+    width: 1px; height: 20px; background: var(--border);
+  }
+  .bulk-edit-group {
+    display: flex; gap: 6px; align-items: center;
+  }
+  .bulk-edit-group select, .bulk-edit-group input {
+    padding: 4px 8px; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 4px; color: var(--text); font-size: 11px; outline: none;
+  }
+  .bulk-edit-group select:focus, .bulk-edit-group input:focus { border-color: var(--accent); }
+  .btn-sm {
+    padding: 4px 10px; border-radius: 5px; border: 1px solid var(--border);
+    background: var(--surface2); color: var(--text); font-size: 11px;
+    cursor: pointer; font-weight: 500; transition: all 0.15s;
+  }
+  .btn-sm:hover { border-color: var(--accent); }
+  .btn-sm.danger { border-color: var(--red); color: var(--red); }
+  .btn-sm.danger:hover { background: rgba(225,112,85,0.15); }
+  .btn-sm.apply { background: var(--accent); border-color: var(--accent); color: white; }
+  .btn-sm.apply:hover { background: var(--accent2); }
+
+  .row-checkbox {
+    accent-color: var(--accent); cursor: pointer; width: 14px; height: 14px;
+  }
+  .projects-table th.check-col, .projects-table td.check-col {
+    width: 30px; text-align: center; padding: 4px;
+  }
+
   /* ── Drop Indicator ── */
   .drop-indicator {
     width: 3px; min-height: 70px; background: var(--accent);
@@ -507,6 +545,9 @@ function App() {
   const [activeTab, setActiveTab] = useState('planner');
   const [editingCell, setEditingCell] = useState(null);
   const [editValue, setEditValue] = useState('');
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkField, setBulkField] = useState('pillar');
+  const [bulkValue, setBulkValue] = useState('');
 
   const TRACKS = [
     { key: 'core-bonus', label: 'Core Bonus', gradient: 'linear-gradient(180deg, #fdcb6ecc, #fdcb6e88)', borderColor: 'rgba(253,203,110,0.4)' },
@@ -926,10 +967,63 @@ function App() {
     if (!window.confirm('Delete this project?')) return;
     const updated = currentData.filter(p => p.id !== projectId);
     setVerticalData(prev => ({ ...prev, [activeVertical]: updated }));
-    // Also remove from tracks
     setTracks(prev => removeFromTracks(prev, projectId));
     debouncedSaveProjects(activeVertical, updated);
   };
+
+  // ── Bulk operations ──
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === currentData.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(currentData.map(p => p.id)));
+    }
+  };
+
+  const bulkDelete = () => {
+    if (selectedIds.size === 0) return;
+    if (!window.confirm(`Delete ${selectedIds.size} selected project${selectedIds.size > 1 ? 's' : ''}?`)) return;
+    const updated = currentData.filter(p => !selectedIds.has(p.id));
+    setVerticalData(prev => ({ ...prev, [activeVertical]: updated }));
+    setTracks(prev => {
+      let t = prev;
+      for (const id of selectedIds) t = removeFromTracks(t, id);
+      return t;
+    });
+    debouncedSaveProjects(activeVertical, updated);
+    setSelectedIds(new Set());
+  };
+
+  const bulkEdit = () => {
+    if (selectedIds.size === 0 || !bulkField) return;
+    const updated = currentData.map(p =>
+      selectedIds.has(p.id) ? { ...p, [bulkField]: bulkValue } : p
+    );
+    setVerticalData(prev => ({ ...prev, [activeVertical]: updated }));
+    debouncedSaveProjects(activeVertical, updated);
+  };
+
+  const BULK_FIELD_OPTIONS = [
+    { key: 'pillar', label: 'Pillar' },
+    { key: 'targetMarket', label: 'Market' },
+    { key: 'targetKPI', label: 'KPI' },
+    { key: 'impact', label: 'Impact' },
+    { key: 'backend', label: 'Backend' },
+    { key: 'frontend', label: 'Frontend' },
+    { key: 'natives', label: 'Natives' },
+    { key: 'qa', label: 'QA' },
+    { key: 'masterEpic', label: 'Epic' },
+  ];
+
+  const sizeFields = new Set(['impact', 'backend', 'frontend', 'natives', 'qa']);
 
   const startEdit = (id, field, value) => {
     setEditingCell({ id, field });
@@ -997,10 +1091,53 @@ function App() {
       <div className="projects-toolbar">
         <button className="btn btn-primary" onClick={addProject}>+ Add Project</button>
         <span className="project-count-badge">{currentData.length} projects</span>
+        {selectedIds.size > 0 && (
+          <button className="btn-sm" onClick={() => setSelectedIds(new Set())} style={{marginLeft:4}}>
+            Deselect all
+          </button>
+        )}
       </div>
+
+      {selectedIds.size > 0 && (
+        <div className="bulk-bar">
+          <span className="bulk-count">{selectedIds.size} selected</span>
+          <div className="bulk-sep" />
+          <button className="btn-sm danger" onClick={bulkDelete}>
+            Delete selected
+          </button>
+          <div className="bulk-sep" />
+          <div className="bulk-edit-group">
+            <span style={{fontSize:11, color:'var(--text2)'}}>Set</span>
+            <select value={bulkField} onChange={e => { setBulkField(e.target.value); setBulkValue(''); }}>
+              {BULK_FIELD_OPTIONS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+            </select>
+            <span style={{fontSize:11, color:'var(--text2)'}}>to</span>
+            {sizeFields.has(bulkField) ? (
+              <select value={bulkValue} onChange={e => setBulkValue(e.target.value)}>
+                <option value="">— select —</option>
+                {(bulkField === 'impact' ? VALID_IMPACTS : VALID_SIZES.filter(Boolean)).map(v =>
+                  <option key={v} value={v}>{v}</option>
+                )}
+              </select>
+            ) : (
+              <input type="text" value={bulkValue} onChange={e => setBulkValue(e.target.value)}
+                placeholder="value..." style={{width:120}} />
+            )}
+            <button className="btn-sm apply" onClick={bulkEdit} disabled={!bulkValue}>
+              Apply
+            </button>
+          </div>
+        </div>
+      )}
+
       <table className="projects-table">
         <thead>
           <tr>
+            <th className="check-col">
+              <input type="checkbox" className="row-checkbox"
+                checked={currentData.length > 0 && selectedIds.size === currentData.length}
+                onChange={toggleSelectAll} />
+            </th>
             <th style={{width:'3%'}}>#</th>
             {TABLE_COLS.map(c => <th key={c.key} style={{width:c.width}}>{c.label}</th>)}
             <th style={{width:'5%'}}></th>
@@ -1008,7 +1145,12 @@ function App() {
         </thead>
         <tbody>
           {currentData.map((p, i) => (
-            <tr key={p.id} className={editingCell?.id === p.id ? 'editing-row' : ''}>
+            <tr key={p.id} className={`${editingCell?.id === p.id ? 'editing-row' : ''} ${selectedIds.has(p.id) ? 'editing-row' : ''}`}>
+              <td className="check-col">
+                <input type="checkbox" className="row-checkbox"
+                  checked={selectedIds.has(p.id)}
+                  onChange={() => toggleSelect(p.id)} />
+              </td>
               <td style={{color:'var(--text2)', fontSize:10}}>{i+1}</td>
               {TABLE_COLS.map(c => <td key={c.key}>{renderEditableCell(p, c.key)}</td>)}
               <td>
