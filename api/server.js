@@ -159,8 +159,8 @@ app.get('/api/verticals/:key/state', (req, res) => {
   res.json(state);
 });
 
-// ── Save state for a vertical ──
-app.put('/api/verticals/:key/state', (req, res) => {
+// ── Save state for a vertical (POST + PUT) ──
+function saveStateHandler(req, res) {
   const { capacity, tracks, trackCapacity } = req.body;
   if (!capacity || !tracks) {
     return res.status(400).json({ error: 'Missing capacity or tracks in body' });
@@ -169,7 +169,9 @@ app.put('/api/verticals/:key/state', (req, res) => {
   if (trackCapacity) state.trackCapacity = trackCapacity;
   saveJSON(getStateFile(req.params.key), state);
   res.json({ success: true });
-});
+}
+app.post('/api/verticals/:key/state', saveStateHandler);
+app.put('/api/verticals/:key/state', saveStateHandler);
 
 // ── Save projects for a vertical (POST + PUT for compatibility) ──
 app.post('/api/verticals/:key/projects', saveProjectsHandler);

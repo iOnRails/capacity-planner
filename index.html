@@ -691,7 +691,7 @@ function App() {
     try {
       setSaving(true);
       await fetch(`${API_URL}/api/verticals/${key}/state`, {
-        method: 'PUT',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity }),
       });
