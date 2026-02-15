@@ -1,7 +1,5 @@
 const express = require('express');
 const cors = require('cors');
-const multer = require('multer');
-const XLSX = require('xlsx');
 const path = require('path');
 const fs = require('fs');
 
@@ -116,8 +114,6 @@ const app = express();
 app.use(cors({ origin: CORS_ORIGIN === '*' ? true : CORS_ORIGIN.split(',') }));
 app.use(express.json({ limit: '5mb' }));
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
-
 // ── Health ──
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -159,86 +155,53 @@ app.put('/api/verticals/:key/state', (req, res) => {
   res.json({ success: true });
 });
 
-// ── Upload Excel for a vertical ──
-app.post('/api/verticals/:key/upload', upload.single('file'), (req, res) => {
-  const { key } = req.params;
-  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+// ── Save projects for a vertical ──
+app.put('/api/verticals/:key/projects', (req, res) => {
+  const { projects } = req.body;
+  if (!Array.isArray(projects)) {
+    return res.status(400).json({ error: 'Projects must be an array' });
+  }
+
+  const VALID_SIZES = new Set(['', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL']);
+
+  for (let i = 0; i < projects.length; i++) {
+    const p = projects[i];
+    if (!p.id || !p.subTask) {
+      return res.status(400).json({ error: `Project at index ${i} missing required fields (id, subTask)` });
+    }
+    if (p.impact && !VALID_SIZES.has(p.impact)) {
+      return res.status(400).json({ error: `Project ${p.id}: invalid impact "${p.impact}"` });
+    }
+    for (const f of ['backend', 'frontend', 'natives', 'qa']) {
+      if (p[f] && !VALID_SIZES.has(p[f])) {
+        return res.status(400).json({ error: `Project ${p.id}: invalid ${f} size "${p[f]}"` });
+      }
+    }
+  }
 
   try {
-    const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
-    const sheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[sheetName];
-    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+    saveJSON(getProjectsFile(req.params.key), projects);
 
-    if (rows.length === 0) return res.status(400).json({ error: 'Excel file is empty' });
-
-    // Flexible column mapping
-    const headers = Object.keys(rows[0]);
-    const find = (patterns) => {
-      for (const h of headers) {
-        const lc = h.toLowerCase().replace(/[^a-z0-9]/g, '');
-        for (const p of patterns) { if (lc.includes(p)) return h; }
-      }
-      return null;
-    };
-    const cm = {
-      nvrd: find(['nvrd', 'jira', 'ticket', 'key']),
-      masterEpic: find(['masterepic', 'epic']),
-      subTask: find(['subtask', 'task', 'title', 'name']),
-      pillar: find(['pillar']),
-      targetMarket: find(['targetmarket', 'market']),
-      targetKPI: find(['targetkpi', 'kpi']),
-      impact: find(['impact']),
-      backend: find(['backend']),
-      frontend: find(['frontend']),
-      natives: find(['native']),
-      qa: find(['qa', 'quality']),
-      inProgress: find(['inprogress', 'progress', 'started']),
-    };
-
-    const warnings = [];
-    const validImpacts = new Set(['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL']);
-
-    const projects = rows.map((row, i) => {
-      const get = (col) => col ? (row[col] || '').toString().trim() : '';
-      const impact = get(cm.impact).toUpperCase();
-      if (impact && !validImpacts.has(impact)) warnings.push(`Row ${i + 2}: Invalid impact "${impact}"`);
-
-      const ipVal = get(cm.inProgress).toLowerCase();
-      const inProgress = ['yes', 'true', '1', 'x'].includes(ipVal);
-
-      return {
-        id: i + 1,
-        nvrd: get(cm.nvrd),
-        masterEpic: get(cm.masterEpic),
-        subTask: get(cm.subTask),
-        pillar: get(cm.pillar),
-        targetMarket: get(cm.targetMarket),
-        targetKPI: get(cm.targetKPI),
-        impact: impact,
-        backend: get(cm.backend),
-        frontend: get(cm.frontend),
-        natives: get(cm.natives),
-        qa: get(cm.qa),
-        inProgress,
-      };
+    // Clean up tracks: remove IDs that no longer exist
+    const validIds = new Set(projects.map(p => p.id));
+    const existingState = loadJSON(getStateFile(req.params.key), {
+      capacity: { ...DEFAULT_CAPACITY },
+      tracks: { ...DEFAULT_TRACKS },
     });
-
-    // Save projects (replaces all)
-    saveJSON(getProjectsFile(key), projects);
-
-    // Reset tracks (old IDs may not be valid)
-    const existingState = loadJSON(getStateFile(key), { capacity: { ...DEFAULT_CAPACITY } });
-    saveJSON(getStateFile(key), {
+    const cleanedTracks = {};
+    for (const [tk, ids] of Object.entries(existingState.tracks || {})) {
+      cleanedTracks[tk] = (ids || []).filter(id => validIds.has(id));
+    }
+    saveJSON(getStateFile(req.params.key), {
       capacity: existingState.capacity,
-      tracks: { 'core-bonus': [], 'gamification': [] },
+      tracks: cleanedTracks,
       updatedAt: new Date().toISOString(),
     });
 
-    res.json({ success: true, projectsAdded: projects.length, warnings });
+    res.json({ success: true, projectCount: projects.length });
   } catch (err) {
-    console.error('Upload error:', err);
-    res.status(500).json({ error: 'Failed to parse Excel file', details: err.message });
+    console.error('Save projects error:', err);
+    res.status(500).json({ error: 'Failed to save projects' });
   }
 });
 
