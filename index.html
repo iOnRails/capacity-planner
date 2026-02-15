@@ -623,6 +623,164 @@
     from { opacity: 0.6; }
     to { opacity: 1; }
   }
+
+  /* ── Timeline / Gantt Overlay ── */
+  .timeline-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+    z-index: 500; display: flex; align-items: center; justify-content: center;
+    animation: tl-fade-in 0.2s ease-out;
+  }
+  @keyframes tl-fade-in { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes tl-slide-up { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+  .timeline-modal {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 14px; width: 96vw; height: 92vh;
+    display: flex; flex-direction: column; overflow: hidden;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.7);
+    animation: tl-slide-up 0.3s ease-out;
+  }
+
+  /* Header */
+  .tl-header {
+    display: flex; align-items: center; gap: 16px; padding: 12px 20px;
+    background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  .tl-header h2 { font-size: 16px; font-weight: 700; white-space: nowrap; }
+  .tl-controls { display: flex; gap: 12px; align-items: center; flex: 1; flex-wrap: wrap; }
+  .tl-ctrl-group { display: flex; align-items: center; gap: 4px; }
+  .tl-ctrl-group label { font-size: 11px; color: var(--text2); font-weight: 600; }
+  .tl-ctrl-group input, .tl-ctrl-group select {
+    padding: 4px 8px; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 5px; color: var(--text); font-size: 12px; outline: none;
+  }
+  .tl-ctrl-group input:focus, .tl-ctrl-group select:focus { border-color: var(--accent); }
+  .tl-close {
+    background: none; border: none; font-size: 22px; color: var(--text2);
+    cursor: pointer; padding: 4px 8px; border-radius: 6px; margin-left: auto;
+  }
+  .tl-close:hover { color: var(--text); background: var(--surface2); }
+  .tl-btn {
+    padding: 5px 12px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--accent); color: white; font-size: 11px; font-weight: 600;
+    cursor: pointer; white-space: nowrap;
+  }
+  .tl-btn:hover { opacity: 0.85; }
+  .tl-btn-outline { background: var(--surface2); color: var(--text); }
+
+  /* Body layout */
+  .tl-body { display: flex; flex: 1; overflow: hidden; }
+  .tl-sidebar {
+    width: 220px; background: var(--surface); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; overflow-y: auto; flex-shrink: 0;
+  }
+  .tl-sidebar-header {
+    padding: 12px 14px; font-size: 13px; font-weight: 700; color: var(--text);
+    border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;
+  }
+  .tl-sidebar-content { padding: 8px; flex: 1; overflow-y: auto; }
+  .tl-ms-item {
+    display: flex; gap: 8px; padding: 8px 10px; margin-bottom: 4px;
+    background: var(--surface2); border-radius: 8px; align-items: flex-start;
+    border: 1px solid transparent; transition: border-color 0.15s;
+  }
+  .tl-ms-item:hover { border-color: var(--border); }
+  .tl-ms-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-top: 3px; }
+  .tl-ms-name { font-size: 12px; font-weight: 600; color: var(--text); }
+  .tl-ms-date { font-size: 10px; color: var(--text2); margin-top: 1px; }
+  .tl-ms-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.15s; margin-left: auto; }
+  .tl-ms-item:hover .tl-ms-actions { opacity: 1; }
+  .tl-ms-btn {
+    padding: 2px 6px; background: var(--surface); color: var(--text2);
+    border: 1px solid var(--border); border-radius: 3px; font-size: 10px; cursor: pointer;
+  }
+  .tl-ms-btn:hover { color: var(--text); border-color: var(--text2); }
+  .tl-ms-btn.del:hover { color: var(--red); border-color: var(--red); }
+  .tl-ms-empty { font-size: 11px; color: var(--text2); padding: 16px; text-align: center; }
+
+  /* Grid area */
+  .tl-grid-wrapper { flex: 1; overflow: auto; position: relative; }
+  .tl-grid { display: flex; flex-direction: column; min-width: 100%; }
+
+  /* Ruler */
+  .tl-ruler {
+    display: flex; position: sticky; top: 0; z-index: 10;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+  }
+  .tl-ruler-label {
+    width: 110px; min-width: 110px; padding: 8px 10px; font-size: 10px;
+    font-weight: 600; color: var(--text2); text-transform: uppercase;
+    border-right: 1px solid var(--border); display: flex; align-items: flex-end;
+  }
+  .tl-ruler-bar { display: flex; position: relative; flex: 1; }
+  .tl-ruler-mark {
+    font-size: 10px; color: var(--text2); padding: 4px 6px; text-align: center;
+    border-right: 1px solid var(--border); display: flex; align-items: flex-end;
+    justify-content: center; font-weight: 500; box-sizing: border-box; flex-shrink: 0;
+  }
+
+  /* Track rows */
+  .tl-track {
+    display: flex; border-bottom: 1px solid var(--border); min-height: 56px;
+  }
+  .tl-track-label {
+    width: 110px; min-width: 110px; padding: 8px 10px;
+    font-size: 12px; font-weight: 700; color: white;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    border-right: 1px solid var(--border);
+    display: flex; align-items: center;
+  }
+  .tl-track-bars {
+    position: relative; flex: 1; padding: 6px 0; min-height: 48px;
+  }
+
+  /* Project bars */
+  .tl-bar {
+    position: absolute; top: 6px; height: 36px; border-radius: 6px;
+    display: flex; align-items: center; padding: 0 8px; cursor: default;
+    border: 1px solid rgba(255,255,255,0.15); transition: all 0.15s;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2); overflow: hidden;
+  }
+  .tl-bar:hover {
+    transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    border-color: rgba(255,255,255,0.3); z-index: 5;
+  }
+  .tl-bar-label {
+    font-size: 11px; font-weight: 600; color: white;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .tl-bar-sp {
+    font-size: 9px; font-weight: 800; color: rgba(255,255,255,0.85);
+    background: rgba(0,0,0,0.25); padding: 1px 5px; border-radius: 3px; margin-left: 6px; flex-shrink: 0;
+  }
+  .tl-bar.ghost {
+    border-style: dashed; opacity: 0.6;
+  }
+  .tl-bar.in-progress {
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2), inset 0 0 0 2px var(--green);
+  }
+
+  /* Milestone lines */
+  .tl-milestone-line {
+    position: absolute; top: 0; bottom: 0; width: 2px; z-index: 4;
+    pointer-events: none;
+  }
+  .tl-milestone-flag {
+    position: absolute; top: -1px; transform: translateX(-50%);
+    font-size: 9px; font-weight: 700; color: white; padding: 2px 6px;
+    border-radius: 3px; white-space: nowrap; pointer-events: auto; cursor: default;
+    z-index: 11;
+  }
+
+  /* Timeline trigger button */
+  .btn-timeline {
+    padding: 6px 14px; background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: white; border: none; border-radius: 6px; font-size: 12px; font-weight: 600;
+    cursor: pointer; white-space: nowrap; transition: all 0.15s;
+    box-shadow: 0 2px 8px rgba(108,92,231,0.3);
+  }
+  .btn-timeline:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(108,92,231,0.4); }
 </style>
 </head>
 <body>
@@ -700,6 +858,13 @@ function migrateTrackCapacity(tc) {
 const BLOCK_HEIGHT = 94;
 const MIN_WIDTH = 100;
 const MAX_WIDTH = 360;
+const PX_PER_SPRINT_WEEK = 50;
+const DEFAULT_TIMELINE_CONFIG = {
+  sprintStartDate: new Date().toISOString().split('T')[0],
+  sprintDurationWeeks: 2,
+  timeScale: 'months',
+};
+const MILESTONE_COLORS = ['#e84393','#fdcb6e','#00b894','#0984e3','#e67e22','#a29bfe','#e17055'];
 const PX_PER_SPRINT = 20;
 
 function App() {
@@ -717,6 +882,7 @@ function App() {
   const [saveStatus, setSaveStatus] = useState(null); // {type: 'ok'|'error', msg: '...'}
   const [buffer, setBuffer] = useState({ backend: 0, frontend: 0, natives: 0, qa: 0 });
   const [splitModal, setSplitModal] = useState(null); // { projectId, projectName, existing: {...} }
+  const [showTimeline, setShowTimeline] = useState(false);
 
   const TRACKS = [
     { key: 'core-bonus', label: 'Core Bonus', gradient: 'linear-gradient(180deg, #fdcb6ecc, #fdcb6e88)', borderColor: 'rgba(253,203,110,0.4)' },
@@ -728,7 +894,7 @@ function App() {
   const [verticalData, setVerticalData] = useState({});
   const [verticalStates, setVerticalStates] = useState(() => {
     const state = {};
-    for (const v of VERTICALS) state[v.key] = { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }, trackCapacity: JSON.parse(JSON.stringify(DEFAULT_TRACK_CAPACITY)), splits: {} };
+    for (const v of VERTICALS) state[v.key] = { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }, trackCapacity: JSON.parse(JSON.stringify(DEFAULT_TRACK_CAPACITY)), splits: {}, timelineConfig: {...DEFAULT_TIMELINE_CONFIG}, milestones: [] };
     return state;
   });
 
@@ -747,6 +913,8 @@ function App() {
           tracks: migrateTracks(stateRes.tracks || { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }),
           trackCapacity: migrateTrackCapacity(stateRes.trackCapacity),
           splits: stateRes.splits || {},
+          timelineConfig: stateRes.timelineConfig || {...DEFAULT_TIMELINE_CONFIG},
+          milestones: stateRes.milestones || [],
         }
       }));
     } catch (e) {
@@ -770,7 +938,7 @@ function App() {
       await fetch(`${API_URL}/api/verticals/${key}/state`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits }),
+        body: JSON.stringify({ capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones }),
       });
     } catch (e) {
       console.error('Failed to save state:', e);
@@ -825,11 +993,13 @@ function App() {
   }, [saveProjects]);
 
   const currentData = verticalData[activeVertical] || [];
-  const currentState = verticalStates[activeVertical] || { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }, trackCapacity: JSON.parse(JSON.stringify(DEFAULT_TRACK_CAPACITY)), splits: {} };
+  const currentState = verticalStates[activeVertical] || { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }, trackCapacity: JSON.parse(JSON.stringify(DEFAULT_TRACK_CAPACITY)), splits: {}, timelineConfig: {...DEFAULT_TIMELINE_CONFIG}, milestones: [] };
   const capacity = currentState.capacity;
   const tracks = currentState.tracks;
   const trackCapacity = currentState.trackCapacity || JSON.parse(JSON.stringify(DEFAULT_TRACK_CAPACITY));
   const splits = currentState.splits || {};
+  const timelineConfig = currentState.timelineConfig || {...DEFAULT_TIMELINE_CONFIG};
+  const milestones = currentState.milestones || [];
 
   const roadmapIds = useMemo(() => {
     const s = new Set();
@@ -1386,6 +1556,138 @@ function App() {
     return result;
   }, [trackProjects, trackCapacity, effectiveSprints, ghostsByTrack]);
 
+  // ── Timeline helpers ──
+  const updateTimelineConfig = useCallback((updates) => {
+    setVerticalStates(prev => {
+      const tc = { ...(prev[activeVertical].timelineConfig || DEFAULT_TIMELINE_CONFIG), ...updates };
+      const newState = { ...prev, [activeVertical]: { ...prev[activeVertical], timelineConfig: tc } };
+      debouncedSave(activeVertical, newState[activeVertical]);
+      return newState;
+    });
+  }, [activeVertical, debouncedSave]);
+
+  const addMilestone = useCallback((name, date, color) => {
+    setVerticalStates(prev => {
+      const ms = [...(prev[activeVertical].milestones || [])];
+      const id = ms.length > 0 ? Math.max(...ms.map(m => m.id)) + 1 : 1;
+      ms.push({ id, name, date, color: color || MILESTONE_COLORS[ms.length % MILESTONE_COLORS.length] });
+      const newState = { ...prev, [activeVertical]: { ...prev[activeVertical], milestones: ms } };
+      debouncedSave(activeVertical, newState[activeVertical]);
+      return newState;
+    });
+  }, [activeVertical, debouncedSave]);
+
+  const updateMilestone = useCallback((id, updates) => {
+    setVerticalStates(prev => {
+      const ms = (prev[activeVertical].milestones || []).map(m => m.id === id ? { ...m, ...updates } : m);
+      const newState = { ...prev, [activeVertical]: { ...prev[activeVertical], milestones: ms } };
+      debouncedSave(activeVertical, newState[activeVertical]);
+      return newState;
+    });
+  }, [activeVertical, debouncedSave]);
+
+  const removeMilestone = useCallback((id) => {
+    setVerticalStates(prev => {
+      const ms = (prev[activeVertical].milestones || []).filter(m => m.id !== id);
+      const newState = { ...prev, [activeVertical]: { ...prev[activeVertical], milestones: ms } };
+      debouncedSave(activeVertical, newState[activeVertical]);
+      return newState;
+    });
+  }, [activeVertical, debouncedSave]);
+
+  // Compute timeline layout data
+  const timelineData = useMemo(() => {
+    const sprintWeeks = timelineConfig.sprintDurationWeeks || 2;
+    const scale = timelineConfig.timeScale || 'months';
+    const startDate = new Date(timelineConfig.sprintStartDate || Date.now());
+
+    // Pixel width per sprint based on scale
+    const pxPerSprint = scale === 'weeks' ? PX_PER_SPRINT_WEEK * sprintWeeks
+      : scale === 'months' ? PX_PER_SPRINT_WEEK * sprintWeeks * 0.7
+      : PX_PER_SPRINT_WEEK * sprintWeeks * 0.35; // quarters
+
+    // Build track bars: { trackKey: [{project, left, width, sprints}] }
+    const trackBars = {};
+    let maxPx = 0;
+    for (const t of TRACKS) {
+      const bars = [];
+      let cumSprints = 0;
+      for (const pid of (tracks[t.key] || [])) {
+        const p = projectById[pid];
+        if (!p) continue;
+        const eff = effectiveSprints(p);
+        const left = cumSprints * pxPerSprint;
+        const width = Math.max(40, eff.total * pxPerSprint);
+        bars.push({ project: p, left, width, sprints: eff.total, startSprints: cumSprints });
+        cumSprints += eff.total;
+      }
+      // Ghost blocks appended at the end of the track
+      for (const g of (ghostsByTrack[t.key] || [])) {
+        const totalSp = (g.sizing.backend||0) + (g.sizing.frontend||0) + (g.sizing.natives||0) + (g.sizing.qa||0);
+        const left = cumSprints * pxPerSprint;
+        const width = Math.max(40, totalSp * pxPerSprint);
+        bars.push({ project: g.project, left, width, sprints: totalSp, startSprints: cumSprints, ghost: true, homeTrack: g.homeTrack });
+        cumSprints += totalSp;
+      }
+      trackBars[t.key] = bars;
+      maxPx = Math.max(maxPx, cumSprints * pxPerSprint);
+    }
+
+    const totalWeeks = (maxPx / PX_PER_SPRINT_WEEK) * (scale === 'months' ? 1/0.7 : scale === 'quarters' ? 1/0.35 : 1);
+
+    // Generate ruler marks
+    const marks = [];
+    const totalPx = maxPx + 200; // extra padding
+    if (scale === 'weeks') {
+      const weekPx = PX_PER_SPRINT_WEEK;
+      const numWeeks = Math.ceil(totalPx / weekPx);
+      for (let i = 0; i < numWeeks; i++) {
+        const d = new Date(startDate);
+        d.setDate(d.getDate() + i * 7);
+        marks.push({ label: `W${i+1}`, width: weekPx, date: d });
+      }
+    } else if (scale === 'months') {
+      const monthPx = PX_PER_SPRINT_WEEK * (4.33 / sprintWeeks) * pxPerSprint / PX_PER_SPRINT_WEEK * sprintWeeks;
+      // Simpler approach: compute months from start to end
+      const d = new Date(startDate);
+      let px = 0;
+      while (px < totalPx) {
+        const nextMonth = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+        const daysInMonth = (nextMonth - d) / (1000*60*60*24);
+        const weeksInMonth = daysInMonth / 7;
+        const w = weeksInMonth / sprintWeeks * pxPerSprint;
+        marks.push({ label: d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }), width: Math.max(60, w), date: new Date(d) });
+        px += w;
+        d.setMonth(d.getMonth() + 1); d.setDate(1);
+      }
+    } else { // quarters
+      const d = new Date(startDate);
+      let px = 0;
+      const qNames = ['Q1','Q2','Q3','Q4'];
+      while (px < totalPx) {
+        const q = Math.floor(d.getMonth() / 3);
+        const nextQ = new Date(d.getFullYear(), (q + 1) * 3, 1);
+        const daysInQ = (nextQ - d) / (1000*60*60*24);
+        const weeksInQ = daysInQ / 7;
+        const w = weeksInQ / sprintWeeks * pxPerSprint;
+        marks.push({ label: `${qNames[q]} ${d.getFullYear()}`, width: Math.max(80, w), date: new Date(d) });
+        px += w;
+        d.setTime(nextQ.getTime());
+      }
+    }
+
+    // Milestone positions (date to px)
+    const msPositions = (milestones || []).map(m => {
+      const mDate = new Date(m.date);
+      const daysDiff = (mDate - startDate) / (1000*60*60*24);
+      const weeksDiff = daysDiff / 7;
+      const sprintsDiff = weeksDiff / sprintWeeks;
+      return { ...m, px: sprintsDiff * pxPerSprint };
+    }).filter(m => m.px >= 0);
+
+    return { trackBars, marks, totalPx: totalPx, msPositions, pxPerSprint };
+  }, [tracks, projectById, effectiveSprints, ghostsByTrack, timelineConfig, milestones]);
+
   const activeV = VERTICALS.find(v => v.key === activeVertical);
   const roadmapTotalSprints = currentData.filter(p => roadmapIds.has(p.id)).reduce((s, p) => s + projectSprints(p).total, 0);
 
@@ -1874,6 +2176,7 @@ function App() {
                   {k.charAt(0).toUpperCase()+k.slice(1)}: <strong>{bufferedUsed[k]}</strong>/{capacity[k]}
                 </span>
               ))}
+              <button className="btn-timeline" onClick={() => setShowTimeline(true)}>📊 Timeline</button>
             </div>
           </div>
           <div className="track-group">
@@ -1949,6 +2252,130 @@ function App() {
 
       {renderTooltip()}
       </>)}
+
+      {showTimeline && (
+        <div className="timeline-overlay" onClick={() => setShowTimeline(false)}>
+          <div className="timeline-modal" onClick={e => e.stopPropagation()}>
+            <div className="tl-header">
+              <h2>📊 Timeline</h2>
+              <div className="tl-controls">
+                <div className="tl-ctrl-group">
+                  <label>Start:</label>
+                  <input type="date" value={timelineConfig.sprintStartDate}
+                    onChange={e => updateTimelineConfig({ sprintStartDate: e.target.value })} />
+                </div>
+                <div className="tl-ctrl-group">
+                  <label>Sprint:</label>
+                  <select value={timelineConfig.sprintDurationWeeks}
+                    onChange={e => updateTimelineConfig({ sprintDurationWeeks: parseInt(e.target.value) })}>
+                    <option value={1}>1 wk</option>
+                    <option value={2}>2 wk</option>
+                    <option value={3}>3 wk</option>
+                    <option value={4}>4 wk</option>
+                  </select>
+                </div>
+                <div className="tl-ctrl-group">
+                  <label>Scale:</label>
+                  <select value={timelineConfig.timeScale}
+                    onChange={e => updateTimelineConfig({ timeScale: e.target.value })}>
+                    <option value="weeks">Weeks</option>
+                    <option value="months">Months</option>
+                    <option value="quarters">Quarters</option>
+                  </select>
+                </div>
+              </div>
+              <button className="tl-close" onClick={() => setShowTimeline(false)} title="Close">✕</button>
+            </div>
+            <div className="tl-body">
+              {/* Milestones sidebar */}
+              <div className="tl-sidebar">
+                <div className="tl-sidebar-header">
+                  <span>Milestones</span>
+                  <button className="tl-btn" onClick={() => {
+                    const name = prompt('Milestone name:');
+                    if (name) {
+                      const date = prompt('Date (YYYY-MM-DD):', new Date().toISOString().split('T')[0]);
+                      if (date) addMilestone(name, date);
+                    }
+                  }}>+ Add</button>
+                </div>
+                <div className="tl-sidebar-content">
+                  {milestones.length === 0 && <div className="tl-ms-empty">No milestones yet. Click "+ Add" to create one.</div>}
+                  {milestones.map(m => (
+                    <div key={m.id} className="tl-ms-item">
+                      <div className="tl-ms-dot" style={{background: m.color}} />
+                      <div style={{flex:1,minWidth:0}}>
+                        <div className="tl-ms-name">{m.name}</div>
+                        <div className="tl-ms-date">{m.date}</div>
+                      </div>
+                      <div className="tl-ms-actions">
+                        <button className="tl-ms-btn" onClick={() => {
+                          const name = prompt('Milestone name:', m.name);
+                          if (name !== null) updateMilestone(m.id, { name });
+                        }}>✎</button>
+                        <button className="tl-ms-btn" onClick={() => {
+                          const date = prompt('Date (YYYY-MM-DD):', m.date);
+                          if (date !== null) updateMilestone(m.id, { date });
+                        }}>📅</button>
+                        <button className="tl-ms-btn del" onClick={() => {
+                          if (confirm('Remove this milestone?')) removeMilestone(m.id);
+                        }}>✕</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {/* Timeline grid */}
+              <div className="tl-grid-wrapper">
+                <div className="tl-grid" style={{width: timelineData.totalPx}}>
+                  {/* Ruler */}
+                  <div className="tl-ruler">
+                    <div className="tl-ruler-label">Swimlane</div>
+                    <div className="tl-ruler-bar">
+                      {timelineData.marks.map((m, i) => (
+                        <div key={i} className="tl-ruler-mark" style={{width: m.width}}>{m.label}</div>
+                      ))}
+                    </div>
+                  </div>
+                  {/* Track rows */}
+                  {TRACKS.map(track => (
+                    <div key={track.key} className="tl-track">
+                      <div className="tl-track-label" style={{background: track.gradient}}>{track.label}</div>
+                      <div className="tl-track-bars" style={{width: timelineData.totalPx - 110}}>
+                        {(timelineData.trackBars[track.key] || []).map((bar, i) => (
+                          <div key={bar.ghost ? `g-${bar.project.id}` : bar.project.id}
+                            className={`tl-bar ${bar.ghost ? 'ghost' : ''} ${bar.project.inProgress ? 'in-progress' : ''}`}
+                            style={{left: bar.left, width: bar.width, background: getBlockBg(bar.project.pillar)}}
+                            onMouseEnter={(e) => handleMouseEnter(e, bar.project)}
+                            onMouseLeave={handleMouseLeave}
+                            title={`${bar.project.subTask}: ${bar.sprints}sp${bar.ghost ? ' (split from ' + (TRACKS.find(t=>t.key===bar.homeTrack)?.label||'') + ')' : ''}`}>
+                            <span className="tl-bar-label">{bar.project.subTask}</span>
+                            <span className="tl-bar-sp">{bar.sprints}sp</span>
+                          </div>
+                        ))}
+                        {/* Milestone lines in each track */}
+                        {timelineData.msPositions.map(m => (
+                          <div key={m.id} className="tl-milestone-line"
+                            style={{left: m.px, background: m.color}} />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  {/* Milestone flags on the ruler */}
+                  <div style={{position:'absolute',top:0,left:110,right:0,pointerEvents:'none',zIndex:12}}>
+                    {timelineData.msPositions.map(m => (
+                      <div key={m.id} className="tl-milestone-flag"
+                        style={{left: m.px, background: m.color}}>
+                        {m.name}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {splitModal && (() => {
         const { projectId, projectName, homeTrack } = splitModal;
