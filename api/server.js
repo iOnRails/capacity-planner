@@ -184,8 +184,8 @@ function saveProjectsHandler(req, res) {
 
   for (let i = 0; i < projects.length; i++) {
     const p = projects[i];
-    if (!p.id || !p.subTask) {
-      return res.status(400).json({ error: `Project at index ${i} missing required fields (id, subTask)` });
+    if (p.id == null) {
+      return res.status(400).json({ error: `Project at index ${i} missing required field (id)` });
     }
     if (p.impact && !VALID_SIZES.has(p.impact)) {
       return res.status(400).json({ error: `Project ${p.id}: invalid impact "${p.impact}"` });
