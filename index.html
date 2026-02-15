@@ -781,7 +781,6 @@ function App() {
       setSaving(true);
       setSaveStatus(null);
       const url = `${API_URL}/api/verticals/${encodeURIComponent(key)}/projects`;
-      console.log('Saving to:', url, 'projects:', projects.length);
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -823,7 +822,9 @@ function App() {
 
   const roadmapIds = useMemo(() => {
     const s = new Set();
-    for (const arr of Object.values(tracks)) arr.forEach(id => s.add(id));
+    for (const arr of Object.values(tracks)) {
+      if (Array.isArray(arr)) arr.forEach(id => s.add(id));
+    }
     return s;
   }, [tracks]);
 
@@ -936,7 +937,7 @@ function App() {
     return projects.filter(p => {
       if (search) {
         const q = search.toLowerCase();
-        if (!p.subTask.toLowerCase().includes(q) && !p.nvrd.toLowerCase().includes(q) && !p.masterEpic.toLowerCase().includes(q)) return false;
+        if (!(p.subTask||'').toLowerCase().includes(q) && !(p.nvrd||'').toLowerCase().includes(q) && !(p.masterEpic||'').toLowerCase().includes(q)) return false;
       }
       if (filters.pillar.length && !filters.pillar.includes(p.pillar)) return false;
       if (filters.market.length && !filters.market.includes(p.targetMarket)) return false;
@@ -1108,6 +1109,13 @@ function App() {
     );
   };
 
+  // Project lookup by ID — must be before ghostsByTrack which depends on it
+  const projectById = useMemo(() => {
+    const m = {};
+    for (const p of currentData) m[p.id] = p;
+    return m;
+  }, [currentData]);
+
   // Find which track a project primarily lives in
   const getProjectHomeTrack = useCallback((projectId) => {
     for (const t of TRACKS) {
@@ -1260,21 +1268,6 @@ function App() {
       </div>
     );
   };
-
-  const projectById = useMemo(() => {
-    const m = {};
-    for (const p of currentData) m[p.id] = p;
-    return m;
-  }, [currentData]);
-
-  // Debug: log once to find the '11' error
-  useEffect(() => {
-    if (currentData.length > 0) {
-      console.log('DEBUG splits type:', typeof splits, 'value:', JSON.stringify(splits).slice(0,200));
-      console.log('DEBUG projectById sample:', typeof projectById, Object.keys(projectById).slice(0,5));
-      console.log('DEBUG tracks:', typeof tracks, Object.keys(tracks));
-    }
-  }, [currentData.length > 0]);
 
   const trackProjects = useMemo(() => {
     const result = {};
