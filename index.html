@@ -1,0 +1,1044 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Capacity Planner</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #232733;
+    --border: #2e3345;
+    --text: #e2e4eb;
+    --text2: #8b90a0;
+    --accent: #6c5ce7;
+    --accent2: #a29bfe;
+    --green: #00b894;
+    --yellow: #fdcb6e;
+    --red: #e17055;
+    --orange: #e67e22;
+    --blue: #0984e3;
+    --pink: #e84393;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Header ── */
+  .app-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 28px; background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 100;
+  }
+  .app-header h1 { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
+  .app-header h1 span { color: var(--accent2); }
+  .header-right { display: flex; gap: 12px; align-items: center; }
+
+  /* ── Vertical Selector ── */
+  .vertical-selector { display: flex; align-items: center; gap: 8px; }
+  .vertical-selector label {
+    font-size: 11px; color: var(--text2); text-transform: uppercase;
+    letter-spacing: 0.8px; font-weight: 600;
+  }
+  .vertical-select {
+    padding: 7px 32px 7px 14px; background: var(--surface2);
+    border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); font-size: 14px; font-weight: 700;
+    outline: none; cursor: pointer; appearance: none; -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238b90a0'%3E%3Cpath d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 10px center;
+    transition: border-color 0.15s;
+  }
+  .vertical-select:hover, .vertical-select:focus { border-color: var(--accent); }
+
+  /* ── Config Panel ── */
+  .config-bar {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 14px 28px; display: flex; gap: 28px; align-items: flex-end; flex-wrap: wrap;
+  }
+  .config-section h3 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--text2); margin-bottom: 6px; font-weight: 600;
+  }
+  .config-inputs { display: flex; gap: 10px; flex-wrap: wrap; }
+  .config-field { display: flex; flex-direction: column; gap: 3px; }
+  .config-field label { font-size: 10px; color: var(--text2); font-weight: 500; }
+  .config-field input {
+    width: 64px; padding: 5px 8px; background: var(--bg);
+    border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text); font-size: 13px; font-weight: 600;
+    text-align: center; outline: none;
+  }
+  .config-field input:focus { border-color: var(--accent); }
+  .size-mapping { display: flex; gap: 5px; align-items: center; }
+  .size-chip { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .size-chip span { font-size: 9px; color: var(--text2); font-weight: 600; }
+  .size-chip input {
+    width: 40px; padding: 3px; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 4px; color: var(--text); font-size: 11px; text-align: center; outline: none;
+  }
+  .size-chip input:focus { border-color: var(--accent); }
+
+  /* ── Capacity Bars ── */
+  .capacity-overview {
+    padding: 14px 28px; display: flex; gap: 14px; flex-wrap: wrap;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+  }
+  .cap-bar-container { flex: 1; min-width: 160px; }
+  .cap-bar-label {
+    display: flex; justify-content: space-between;
+    font-size: 11px; margin-bottom: 3px; font-weight: 500;
+  }
+  .cap-bar-track {
+    height: 18px; background: var(--bg); border-radius: 5px;
+    overflow: hidden; border: 1px solid var(--border);
+  }
+  .cap-bar-fill {
+    height: 100%; border-radius: 4px; transition: width 0.4s ease, background 0.3s;
+    display: flex; align-items: center; justify-content: flex-end;
+    padding-right: 5px; font-size: 9px; font-weight: 700;
+    color: rgba(255,255,255,0.9);
+  }
+  .cap-total {
+    flex: 1; min-width: 160px; background: var(--surface2);
+    border-radius: 8px; padding: 6px 12px; border: 1px solid var(--border);
+  }
+  .cap-total .cap-bar-label { font-weight: 700; font-size: 12px; }
+
+  /* ── Filters ── */
+  .filters-bar {
+    padding: 10px 28px; display: flex; gap: 8px; flex-wrap: wrap;
+    align-items: center; background: var(--surface); border-bottom: 1px solid var(--border);
+  }
+  .filter-group { position: relative; }
+  .filter-btn {
+    padding: 5px 12px; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text); font-size: 11px; cursor: pointer;
+    display: flex; align-items: center; gap: 5px; transition: all 0.15s;
+  }
+  .filter-btn:hover { border-color: var(--accent); }
+  .filter-btn.active { border-color: var(--accent); background: rgba(108,92,231,0.15); }
+  .filter-btn .count {
+    background: var(--accent); color: white; font-size: 9px;
+    padding: 1px 5px; border-radius: 10px; font-weight: 700;
+  }
+  .filter-dropdown {
+    position: absolute; top: 100%; left: 0; margin-top: 4px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px; z-index: 50; min-width: 150px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4); display: none;
+  }
+  .filter-dropdown.open { display: block; }
+  .filter-option {
+    display: flex; align-items: center; gap: 6px; padding: 5px 8px;
+    border-radius: 4px; cursor: pointer; font-size: 11px;
+  }
+  .filter-option:hover { background: rgba(255,255,255,0.05); }
+  .filter-option input[type="checkbox"] { accent-color: var(--accent); }
+  .search-input {
+    padding: 5px 12px; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text); font-size: 11px; outline: none; width: 200px;
+  }
+  .search-input:focus { border-color: var(--accent); }
+  .search-input::placeholder { color: var(--text2); }
+  .sort-controls { display: flex; gap: 5px; align-items: center; }
+  .sort-controls select {
+    padding: 4px 8px; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 4px; color: var(--text); font-size: 11px; outline: none; cursor: pointer;
+  }
+
+  /* ── Btn ── */
+  .btn {
+    padding: 5px 14px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--surface2); color: var(--text); font-size: 11px;
+    cursor: pointer; font-weight: 500; transition: all 0.15s;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: white; }
+  .btn-primary:hover { background: var(--accent2); }
+
+  /* ── Lane (horizontal) ── */
+  .lane-section { padding: 0 28px 8px; }
+  .lane-header-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 28px 10px; margin: 0 -28px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+  }
+  .lane-header-row h2 {
+    font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px;
+  }
+  .badge {
+    font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 700;
+  }
+  .roadmap-badge { background: rgba(0,184,148,0.2); color: var(--green); }
+  .backlog-badge { background: rgba(139,144,160,0.2); color: var(--text2); }
+  .lane-stats {
+    display: flex; gap: 8px; align-items: center;
+  }
+  .stat-chip {
+    font-size: 10px; padding: 3px 8px; background: var(--surface);
+    border-radius: 6px; color: var(--text2); font-weight: 500;
+  }
+  .stat-chip strong { color: var(--text); }
+
+  /* ── Flow Container ── */
+  .flow-container {
+    display: flex; flex-wrap: wrap; gap: 6px; padding: 10px;
+    min-height: 80px; border-radius: 10px;
+    background: var(--surface); border: 1px solid var(--border);
+    transition: all 0.2s;
+    margin-top: 10px;
+  }
+  .flow-container.drag-over {
+    background: rgba(108,92,231,0.06);
+    border-color: var(--accent);
+    box-shadow: inset 0 0 20px rgba(108,92,231,0.08);
+  }
+  .flow-container.roadmap-flow { border-color: rgba(0,184,148,0.25); }
+  .empty-flow {
+    width: 100%; display: flex; align-items: center; justify-content: center;
+    min-height: 70px; color: var(--text2); font-size: 12px;
+    border: 2px dashed var(--border); border-radius: 8px;
+  }
+
+  /* ── Track (sub-lane within roadmap) ── */
+  .track-group { margin-top: 10px; }
+  .track-row {
+    display: flex; align-items: stretch; gap: 0;
+  }
+  .track-label {
+    writing-mode: vertical-lr; text-orientation: mixed;
+    transform: rotate(180deg);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
+    padding: 8px 6px; border-radius: 10px 0 0 10px;
+    min-width: 32px; text-align: center; white-space: nowrap;
+    color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  }
+  .track-flow {
+    display: flex; flex-wrap: wrap; gap: 6px; padding: 10px;
+    min-height: 60px; border-radius: 0 10px 10px 0;
+    background: var(--surface); border: 1px solid var(--border);
+    border-left: none; flex: 1; transition: all 0.2s;
+    align-content: flex-start;
+  }
+  .track-flow.drag-over {
+    background: rgba(108,92,231,0.06);
+    border-color: var(--accent);
+  }
+  .track-divider {
+    height: 1px; background: var(--border); margin: 0 0 0 32px; opacity: 0.5;
+  }
+  .track-empty {
+    display: flex; align-items: center; justify-content: center;
+    width: 100%; min-height: 40px; color: var(--text2); font-size: 11px;
+    border: 1px dashed var(--border); border-radius: 6px;
+    font-style: italic;
+  }
+
+  /* ── Project Block (proportional) ── */
+  .project-block {
+    position: relative; border-radius: 8px; cursor: grab;
+    transition: all 0.15s; user-select: none; overflow: hidden;
+    display: flex; flex-direction: column; justify-content: space-between;
+    border: 1px solid transparent;
+  }
+  .project-block:hover {
+    border-color: rgba(255,255,255,0.3);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+    transform: translateY(-2px);
+    z-index: 5;
+  }
+  .project-block.dragging { opacity: 0.3; transform: scale(0.95); }
+  .project-block.in-progress { box-shadow: inset 0 0 0 2px var(--green); }
+
+  .block-content {
+    padding: 8px 10px; display: flex; flex-direction: column;
+    height: 100%; overflow: hidden;
+  }
+  .block-title {
+    font-size: 11px; font-weight: 600; line-height: 1.25;
+    overflow: hidden; text-overflow: ellipsis;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  }
+  .block-bottom {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    margin-top: auto; padding-top: 4px;
+  }
+  .block-jira {
+    font-size: 9px; color: rgba(255,255,255,0.7); font-weight: 600;
+  }
+  .block-sprints {
+    font-size: 10px; font-weight: 800; color: white;
+    background: rgba(0,0,0,0.3); padding: 1px 6px; border-radius: 4px;
+  }
+  .block-pillar-line {
+    height: 3px; width: 100%; opacity: 0.8;
+  }
+
+  /* ── Move button on block ── */
+  .block-move {
+    position: absolute; top: 4px; right: 4px; width: 20px; height: 20px;
+    border-radius: 50%; border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; opacity: 0; transition: opacity 0.15s;
+    background: rgba(0,0,0,0.5); color: white;
+  }
+  .project-block:hover .block-move { opacity: 1; }
+  .block-move:hover { background: var(--accent); }
+
+  /* ── Tooltip ── */
+  .tooltip-overlay {
+    position: fixed; z-index: 200; pointer-events: none;
+  }
+  .tooltip-card {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px; width: 320px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+  }
+  .tooltip-card .tt-title { font-size: 13px; font-weight: 700; margin-bottom: 8px; }
+  .tooltip-card .tt-meta { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 8px; }
+  .tooltip-card .tt-efforts { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 6px; }
+  .tooltip-card .tt-total {
+    font-size: 12px; font-weight: 700; color: var(--accent2); text-align: right;
+  }
+  .pill {
+    font-size: 10px; padding: 2px 8px; border-radius: 10px;
+    font-weight: 600; white-space: nowrap;
+  }
+  .pill-pillar { opacity: 0.9; color: white; }
+  .pill-expansion { background: #00b894; }
+  .pill-acquisition { background: #0984e3; }
+  .pill-core-platform { background: #6c5ce7; }
+  .pill-comms { background: #e67e22; }
+  .pill-gamification { background: #e84393; }
+  .pill-core-bonus { background: #fdcb6e; color: #333; }
+  .pill-market { background: rgba(255,255,255,0.08); color: var(--text2); }
+  .pill-kpi { background: rgba(9,132,227,0.15); color: var(--blue); }
+  .pill-impact { font-weight: 700; }
+  .impact-XS { background: rgba(139,144,160,0.15); color: var(--text2); }
+  .impact-S { background: rgba(0,184,148,0.12); color: var(--green); }
+  .impact-M { background: rgba(9,132,227,0.15); color: var(--blue); }
+  .impact-L { background: rgba(108,92,231,0.15); color: var(--accent2); }
+  .impact-XL { background: rgba(230,126,34,0.15); color: var(--orange); }
+  .impact-XXL { background: rgba(225,112,85,0.15); color: var(--red); }
+  .impact-XXXL { background: rgba(225,112,85,0.25); color: var(--red); }
+  .effort-tag {
+    font-size: 10px; padding: 2px 6px; border-radius: 4px;
+    background: rgba(255,255,255,0.06); color: var(--text2); font-weight: 500;
+  }
+  .effort-tag .val { font-weight: 700; color: var(--text); }
+
+  /* ── Empty Vertical ── */
+  .empty-vertical {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; padding: 80px 40px; text-align: center; gap: 16px;
+  }
+  .empty-vertical-icon {
+    width: 80px; height: 80px; border-radius: 20px; background: var(--surface2);
+    border: 2px dashed var(--border); display: flex; align-items: center;
+    justify-content: center; font-size: 32px;
+  }
+  .empty-vertical h2 { font-size: 18px; font-weight: 700; }
+  .empty-vertical p { font-size: 13px; color: var(--text2); max-width: 400px; line-height: 1.5; }
+  .empty-vertical code {
+    background: var(--surface2); padding: 2px 8px; border-radius: 4px;
+    font-size: 12px; color: var(--accent2);
+  }
+
+  /* ── Scroll ── */
+  .main-scroll { overflow-y: auto; padding-bottom: 40px; }
+  .main-scroll::-webkit-scrollbar { width: 6px; }
+  .main-scroll::-webkit-scrollbar-track { background: transparent; }
+  .main-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* ── Color-by legend ── */
+  .color-legend {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  }
+  .legend-item {
+    display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--text2);
+  }
+  .legend-dot {
+    width: 10px; height: 10px; border-radius: 3px;
+  }
+
+  /* ── Drop Indicator ── */
+  .drop-indicator {
+    width: 3px; min-height: 70px; background: var(--accent);
+    border-radius: 2px; flex-shrink: 0;
+    box-shadow: 0 0 8px rgba(108,92,231,0.6);
+    animation: pulse-indicator 0.8s ease-in-out infinite alternate;
+  }
+  @keyframes pulse-indicator {
+    from { opacity: 0.6; }
+    to { opacity: 1; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<script type="text/babel">
+const { useState, useMemo, useCallback, useRef, useEffect } = React;
+
+const VERTICALS = [
+  { key: 'growth', label: 'Growth', color: '#6c5ce7', icon: '📈' },
+  { key: 'sportsbook', label: 'Sportsbook', color: '#00b894', icon: '⚽' },
+  { key: 'casino', label: 'Casino', color: '#e84393', icon: '🎰' },
+  { key: 'account', label: 'Account', color: '#0984e3', icon: '👤' },
+  { key: 'payments', label: 'Payments', color: '#fdcb6e', icon: '💳' },
+];
+
+const VERTICAL_DATA = {
+  growth: [
+  {id:1,nvrd:"PGR-362",masterEpic:"Marketplace",subTask:"[Marketplace] CY Expansion",pillar:"Expansion",targetMarket:"CY",targetKPI:"Revenue",impact:"L",backend:"S",frontend:"XS",natives:"S",qa:"S",inProgress:true},
+  {id:2,nvrd:"PGR-363",masterEpic:"Marketplace",subTask:"[Marketplace] MX Expansion",pillar:"Expansion",targetMarket:"MX",targetKPI:"Revenue",impact:"XL",backend:"XS",frontend:"XS",natives:"S",qa:"S",inProgress:false},
+  {id:3,nvrd:"PGR-293",masterEpic:"Nova",subTask:"Nova Integration: New customers",pillar:"Acquisition",targetMarket:"GR",targetKPI:"Revenue",impact:"XS",backend:"M",frontend:"",natives:"",qa:"S",inProgress:false},
+  {id:4,nvrd:"PGR-376",masterEpic:"Marketplace",subTask:"[Marketplace] CoinHunt Scalability",pillar:"Core Platform",targetMarket:"Global",targetKPI:"Efficiency",impact:"XL",backend:"L",frontend:"",natives:"",qa:"",inProgress:false},
+  {id:5,nvrd:"PGR-199",masterEpic:"Comms",subTask:"In-app Notification Channel",pillar:"Comms",targetMarket:"Global",targetKPI:"Experience",impact:"L",backend:"S",frontend:"S",natives:"M",qa:"S",inProgress:false},
+  {id:6,nvrd:"PGR-21",masterEpic:"Challenges",subTask:"[EPIC] Challenges Revamp (SB & CA)",pillar:"Comms",targetMarket:"Global",targetKPI:"Experience",impact:"L",backend:"XL",frontend:"L",natives:"XL",qa:"XL",inProgress:false},
+  {id:7,nvrd:"PGR-359",masterEpic:"Reporting",subTask:"[EPIC] Internal Campaign Reporting & Rewards Progress",pillar:"Core Platform",targetMarket:"Global",targetKPI:"Efficiency",impact:"XXXL",backend:"L",frontend:"",natives:"",qa:"M",inProgress:false},
+  {id:8,nvrd:"PGR-299",masterEpic:"Optimove",subTask:"[Optimove] Inbox Integration",pillar:"Comms",targetMarket:"Global",targetKPI:"Efficiency",impact:"M",backend:"M",frontend:"",natives:"",qa:"S",inProgress:false},
+  {id:9,nvrd:"PGR-313",masterEpic:"Marketplace",subTask:"Update Casino Loyalty Config - Novibet Club",pillar:"Expansion",targetMarket:"BR",targetKPI:"Revenue",impact:"M",backend:"S",frontend:"",natives:"",qa:"S",inProgress:false},
+  {id:10,nvrd:"PGR-149",masterEpic:"Offers",subTask:"Casino In-game Offers Widget",pillar:"Comms",targetMarket:"Global",targetKPI:"Experience",impact:"L",backend:"XL",frontend:"M",natives:"L",qa:"M",inProgress:false},
+  {id:11,nvrd:"PGR-145",masterEpic:"Offers",subTask:"[EPIC] 1-click Offers Opt-in",pillar:"Comms",targetMarket:"Global",targetKPI:"Revenue",impact:"M",backend:"XL",frontend:"S",natives:"M",qa:"S",inProgress:false},
+  {id:12,nvrd:"PGR-148",masterEpic:"Offers",subTask:"[EPIC] Offers Consolidation & Unification",pillar:"Core Platform",targetMarket:"Global",targetKPI:"Efficiency",impact:"XXL",backend:"XXXL",frontend:"XXXL",natives:"XXXL",qa:"XXXL",inProgress:false},
+  {id:13,nvrd:"PGR-314",masterEpic:"Welcome Offer v2",subTask:"Welcome Offer Revamp v2",pillar:"Acquisition",targetMarket:"GR",targetKPI:"Revenue",impact:"XL",backend:"XXL",frontend:"L",natives:"L",qa:"L",inProgress:false},
+  {id:14,nvrd:"PGR-315",masterEpic:"Welcome Offer v2",subTask:"[Welcome Offer v2] Casino WO",pillar:"Acquisition",targetMarket:"GR",targetKPI:"Revenue",impact:"L",backend:"XL",frontend:"M",natives:"M",qa:"L",inProgress:false},
+  {id:15,nvrd:"PGR-316",masterEpic:"Marketplace",subTask:"Marketplace: In-play mini game (Predictor / Slot / Wheel)",pillar:"Gamification",targetMarket:"Global",targetKPI:"Experience",impact:"XL",backend:"XXL",frontend:"M",natives:"L",qa:"L",inProgress:false},
+  {id:16,nvrd:"PGR-317",masterEpic:"Challenges",subTask:"[Challenges] Leader Board",pillar:"Gamification",targetMarket:"Global",targetKPI:"Experience",impact:"L",backend:"XL",frontend:"L",natives:"XL",qa:"L",inProgress:false},
+  {id:17,nvrd:"PGR-318",masterEpic:"Challenges",subTask:"[Challenges] Teams/Guilds/Social",pillar:"Gamification",targetMarket:"Global",targetKPI:"Experience",impact:"L",backend:"XXL",frontend:"L",natives:"XL",qa:"L",inProgress:false},
+  {id:18,nvrd:"PGR-319",masterEpic:"Offers",subTask:"[Offers] Deep-link Offers from External Channels (Email/Push)",pillar:"Comms",targetMarket:"Global",targetKPI:"Revenue",impact:"M",backend:"M",frontend:"S",natives:"M",qa:"S",inProgress:false},
+  {id:19,nvrd:"PGR-320",masterEpic:"Comms",subTask:"[Comms] WhatsApp Channel Integration",pillar:"Comms",targetMarket:"BR",targetKPI:"Revenue",impact:"M",backend:"M",frontend:"",natives:"",qa:"S",inProgress:false},
+  {id:20,nvrd:"PGR-321",masterEpic:"Comms",subTask:"[Comms] Telegram Channel Integration",pillar:"Comms",targetMarket:"Global",targetKPI:"Experience",impact:"S",backend:"M",frontend:"",natives:"",qa:"S",inProgress:false},
+  {id:21,nvrd:"PGR-322",masterEpic:"Comms",subTask:"Onsite Notification Feed Panel",pillar:"Comms",targetMarket:"Global",targetKPI:"Experience",impact:"M",backend:"S",frontend:"M",natives:"M",qa:"S",inProgress:false},
+  {id:22,nvrd:"PGR-323",masterEpic:"Optimove",subTask:"[Optimove] Triggered Campaign Support",pillar:"Comms",targetMarket:"Global",targetKPI:"Revenue",impact:"L",backend:"L",frontend:"",natives:"",qa:"S",inProgress:false},
+  {id:23,nvrd:"PGR-324",masterEpic:"Optimove",subTask:"[Optimove] A/B Testing Integration",pillar:"Comms",targetMarket:"Global",targetKPI:"Efficiency",impact:"M",backend:"M",frontend:"",natives:"",qa:"S",inProgress:false},
+  {id:24,nvrd:"PGR-325",masterEpic:"Offers",subTask:"[Offers] Automated Bonus Suggestions (AI/ML)",pillar:"Core Platform",targetMarket:"Global",targetKPI:"Revenue",impact:"XXL",backend:"XXL",frontend:"M",natives:"M",qa:"L",inProgress:false},
+  {id:25,nvrd:"PGR-326",masterEpic:"Reporting",subTask:"[Reporting] Campaign ROI Dashboard",pillar:"Core Platform",targetMarket:"Global",targetKPI:"Efficiency",impact:"XL",backend:"L",frontend:"L",natives:"",qa:"M",inProgress:false},
+  {id:26,nvrd:"PGR-327",masterEpic:"Reporting",subTask:"[Reporting] Player Lifecycle Analytics",pillar:"Core Platform",targetMarket:"Global",targetKPI:"Efficiency",impact:"L",backend:"L",frontend:"M",natives:"",qa:"S",inProgress:false},
+  {id:27,nvrd:"PGR-328",masterEpic:"Budget Optimization",subTask:"[Budget] Dynamic Budget Allocation Engine",pillar:"Core Platform",targetMarket:"Global",targetKPI:"Revenue",impact:"XXL",backend:"XXL",frontend:"L",natives:"",qa:"L",inProgress:false},
+  {id:28,nvrd:"PGR-329",masterEpic:"Budget Optimization",subTask:"[Budget] Spend vs Performance Tracker",pillar:"Core Platform",targetMarket:"Global",targetKPI:"Efficiency",impact:"L",backend:"L",frontend:"M",natives:"",qa:"S",inProgress:false},
+  {id:29,nvrd:"PGR-330",masterEpic:"Marketplace",subTask:"[Marketplace] Reward Shop",pillar:"Gamification",targetMarket:"Global",targetKPI:"Experience",impact:"XL",backend:"XL",frontend:"L",natives:"L",qa:"L",inProgress:false},
+  {id:30,nvrd:"PGR-331",masterEpic:"Marketplace",subTask:"[Marketplace] BR Expansion",pillar:"Expansion",targetMarket:"BR",targetKPI:"Revenue",impact:"XL",backend:"S",frontend:"XS",natives:"S",qa:"S",inProgress:false},
+  {id:31,nvrd:"PGR-332",masterEpic:"Challenges",subTask:"[Challenges] Daily/Weekly Streaks",pillar:"Gamification",targetMarket:"Global",targetKPI:"Experience",impact:"M",backend:"L",frontend:"M",natives:"L",qa:"M",inProgress:false},
+  {id:32,nvrd:"PGR-333",masterEpic:"Challenges",subTask:"[Challenges] Custom Challenge Builder (Internal Tool)",pillar:"Core Platform",targetMarket:"Global",targetKPI:"Efficiency",impact:"L",backend:"XL",frontend:"XL",natives:"",qa:"L",inProgress:false},
+  {id:33,nvrd:"PGR-334",masterEpic:"Comms",subTask:"[Comms] Rich Push Notifications (Images/Actions)",pillar:"Comms",targetMarket:"Global",targetKPI:"Experience",impact:"S",backend:"S",frontend:"",natives:"M",qa:"S",inProgress:false},
+  {id:34,nvrd:"PGR-335",masterEpic:"Comms",subTask:"[Comms] SMS Fallback for Critical Notifications",pillar:"Comms",targetMarket:"Global",targetKPI:"Experience",impact:"S",backend:"M",frontend:"",natives:"",qa:"S",inProgress:false},
+  {id:35,nvrd:"PGR-336",masterEpic:"Nova",subTask:"[Nova] Existing Customer Re-engagement Campaigns",pillar:"Acquisition",targetMarket:"GR",targetKPI:"Revenue",impact:"M",backend:"M",frontend:"S",natives:"",qa:"S",inProgress:false},
+  {id:36,nvrd:"PGR-337",masterEpic:"Nova",subTask:"[Nova] Attribution & Tracking Improvements",pillar:"Acquisition",targetMarket:"GR",targetKPI:"Efficiency",impact:"M",backend:"L",frontend:"S",natives:"XS",qa:"S",inProgress:false},
+  {id:37,nvrd:"PGR-338",masterEpic:"SEO & Affiliates",subTask:"[SEO] Content Management & SEO Toolkit",pillar:"Acquisition",targetMarket:"Global",targetKPI:"Revenue",impact:"L",backend:"M",frontend:"L",natives:"",qa:"S",inProgress:false},
+  {id:38,nvrd:"PGR-339",masterEpic:"SEO & Affiliates",subTask:"[Affiliates] Partner Dashboard & Tracking",pillar:"Acquisition",targetMarket:"Global",targetKPI:"Revenue",impact:"L",backend:"L",frontend:"L",natives:"",qa:"M",inProgress:false},
+  {id:39,nvrd:"PGR-340",masterEpic:"Offers",subTask:"[Offers] Geo-targeted Promotions",pillar:"Expansion",targetMarket:"Global",targetKPI:"Revenue",impact:"M",backend:"M",frontend:"S",natives:"S",qa:"S",inProgress:false},
+  {id:40,nvrd:"PGR-341",masterEpic:"Offers",subTask:"[Offers] Time-limited Flash Deals Engine",pillar:"Core Bonus",targetMarket:"Global",targetKPI:"Revenue",impact:"L",backend:"L",frontend:"M",natives:"M",qa:"M",inProgress:false},
+  {id:41,nvrd:"PGR-342",masterEpic:"Offers",subTask:"[Offers] VIP Tier-based Rewards System",pillar:"Core Bonus",targetMarket:"Global",targetKPI:"Revenue",impact:"XL",backend:"XXL",frontend:"L",natives:"L",qa:"L",inProgress:false},
+  {id:42,nvrd:"PGR-343",masterEpic:"Offers",subTask:"[Offers] Cross-product Bundle Offers",pillar:"Core Bonus",targetMarket:"Global",targetKPI:"Revenue",impact:"L",backend:"L",frontend:"M",natives:"M",qa:"M",inProgress:false},
+  {id:43,nvrd:"PGR-344",masterEpic:"Predictor",subTask:"[Predictor] Free-to-Play Predictor Game",pillar:"Gamification",targetMarket:"Global",targetKPI:"Experience",impact:"XL",backend:"XXL",frontend:"L",natives:"L",qa:"L",inProgress:false},
+  {id:44,nvrd:"PGR-345",masterEpic:"Predictor",subTask:"[Predictor] Social Sharing & Leaderboards",pillar:"Gamification",targetMarket:"Global",targetKPI:"Experience",impact:"M",backend:"L",frontend:"M",natives:"M",qa:"M",inProgress:false},
+  {id:45,nvrd:"PGR-346",masterEpic:"Marketplace",subTask:"[Marketplace] Dynamic Pricing Engine",pillar:"Core Platform",targetMarket:"Global",targetKPI:"Revenue",impact:"XXL",backend:"XXL",frontend:"S",natives:"S",qa:"L",inProgress:false},
+  {id:46,nvrd:"PGR-347",masterEpic:"Marketplace",subTask:"[Marketplace] Multi-currency Support Enhancement",pillar:"Expansion",targetMarket:"Global",targetKPI:"Efficiency",impact:"L",backend:"L",frontend:"S",natives:"S",qa:"M",inProgress:false},
+  {id:47,nvrd:"PGR-348",masterEpic:"Reporting",subTask:"[Reporting] Real-time Engagement Metrics Dashboard",pillar:"Core Platform",targetMarket:"Global",targetKPI:"Efficiency",impact:"L",backend:"M",frontend:"L",natives:"",qa:"S",inProgress:false},
+  {id:48,nvrd:"PGR-349",masterEpic:"Comms",subTask:"[Comms] Preference Center & Opt-in Management",pillar:"Comms",targetMarket:"Global",targetKPI:"Experience",impact:"M",backend:"M",frontend:"M",natives:"M",qa:"S",inProgress:false},
+  {id:49,nvrd:"PGR-350",masterEpic:"Challenges",subTask:"[Challenges] Achievement Badges & Collectibles",pillar:"Gamification",targetMarket:"Global",targetKPI:"Experience",impact:"M",backend:"L",frontend:"M",natives:"L",qa:"M",inProgress:false},
+  {id:50,nvrd:"PGR-351",masterEpic:"Welcome Offer v2",subTask:"[Welcome Offer v2] Personalized Onboarding Flow",pillar:"Acquisition",targetMarket:"Global",targetKPI:"Revenue",impact:"L",backend:"L",frontend:"L",natives:"L",qa:"L",inProgress:false},
+  {id:51,nvrd:"PGR-352",masterEpic:"Optimove",subTask:"[Optimove] Predictive Churn Prevention",pillar:"Comms",targetMarket:"Global",targetKPI:"Revenue",impact:"XL",backend:"XL",frontend:"S",natives:"",qa:"M",inProgress:false},
+  {id:52,nvrd:"PGR-353",masterEpic:"Budget Optimization",subTask:"[Budget] Channel Mix Optimizer",pillar:"Core Platform",targetMarket:"Global",targetKPI:"Revenue",impact:"L",backend:"L",frontend:"M",natives:"",qa:"S",inProgress:false},
+  {id:53,nvrd:"PGR-354",masterEpic:"Offers",subTask:"[Offers] Cashback & Rebate System",pillar:"Core Bonus",targetMarket:"Global",targetKPI:"Revenue",impact:"L",backend:"XL",frontend:"M",natives:"M",qa:"L",inProgress:false},
+  {id:54,nvrd:"PGR-355",masterEpic:"Marketplace",subTask:"[Marketplace] Vendor Onboarding Portal",pillar:"Core Platform",targetMarket:"Global",targetKPI:"Efficiency",impact:"M",backend:"L",frontend:"L",natives:"",qa:"M",inProgress:false},
+  {id:55,nvrd:"PGR-356",masterEpic:"Comms",subTask:"[Comms] In-app Survey & Feedback Module",pillar:"Comms",targetMarket:"Global",targetKPI:"Experience",impact:"S",backend:"M",frontend:"M",natives:"M",qa:"S",inProgress:false},
+  {id:56,nvrd:"PGR-357",masterEpic:"Nova",subTask:"[Nova] Referral Program 2.0",pillar:"Acquisition",targetMarket:"GR",targetKPI:"Revenue",impact:"L",backend:"L",frontend:"M",natives:"M",qa:"M",inProgress:false},
+  {id:57,nvrd:"PGR-358",masterEpic:"Reporting",subTask:"[Reporting] Automated Weekly Stakeholder Reports",pillar:"Core Platform",targetMarket:"Global",targetKPI:"Efficiency",impact:"M",backend:"M",frontend:"S",natives:"",qa:"S",inProgress:false},
+  {id:58,nvrd:"PGR-360",masterEpic:"Challenges",subTask:"[Challenges] Multi-sport Challenge Templates",pillar:"Gamification",targetMarket:"Global",targetKPI:"Experience",impact:"M",backend:"L",frontend:"M",natives:"L",qa:"M",inProgress:false},
+  {id:59,nvrd:"PGR-361",masterEpic:"Offers",subTask:"[Offers] Loyalty Points Exchange System",pillar:"Core Bonus",targetMarket:"Global",targetKPI:"Revenue",impact:"L",backend:"XL",frontend:"L",natives:"L",qa:"L",inProgress:false},
+  {id:60,nvrd:"PGR-364",masterEpic:"Marketplace",subTask:"[Marketplace] GR Enhancement Pack",pillar:"Expansion",targetMarket:"GR",targetKPI:"Revenue",impact:"M",backend:"S",frontend:"S",natives:"S",qa:"S",inProgress:false},
+  {id:61,nvrd:"PGR-365",masterEpic:"Comms",subTask:"[Comms] Email Template Builder",pillar:"Comms",targetMarket:"Global",targetKPI:"Efficiency",impact:"M",backend:"S",frontend:"L",natives:"",qa:"S",inProgress:false},
+  {id:62,nvrd:"PGR-366",masterEpic:"Predictor",subTask:"[Predictor] Integration with Live Events",pillar:"Gamification",targetMarket:"Global",targetKPI:"Experience",impact:"L",backend:"XL",frontend:"M",natives:"M",qa:"L",inProgress:false},
+  {id:63,nvrd:"PGR-367",masterEpic:"SEO & Affiliates",subTask:"[SEO] Technical SEO Automation Suite",pillar:"Acquisition",targetMarket:"Global",targetKPI:"Efficiency",impact:"M",backend:"L",frontend:"M",natives:"",qa:"S",inProgress:false}
+  ],
+  sportsbook: [], casino: [], account: [], payments: [],
+};
+
+const DEFAULT_SIZE_MAP = { XS: 0.5, S: 1, M: 2, L: 3, XL: 5, XXL: 8, XXXL: 13 };
+const DEFAULT_CAPACITY = { backend: 40, frontend: 30, natives: 25, qa: 20 };
+
+const PILLAR_COLORS = {
+  'Expansion': '#00b894', 'Acquisition': '#0984e3', 'Core Platform': '#6c5ce7',
+  'Comms': '#e67e22', 'Gamification': '#e84393', 'Core Bonus': '#fdcb6e',
+};
+const PILLAR_CLASSES = {
+  'Expansion': 'pill-expansion', 'Acquisition': 'pill-acquisition',
+  'Core Platform': 'pill-core-platform', 'Comms': 'pill-comms',
+  'Gamification': 'pill-gamification', 'Core Bonus': 'pill-core-bonus',
+};
+
+function getCapColor(pct) {
+  if (pct <= 70) return 'var(--green)';
+  if (pct <= 90) return 'var(--yellow)';
+  return 'var(--red)';
+}
+
+function getBlockBg(pillar) {
+  const c = PILLAR_COLORS[pillar] || '#6c5ce7';
+  return `linear-gradient(135deg, ${c}cc, ${c}88)`;
+}
+
+const BLOCK_HEIGHT = 80;
+const MIN_WIDTH = 100;
+const MAX_WIDTH = 360;
+const PX_PER_SPRINT = 20;
+
+function App() {
+  const [activeVertical, setActiveVertical] = useState('growth');
+  const [sizeMap, setSizeMap] = useState({...DEFAULT_SIZE_MAP});
+  const [tooltip, setTooltip] = useState(null);
+
+  const TRACKS = [
+    { key: 'core-bonus', label: 'Core Bonus', gradient: 'linear-gradient(180deg, #fdcb6ecc, #fdcb6e88)', borderColor: 'rgba(253,203,110,0.4)' },
+    { key: 'gamification', label: 'Gamification', gradient: 'linear-gradient(180deg, #e84393cc, #e8439388)', borderColor: 'rgba(232,67,147,0.4)' },
+  ];
+
+  const initVerticalState = () => {
+    const state = {};
+    for (const v of VERTICALS) {
+      const data = VERTICAL_DATA[v.key] || [];
+      const trks = {};
+      for (const t of TRACKS) trks[t.key] = [];
+      data.filter(p => p.inProgress).forEach(p => trks['core-bonus'].push(p.id));
+      state[v.key] = { capacity: {...DEFAULT_CAPACITY}, tracks: trks };
+    }
+    return state;
+  };
+  const [verticalStates, setVerticalStates] = useState(initVerticalState);
+
+  const currentData = VERTICAL_DATA[activeVertical] || [];
+  const currentState = verticalStates[activeVertical];
+  const capacity = currentState.capacity;
+  const tracks = currentState.tracks;
+
+  const roadmapIds = useMemo(() => {
+    const s = new Set();
+    for (const arr of Object.values(tracks)) arr.forEach(id => s.add(id));
+    return s;
+  }, [tracks]);
+
+  const setCapacity = (updater) => {
+    setVerticalStates(prev => ({
+      ...prev,
+      [activeVertical]: {
+        ...prev[activeVertical],
+        capacity: typeof updater === 'function' ? updater(prev[activeVertical].capacity) : updater,
+      }
+    }));
+  };
+  const setTracks = (updater) => {
+    setVerticalStates(prev => ({
+      ...prev,
+      [activeVertical]: {
+        ...prev[activeVertical],
+        tracks: typeof updater === 'function' ? updater(prev[activeVertical].tracks) : updater,
+      }
+    }));
+  };
+
+  const [search, setSearch] = useState('');
+  const [filters, setFilters] = useState({ pillar: [], market: [], epic: [], kpi: [], impact: [] });
+  const [openFilter, setOpenFilter] = useState(null);
+  const [sortBy, setSortBy] = useState('impact');
+  const [colorBy, setColorBy] = useState('pillar');
+  const dragItem = useRef(null);
+  const dragSource = useRef(null);
+
+  const handleVerticalChange = (key) => {
+    setActiveVertical(key);
+    setSearch('');
+    setFilters({ pillar: [], market: [], epic: [], kpi: [], impact: [] });
+  };
+
+  const sizeToSprints = useCallback((size) => {
+    if (!size || size === 'nan' || size === '' || size === 'NaN') return 0;
+    return sizeMap[size] || 0;
+  }, [sizeMap]);
+
+  const projectSprints = useCallback((p) => ({
+    backend: sizeToSprints(p.backend),
+    frontend: sizeToSprints(p.frontend),
+    natives: sizeToSprints(p.natives),
+    qa: sizeToSprints(p.qa),
+    total: sizeToSprints(p.backend) + sizeToSprints(p.frontend) + sizeToSprints(p.natives) + sizeToSprints(p.qa)
+  }), [sizeToSprints]);
+
+  const uniqueValues = useMemo(() => ({
+    pillar: [...new Set(currentData.map(p => p.pillar).filter(Boolean))].sort(),
+    market: [...new Set(currentData.map(p => p.targetMarket).filter(Boolean))].sort(),
+    epic: [...new Set(currentData.map(p => p.masterEpic).filter(Boolean))].sort(),
+    kpi: [...new Set(currentData.map(p => p.targetKPI).filter(Boolean))].sort(),
+    impact: ['XS','S','M','L','XL','XXL','XXXL'],
+  }), [currentData]);
+
+  const filterProjects = useCallback((projects) => {
+    return projects.filter(p => {
+      if (search) {
+        const q = search.toLowerCase();
+        if (!p.subTask.toLowerCase().includes(q) && !p.nvrd.toLowerCase().includes(q) && !p.masterEpic.toLowerCase().includes(q)) return false;
+      }
+      if (filters.pillar.length && !filters.pillar.includes(p.pillar)) return false;
+      if (filters.market.length && !filters.market.includes(p.targetMarket)) return false;
+      if (filters.epic.length && !filters.epic.includes(p.masterEpic)) return false;
+      if (filters.kpi.length && !filters.kpi.includes(p.targetKPI)) return false;
+      if (filters.impact.length && !filters.impact.includes(p.impact)) return false;
+      return true;
+    });
+  }, [search, filters]);
+
+  const impactOrder = { XXXL: 7, XXL: 6, XL: 5, L: 4, M: 3, S: 2, XS: 1 };
+  const sortProjects = useCallback((projects) => {
+    return [...projects].sort((a, b) => {
+      if (sortBy === 'impact') return (impactOrder[b.impact]||0) - (impactOrder[a.impact]||0);
+      if (sortBy === 'effort') return projectSprints(b).total - projectSprints(a).total;
+      if (sortBy === 'name') return a.subTask.localeCompare(b.subTask);
+      if (sortBy === 'epic') return a.masterEpic.localeCompare(b.masterEpic);
+      if (sortBy === 'pillar') return a.pillar.localeCompare(b.pillar);
+      return 0;
+    });
+  }, [sortBy, projectSprints]);
+
+  const roadmapProjects = useMemo(() => sortProjects(filterProjects(currentData.filter(p => roadmapIds.has(p.id)))), [roadmapIds, filterProjects, sortProjects, currentData]);
+  const backlogProjects = useMemo(() => sortProjects(filterProjects(currentData.filter(p => !roadmapIds.has(p.id)))), [roadmapIds, filterProjects, sortProjects, currentData]);
+
+  const usedCapacity = useMemo(() => {
+    return currentData.filter(p => roadmapIds.has(p.id)).reduce((acc, p) => {
+      const s = projectSprints(p);
+      return { backend: acc.backend + s.backend, frontend: acc.frontend + s.frontend, natives: acc.natives + s.natives, qa: acc.qa + s.qa };
+    }, { backend: 0, frontend: 0, natives: 0, qa: 0 });
+  }, [roadmapIds, projectSprints, currentData]);
+
+  const totalCapacity = capacity.backend + capacity.frontend + capacity.natives + capacity.qa;
+  const totalUsed = usedCapacity.backend + usedCapacity.frontend + usedCapacity.natives + usedCapacity.qa;
+
+  // Remove id from all tracks
+  const removeFromTracks = (trks, id) => {
+    const n = {};
+    for (const k of Object.keys(trks)) n[k] = trks[k].filter(x => x !== id);
+    return n;
+  };
+
+  const moveToTrack = (id, trackKey, insertIndex) => setTracks(prev => {
+    const n = removeFromTracks(prev, id);
+    if (insertIndex !== undefined) n[trackKey].splice(insertIndex, 0, id);
+    else n[trackKey].push(id);
+    return n;
+  });
+  const moveToBacklog = (id) => setTracks(prev => removeFromTracks(prev, id));
+
+  const handleDragStart = (e, id, source) => {
+    dragItem.current = id; dragSource.current = source;
+    e.dataTransfer.effectAllowed = 'move';
+    setTimeout(() => e.target.classList.add('dragging'), 0);
+  };
+  const handleDragEnd = (e) => {
+    e.target.classList.remove('dragging');
+    document.querySelectorAll('.drop-indicator').forEach(el => el.remove());
+  };
+  const handleDragOver = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; };
+  const handleDragEnter = (e) => { e.currentTarget.classList.add('drag-over'); };
+  const handleDragLeave = (e) => { if (!e.currentTarget.contains(e.relatedTarget)) e.currentTarget.classList.remove('drag-over'); };
+
+  const handleDropOnTrack = (e, trackKey) => {
+    e.preventDefault(); e.currentTarget.classList.remove('drag-over');
+    document.querySelectorAll('.drop-indicator').forEach(el => el.remove());
+    if (!dragItem.current) return;
+    moveToTrack(dragItem.current, trackKey);
+  };
+
+  const handleDropOnBlock = (e, trackKey, blockId, blockIndex) => {
+    e.preventDefault(); e.stopPropagation();
+    document.querySelectorAll('.drop-indicator').forEach(el => el.remove());
+    if (!dragItem.current || dragItem.current === blockId) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const dropAfter = (e.clientX - rect.left) > rect.width / 2;
+    const insertIdx = dropAfter ? blockIndex + 1 : blockIndex;
+    // Adjust index if dragging from same track before this position
+    const currentTrackIds = tracks[trackKey] || [];
+    const currentIdx = currentTrackIds.indexOf(dragItem.current);
+    let adjustedIdx = insertIdx;
+    if (currentIdx !== -1 && currentIdx < insertIdx) adjustedIdx = insertIdx - 1;
+    moveToTrack(dragItem.current, trackKey, adjustedIdx);
+  };
+
+  const handleDragOverBlock = (e, trackKey, blockId) => {
+    e.preventDefault(); e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    if (!dragItem.current || dragItem.current === blockId) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const dropAfter = (e.clientX - rect.left) > rect.width / 2;
+    // Show drop indicator
+    const existing = e.currentTarget.parentElement.querySelectorAll('.drop-indicator');
+    existing.forEach(el => el.remove());
+    const indicator = document.createElement('div');
+    indicator.className = 'drop-indicator';
+    if (dropAfter) {
+      e.currentTarget.after(indicator);
+    } else {
+      e.currentTarget.before(indicator);
+    }
+  };
+
+  const handleDropOnBacklog = (e) => {
+    e.preventDefault(); e.currentTarget.classList.remove('drag-over');
+    if (dragItem.current && dragSource.current !== 'backlog') moveToBacklog(dragItem.current);
+  };
+
+  const toggleFilter = (key, value) => {
+    setFilters(prev => ({ ...prev, [key]: prev[key].includes(value) ? prev[key].filter(v => v !== value) : [...prev[key], value] }));
+  };
+  const activeFilterCount = Object.values(filters).reduce((s, a) => s + a.length, 0);
+
+  useEffect(() => {
+    const handler = (e) => { if (!e.target.closest('.filter-group')) setOpenFilter(null); };
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, []);
+
+  const getBlockWidth = (p) => {
+    const sprints = projectSprints(p).total;
+    return Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, sprints * PX_PER_SPRINT));
+  };
+
+  const handleMouseEnter = (e, p) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setTooltip({ p, x: rect.right + 8, y: rect.top });
+  };
+  const handleMouseLeave = () => setTooltip(null);
+
+  const renderCapBar = (label, used, total) => {
+    const pct = total > 0 ? Math.round((used / total) * 100) : 0;
+    const barColor = getCapColor(pct);
+    return (
+      <div className="cap-bar-container">
+        <div className="cap-bar-label">
+          <span>{label}</span>
+          <span style={{color: barColor, fontWeight:700}}>{used}/{total} ({pct}%)</span>
+        </div>
+        <div className="cap-bar-track">
+          <div className="cap-bar-fill" style={{ width: `${Math.min(pct,100)}%`, background: barColor }}>
+            {pct > 15 ? `${pct}%` : ''}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderBlock = (p, lane, trackKey, blockIndex) => {
+    const s = projectSprints(p);
+    const w = getBlockWidth(p);
+    const isTrack = lane === 'roadmap' && trackKey;
+    return (
+      <div key={p.id}
+        className={`project-block ${p.inProgress ? 'in-progress' : ''}`}
+        style={{ width: w, height: BLOCK_HEIGHT, background: getBlockBg(p.pillar) }}
+        draggable
+        onDragStart={(e) => handleDragStart(e, p.id, lane)}
+        onDragEnd={handleDragEnd}
+        onMouseEnter={(e) => handleMouseEnter(e, p)}
+        onMouseLeave={handleMouseLeave}
+        {...(isTrack ? {
+          onDragOver: (e) => handleDragOverBlock(e, trackKey, p.id),
+          onDrop: (e) => handleDropOnBlock(e, trackKey, p.id, blockIndex),
+        } : {})}
+      >
+        <div className="block-content">
+          <div className="block-title">{p.subTask}</div>
+          <div className="block-bottom">
+            <span className="block-jira">{p.nvrd}</span>
+            <span className="block-sprints">{s.total}sp</span>
+          </div>
+        </div>
+        <button className="block-move"
+          onClick={(e) => { e.stopPropagation(); lane === 'backlog' ? moveToTrack(p.id, 'core-bonus') : moveToBacklog(p.id); }}
+          title={lane === 'backlog' ? 'Add to Roadmap' : 'Remove from Roadmap'}>
+          {lane === 'backlog' ? '＋' : '✕'}
+        </button>
+      </div>
+    );
+  };
+
+  const FilterDropdown = ({ filterKey, label }) => {
+    const values = uniqueValues[filterKey];
+    const selected = filters[filterKey];
+    const isOpen = openFilter === filterKey;
+    return (
+      <div className="filter-group">
+        <button className={`filter-btn ${selected.length ? 'active' : ''}`}
+          onClick={(e) => { e.stopPropagation(); setOpenFilter(isOpen ? null : filterKey); }}>
+          {label}
+          {selected.length > 0 && <span className="count">{selected.length}</span>}
+          <span style={{fontSize:10}}>▾</span>
+        </button>
+        <div className={`filter-dropdown ${isOpen ? 'open' : ''}`}>
+          {values.map(v => (
+            <label key={v} className="filter-option">
+              <input type="checkbox" checked={selected.includes(v)} onChange={() => toggleFilter(filterKey, v)} />
+              {v}
+            </label>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const projectById = useMemo(() => {
+    const m = {};
+    for (const p of currentData) m[p.id] = p;
+    return m;
+  }, [currentData]);
+
+  const trackProjects = useMemo(() => {
+    const result = {};
+    const filtered = new Set(filterProjects(currentData).map(p => p.id));
+    for (const t of TRACKS) {
+      result[t.key] = (tracks[t.key] || []).map(id => projectById[id]).filter(p => p && filtered.has(p.id));
+    }
+    return result;
+  }, [tracks, projectById, filterProjects, currentData]);
+
+  const activeV = VERTICALS.find(v => v.key === activeVertical);
+  const roadmapTotalSprints = currentData.filter(p => roadmapIds.has(p.id)).reduce((s, p) => s + projectSprints(p).total, 0);
+
+  const renderTooltip = () => {
+    if (!tooltip) return null;
+    const { p, x, y } = tooltip;
+    const s = projectSprints(p);
+    const efforts = [];
+    if (s.backend) efforts.push({ label: 'BE', val: p.backend, sprints: s.backend });
+    if (s.frontend) efforts.push({ label: 'FE', val: p.frontend, sprints: s.frontend });
+    if (s.natives) efforts.push({ label: 'Native', val: p.natives, sprints: s.natives });
+    if (s.qa) efforts.push({ label: 'QA', val: p.qa, sprints: s.qa });
+    // Keep tooltip on screen
+    const tx = Math.min(x, window.innerWidth - 340);
+    const ty = Math.min(y, window.innerHeight - 200);
+    return (
+      <div className="tooltip-overlay" style={{ left: tx, top: ty }}>
+        <div className="tooltip-card">
+          <div className="tt-title">{p.subTask}</div>
+          <div className="tt-meta">
+            <span className={`pill pill-pillar ${PILLAR_CLASSES[p.pillar]||''}`}>{p.pillar}</span>
+            <span className="pill pill-market">{p.targetMarket}</span>
+            <span className="pill pill-kpi">{p.targetKPI}</span>
+            <span className={`pill pill-impact impact-${p.impact}`}>Impact: {p.impact}</span>
+          </div>
+          <div className="tt-efforts">
+            {efforts.map(e => (
+              <span key={e.label} className="effort-tag">{e.label}: <span className="val">{e.val}</span> ({e.sprints}sp)</span>
+            ))}
+          </div>
+          <div className="tt-total">Total: {s.total} man-sprints</div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <>
+      <div className="app-header">
+        <h1>
+          <span style={{color: activeV.color}}>{activeV.icon}</span>
+          {' '}{activeV.label} <span>Capacity Planner</span>
+        </h1>
+        <div className="header-right">
+          <div className="vertical-selector">
+            <label>Vertical</label>
+            <select className="vertical-select" value={activeVertical}
+              onChange={e => handleVerticalChange(e.target.value)}>
+              {VERTICALS.map(v => (
+                <option key={v.key} value={v.key}>{v.icon} {v.label}</option>
+              ))}
+            </select>
+          </div>
+          {currentData.length > 0 && (
+            <span style={{fontSize:12, color:'var(--text2)'}}>
+              {roadmapIds.size} in roadmap · {currentData.length - roadmapIds.size} in backlog
+            </span>
+          )}
+        </div>
+      </div>
+
+      {currentData.length === 0 ? (
+        <div className="empty-vertical">
+          <div className="empty-vertical-icon">{activeV.icon}</div>
+          <h2>{activeV.label} Backlog</h2>
+          <p>No project data loaded for this vertical yet. Feed it with an Excel file using the same format as the Growth backlog.</p>
+          <p style={{fontSize:11, color:'var(--text2)'}}>
+            Expected columns: <code>NVRD</code> <code>Master Epic</code> <code>Sub Tasks</code> <code>Pillar</code> <code>Target Market</code> <code>Target KPI</code> <code>Impact</code> <code>Backend</code> <code>Frontend</code> <code>Natives</code> <code>QA</code>
+          </p>
+        </div>
+      ) : (<>
+
+      <div className="config-bar">
+        <div className="config-section">
+          <h3>Team Capacity (man-sprints)</h3>
+          <div className="config-inputs">
+            {['backend','frontend','natives','qa'].map(k => (
+              <div key={k} className="config-field">
+                <label>{k.charAt(0).toUpperCase() + k.slice(1)}</label>
+                <input type="number" min="0" value={capacity[k]}
+                  onChange={e => setCapacity(prev => ({...prev, [k]: parseInt(e.target.value)||0}))} />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="config-section">
+          <h3>T-shirt → Sprints</h3>
+          <div className="size-mapping">
+            {Object.entries(sizeMap).map(([size, val]) => (
+              <div key={size} className="size-chip">
+                <span>{size}</span>
+                <input type="number" min="0" step="0.5" value={val}
+                  onChange={e => setSizeMap(prev => ({...prev, [size]: parseFloat(e.target.value)||0}))} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="capacity-overview">
+        {renderCapBar('Backend', usedCapacity.backend, capacity.backend)}
+        {renderCapBar('Frontend', usedCapacity.frontend, capacity.frontend)}
+        {renderCapBar('Natives', usedCapacity.natives, capacity.natives)}
+        {renderCapBar('QA', usedCapacity.qa, capacity.qa)}
+        <div className="cap-total">
+          {renderCapBar('Total Capacity', totalUsed, totalCapacity)}
+        </div>
+      </div>
+
+      <div className="filters-bar">
+        <input className="search-input" placeholder="Search projects..." value={search} onChange={e => setSearch(e.target.value)} />
+        <FilterDropdown filterKey="pillar" label="Pillar" />
+        <FilterDropdown filterKey="epic" label="Epic" />
+        <FilterDropdown filterKey="market" label="Market" />
+        <FilterDropdown filterKey="kpi" label="KPI" />
+        <FilterDropdown filterKey="impact" label="Impact" />
+        {activeFilterCount > 0 && (
+          <button className="btn" onClick={() => setFilters({pillar:[],market:[],epic:[],kpi:[],impact:[]})}>
+            Clear ({activeFilterCount})
+          </button>
+        )}
+        <div style={{marginLeft:'auto'}} className="sort-controls">
+          <span style={{fontSize:10,color:'var(--text2)'}}>Sort:</span>
+          <select value={sortBy} onChange={e => setSortBy(e.target.value)}>
+            <option value="impact">Impact ↓</option>
+            <option value="effort">Effort ↓</option>
+            <option value="epic">Epic</option>
+            <option value="pillar">Pillar</option>
+            <option value="name">Name</option>
+          </select>
+        </div>
+        <div className="color-legend">
+          {Object.entries(PILLAR_COLORS).map(([name, color]) => (
+            <div key={name} className="legend-item">
+              <div className="legend-dot" style={{background: color}}></div>
+              {name}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="main-scroll">
+        {/* Roadmap Lane */}
+        <div className="lane-section">
+          <div className="lane-header-row">
+            <h2>
+              ✅ In Roadmap
+              <span className="badge roadmap-badge">{roadmapProjects.length}</span>
+              <span style={{fontSize:11,color:'var(--text2)',fontWeight:400,marginLeft:8}}>
+                {roadmapTotalSprints} total sprints
+              </span>
+            </h2>
+            <div className="lane-stats">
+              {['backend','frontend','natives','qa'].map(k => (
+                <span key={k} className="stat-chip">
+                  {k.charAt(0).toUpperCase()+k.slice(1)}: <strong>{usedCapacity[k]}</strong>/{capacity[k]}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="track-group">
+            {TRACKS.map((track, i) => (
+              <React.Fragment key={track.key}>
+                {i > 0 && <div className="track-divider" />}
+                <div className="track-row">
+                  <div className="track-label" style={{background: track.gradient}}>
+                    {track.label}
+                  </div>
+                  <div className="track-flow"
+                    onDragOver={handleDragOver} onDragEnter={handleDragEnter}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDropOnTrack(e, track.key)}
+                    style={{borderColor: track.borderColor}}>
+                    {(trackProjects[track.key] || []).length === 0 && <div className="track-empty">Drag projects here</div>}
+                    {(trackProjects[track.key] || []).map((p, idx) => renderBlock(p, 'roadmap', track.key, idx))}
+                  </div>
+                </div>
+              </React.Fragment>
+            ))}
+          </div>
+        </div>
+
+        {/* Backlog Lane */}
+        <div className="lane-section">
+          <div className="lane-header-row">
+            <h2>
+              📋 Backlog
+              <span className="badge backlog-badge">{backlogProjects.length}</span>
+            </h2>
+            <div style={{display:'flex',gap:6}}>
+              <button className="btn btn-primary" onClick={() => {
+                const sorted = [...currentData].sort((a,b) => (impactOrder[b.impact]||0) - (impactOrder[a.impact]||0));
+                let used = {backend:0,frontend:0,natives:0,qa:0};
+                const newTracks = {};
+                for (const t of TRACKS) newTracks[t.key] = [];
+                for (const p of sorted) {
+                  const s = projectSprints(p);
+                  if (used.backend+s.backend <= capacity.backend && used.frontend+s.frontend <= capacity.frontend && used.natives+s.natives <= capacity.natives && used.qa+s.qa <= capacity.qa) {
+                    newTracks['core-bonus'].push(p.id); used.backend += s.backend; used.frontend += s.frontend; used.natives += s.natives; used.qa += s.qa;
+                  }
+                }
+                setTracks(newTracks);
+              }}>Auto-fill by Impact</button>
+              <button className="btn" onClick={() => {
+                const empty = {};
+                for (const t of TRACKS) empty[t.key] = [];
+                setTracks(empty);
+              }}>Clear All</button>
+            </div>
+          </div>
+          <div className="flow-container"
+            onDragOver={handleDragOver} onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave} onDrop={handleDropOnBacklog}>
+            {backlogProjects.length === 0 && <div className="empty-flow">All projects are in the roadmap</div>}
+            {backlogProjects.map(p => renderBlock(p, 'backlog'))}
+          </div>
+        </div>
+      </div>
+
+      {renderTooltip()}
+      </>)}
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
