@@ -118,6 +118,17 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '5mb' }));
 
+// ── Request logging (debug) ──
+app.use((req, res, next) => {
+  console.log(`>> ${req.method} ${req.url}`);
+  next();
+});
+
+// ── Debug: test POST endpoint ──
+app.post('/api/test-post', (req, res) => {
+  res.json({ ok: true, method: req.method, path: req.path, bodyKeys: Object.keys(req.body || {}) });
+});
+
 // ── Health ──
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -211,6 +222,12 @@ function saveProjectsHandler(req, res) {
     res.status(500).json({ error: 'Failed to save projects' });
   }
 }
+
+// ── Catch-all 404 (debug) ──
+app.use((req, res) => {
+  console.log(`!! 404: ${req.method} ${req.url}`);
+  res.status(404).json({ error: 'Route not found', method: req.method, url: req.url });
+});
 
 // ── Start ──
 app.listen(PORT, '0.0.0.0', () => {
