@@ -112,6 +112,28 @@
   }
   .cap-total .cap-bar-label { font-weight: 700; font-size: 12px; }
 
+  /* ── Total Demand ── */
+  .demand-section {
+    padding: 14px 28px; display: flex; gap: 16px; flex-wrap: wrap;
+    background: var(--surface); border-bottom: 1px solid var(--border); align-items: stretch;
+  }
+  .demand-card {
+    flex: 1; min-width: 150px; background: var(--surface2); border-radius: 8px;
+    padding: 10px 14px; border: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px;
+  }
+  .demand-card-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); font-weight: 600; }
+  .demand-card-value { font-size: 20px; font-weight: 700; color: var(--text); }
+  .demand-card-buffered { font-size: 11px; color: var(--accent); font-weight: 500; }
+  .demand-buffer-row { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+  .demand-buffer-btn {
+    width: 22px; height: 22px; border-radius: 4px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text); font-size: 13px; font-weight: 700;
+    cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s;
+    padding: 0; line-height: 1;
+  }
+  .demand-buffer-btn:hover { border-color: var(--accent); background: rgba(108,92,231,0.15); }
+  .demand-buffer-pct { font-size: 11px; color: var(--muted); min-width: 36px; text-align: center; }
+
   /* ── Filters ── */
   .filters-bar {
     padding: 10px 28px; display: flex; gap: 8px; flex-wrap: wrap;
@@ -562,6 +584,7 @@ function App() {
   const [bulkField, setBulkField] = useState('pillar');
   const [bulkValue, setBulkValue] = useState('');
   const [saveStatus, setSaveStatus] = useState(null); // {type: 'ok'|'error', msg: '...'}
+  const [buffer, setBuffer] = useState({ backend: 0, frontend: 0, natives: 0, qa: 0 });
 
   const TRACKS = [
     { key: 'core-bonus', label: 'Core Bonus', gradient: 'linear-gradient(180deg, #fdcb6ecc, #fdcb6e88)', borderColor: 'rgba(253,203,110,0.4)' },
@@ -780,6 +803,21 @@ function App() {
 
   const totalCapacity = capacity.backend + capacity.frontend + capacity.natives + capacity.qa;
   const totalUsed = usedCapacity.backend + usedCapacity.frontend + usedCapacity.natives + usedCapacity.qa;
+
+  // Total demand across ALL projects (not just roadmap)
+  const totalDemand = useMemo(() => {
+    return currentData.reduce((acc, p) => {
+      const s = projectSprints(p);
+      return { backend: acc.backend + s.backend, frontend: acc.frontend + s.frontend, natives: acc.natives + s.natives, qa: acc.qa + s.qa };
+    }, { backend: 0, frontend: 0, natives: 0, qa: 0 });
+  }, [currentData, projectSprints]);
+
+  const bufferedDemand = useMemo(() => ({
+    backend: Math.round(totalDemand.backend * (1 + buffer.backend / 100) * 10) / 10,
+    frontend: Math.round(totalDemand.frontend * (1 + buffer.frontend / 100) * 10) / 10,
+    natives: Math.round(totalDemand.natives * (1 + buffer.natives / 100) * 10) / 10,
+    qa: Math.round(totalDemand.qa * (1 + buffer.qa / 100) * 10) / 10,
+  }), [totalDemand, buffer]);
 
   // Remove id from all tracks
   const removeFromTracks = (trks, id) => {
@@ -1329,6 +1367,23 @@ function App() {
         <div className="cap-total">
           {renderCapBar('Total Capacity', totalUsed, totalCapacity)}
         </div>
+      </div>
+
+      <div className="demand-section">
+        {['backend', 'frontend', 'natives', 'qa'].map(k => (
+          <div key={k} className="demand-card">
+            <div className="demand-card-title">{k.charAt(0).toUpperCase() + k.slice(1)} Total Demand</div>
+            <div className="demand-card-value">{totalDemand[k]} <span style={{fontSize:11,color:'var(--muted)',fontWeight:400}}>sprints</span></div>
+            <div className="demand-buffer-row">
+              <button className="demand-buffer-btn" onClick={() => setBuffer(prev => ({...prev, [k]: prev[k] - 5}))}>−</button>
+              <span className="demand-buffer-pct">{buffer[k] >= 0 ? '+' : ''}{buffer[k]}%</span>
+              <button className="demand-buffer-btn" onClick={() => setBuffer(prev => ({...prev, [k]: prev[k] + 5}))}>+</button>
+            </div>
+            {buffer[k] !== 0 && (
+              <div className="demand-card-buffered">With buffer: {bufferedDemand[k]} sprints</div>
+            )}
+          </div>
+        ))}
       </div>
 
       <div className="filters-bar">
