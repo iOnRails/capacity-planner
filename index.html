@@ -1030,11 +1030,13 @@ function App() {
     setEditValue(value || '');
   };
 
-  const commitEdit = () => {
+  const commitEditRef = useRef(null);
+  commitEditRef.current = () => {
     if (editingCell) {
       updateProject(editingCell.id, editingCell.field, editValue);
     }
   };
+  const commitEdit = () => commitEditRef.current();
 
   const dropdownFields = { impact: VALID_IMPACTS, backend: VALID_SIZES, frontend: VALID_SIZES, natives: VALID_SIZES, qa: VALID_SIZES };
 
@@ -1086,7 +1088,7 @@ function App() {
     { key: 'qa', label: 'QA', width: '5%' },
   ];
 
-  const ProjectsTable = () => (
+  const projectsTableJSX = (
     <div className="projects-container">
       <div className="projects-toolbar">
         <button className="btn btn-primary" onClick={addProject}>+ Add Project</button>
@@ -1242,7 +1244,7 @@ function App() {
           <h2>Loading {activeV.label} data...</h2>
         </div>
       ) : activeTab === 'projects' ? (
-        <ProjectsTable />
+        projectsTableJSX
       ) : currentData.length === 0 ? (
         <div className="empty-vertical">
           <div className="empty-vertical-icon">{activeV.icon}</div>
