@@ -112,6 +112,29 @@
   }
   .cap-total .cap-bar-label { font-weight: 700; font-size: 12px; }
 
+  /* ── Track Capacity Allocation ── */
+  .track-alloc-section {
+    padding: 14px 28px; background: var(--surface); border-bottom: 1px solid var(--border);
+  }
+  .track-alloc-section h3 { font-size: 12px; margin: 0 0 10px 0; color: var(--text); }
+  .track-alloc-grid {
+    display: grid; grid-template-columns: 120px repeat(4, 1fr) auto; gap: 6px 10px; align-items: center;
+  }
+  .track-alloc-header { font-size: 10px; text-transform: uppercase; color: var(--muted); font-weight: 600; letter-spacing: 0.5px; }
+  .track-alloc-label { font-size: 12px; font-weight: 600; color: var(--text); }
+  .track-alloc-input {
+    width: 100%; padding: 4px 6px; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 4px; color: var(--text); font-size: 12px; text-align: center; outline: none;
+  }
+  .track-alloc-input:focus { border-color: var(--accent); }
+  .track-alloc-input.over-cap { border-color: #e17055; background: rgba(225,112,85,0.1); }
+  .track-alloc-remaining { font-size: 11px; text-align: center; }
+  .track-alloc-remaining.ok { color: #00b894; }
+  .track-alloc-remaining.warn { color: #fdcb6e; }
+  .track-alloc-remaining.over { color: #e17055; font-weight: 700; }
+  .track-cap-bar { margin-top: 2px; height: 4px; background: var(--bg); border-radius: 2px; overflow: hidden; }
+  .track-cap-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+
   /* ── Total Demand ── */
   .demand-section {
     padding: 14px 28px; display: flex; gap: 16px; flex-wrap: wrap;
@@ -530,6 +553,11 @@ const VERTICALS = [
 const API_URL = window.API_URL || 'https://capacity-planner-production-1cf7.up.railway.app';
 
 const DEFAULT_SIZE_MAP = { XS: 0.5, S: 1, M: 2, L: 3, XL: 5, XXL: 8, XXXL: 13 };
+const DEFAULT_TRACK_CAPACITY = {
+  'core-bonus': { backend: 0, frontend: 0, natives: 0, qa: 0 },
+  'gateway': { backend: 0, frontend: 0, natives: 0, qa: 0 },
+  'seo-aff': { backend: 0, frontend: 0, natives: 0, qa: 0 },
+};
 const DEFAULT_CAPACITY = { backend: 40, frontend: 30, natives: 25, qa: 20 };
 
 const PILLAR_COLORS = {
@@ -567,6 +595,15 @@ function migrateTracks(tracks) {
   return result;
 }
 
+function migrateTrackCapacity(tc) {
+  const result = tc ? JSON.parse(JSON.stringify(tc)) : {};
+  const ZERO = { backend: 0, frontend: 0, natives: 0, qa: 0 };
+  if (!result['core-bonus']) result['core-bonus'] = { ...ZERO };
+  if (!result['gateway']) result['gateway'] = { ...ZERO };
+  if (!result['seo-aff']) result['seo-aff'] = { ...ZERO };
+  return result;
+}
+
 const BLOCK_HEIGHT = 80;
 const MIN_WIDTH = 100;
 const MAX_WIDTH = 360;
@@ -597,7 +634,7 @@ function App() {
   const [verticalData, setVerticalData] = useState({});
   const [verticalStates, setVerticalStates] = useState(() => {
     const state = {};
-    for (const v of VERTICALS) state[v.key] = { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gateway': [], 'seo-aff': [] } };
+    for (const v of VERTICALS) state[v.key] = { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }, trackCapacity: JSON.parse(JSON.stringify(DEFAULT_TRACK_CAPACITY)) };
     return state;
   });
 
@@ -614,6 +651,7 @@ function App() {
         [key]: {
           capacity: stateRes.capacity || {...DEFAULT_CAPACITY},
           tracks: migrateTracks(stateRes.tracks || { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }),
+          trackCapacity: migrateTrackCapacity(stateRes.trackCapacity),
         }
       }));
     } catch (e) {
@@ -637,7 +675,7 @@ function App() {
       await fetch(`${API_URL}/api/verticals/${key}/state`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ capacity: state.capacity, tracks: state.tracks }),
+        body: JSON.stringify({ capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity }),
       });
     } catch (e) {
       console.error('Failed to save state:', e);
@@ -693,9 +731,10 @@ function App() {
   }, [saveProjects]);
 
   const currentData = verticalData[activeVertical] || [];
-  const currentState = verticalStates[activeVertical] || { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gateway': [], 'seo-aff': [] } };
+  const currentState = verticalStates[activeVertical] || { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }, trackCapacity: JSON.parse(JSON.stringify(DEFAULT_TRACK_CAPACITY)) };
   const capacity = currentState.capacity;
   const tracks = currentState.tracks;
+  const trackCapacity = currentState.trackCapacity || JSON.parse(JSON.stringify(DEFAULT_TRACK_CAPACITY));
 
   const roadmapIds = useMemo(() => {
     const s = new Set();
@@ -716,6 +755,22 @@ function App() {
       return newState;
     });
   };
+  const updateTrackCapacity = (trackKey, discipline, value) => {
+    setVerticalStates(prev => {
+      const prevTC = prev[activeVertical].trackCapacity || JSON.parse(JSON.stringify(DEFAULT_TRACK_CAPACITY));
+      const newTC = { ...prevTC, [trackKey]: { ...prevTC[trackKey], [discipline]: value } };
+      // Validate: sum across tracks for this discipline can't exceed total capacity
+      const sum = Object.values(newTC).reduce((s, tc) => s + (tc[discipline] || 0), 0);
+      if (sum > prev[activeVertical].capacity[discipline]) return prev; // block the change
+      const newState = {
+        ...prev,
+        [activeVertical]: { ...prev[activeVertical], trackCapacity: newTC }
+      };
+      debouncedSave(activeVertical, newState[activeVertical]);
+      return newState;
+    });
+  };
+
   const setTracks = (updater) => {
     setVerticalStates(prev => {
       const newState = {
@@ -1014,6 +1069,28 @@ function App() {
     }
     return result;
   }, [tracks, projectById, filterProjects, currentData]);
+
+  // Per-track used capacity
+  const trackUsed = useMemo(() => {
+    const result = {};
+    for (const t of TRACKS) {
+      result[t.key] = (trackProjects[t.key] || []).reduce((acc, p) => {
+        const s = projectSprints(p);
+        return { backend: acc.backend + s.backend, frontend: acc.frontend + s.frontend, natives: acc.natives + s.natives, qa: acc.qa + s.qa };
+      }, { backend: 0, frontend: 0, natives: 0, qa: 0 });
+    }
+    return result;
+  }, [trackProjects, projectSprints]);
+
+  // Unallocated capacity per discipline
+  const unallocated = useMemo(() => {
+    const result = {};
+    for (const d of ['backend', 'frontend', 'natives', 'qa']) {
+      const allocated = Object.values(trackCapacity).reduce((s, tc) => s + (tc[d] || 0), 0);
+      result[d] = capacity[d] - allocated;
+    }
+    return result;
+  }, [capacity, trackCapacity]);
 
   const activeV = VERTICALS.find(v => v.key === activeVertical);
   const roadmapTotalSprints = currentData.filter(p => roadmapIds.has(p.id)).reduce((s, p) => s + projectSprints(p).total, 0);
@@ -1369,6 +1446,47 @@ function App() {
         </div>
       </div>
 
+      <div className="track-alloc-section">
+        <h3>Capacity Allocation per Swimlane</h3>
+        <div className="track-alloc-grid">
+          <div className="track-alloc-header"></div>
+          {['backend','frontend','natives','qa'].map(d => (
+            <div key={d} className="track-alloc-header">{d.charAt(0).toUpperCase()+d.slice(1)}</div>
+          ))}
+          <div className="track-alloc-header"></div>
+          {TRACKS.map(t => {
+            const used = trackUsed[t.key] || { backend:0, frontend:0, natives:0, qa:0 };
+            const tc = trackCapacity[t.key] || { backend:0, frontend:0, natives:0, qa:0 };
+            return (
+              <React.Fragment key={t.key}>
+                <div className="track-alloc-label" style={{borderLeft:`3px solid ${t.borderColor}`, paddingLeft:8}}>{t.label}</div>
+                {['backend','frontend','natives','qa'].map(d => {
+                  const pct = tc[d] > 0 ? Math.round(used[d] / tc[d] * 100) : 0;
+                  const color = pct > 100 ? '#e17055' : pct > 80 ? '#fdcb6e' : '#00b894';
+                  return (
+                    <div key={d}>
+                      <input type="number" min="0" className={`track-alloc-input${used[d] > tc[d] && tc[d] > 0 ? ' over-cap' : ''}`}
+                        value={tc[d]} onChange={e => updateTrackCapacity(t.key, d, parseInt(e.target.value)||0)} />
+                      {tc[d] > 0 && <div className="track-cap-bar"><div className="track-cap-fill" style={{width:`${Math.min(pct,100)}%`, background: color}} /></div>}
+                    </div>
+                  );
+                })}
+                <div style={{fontSize:10,color:'var(--muted)'}}>
+                  {Object.values(used).reduce((a,b)=>a+b,0)}/{Object.values(tc).reduce((a,b)=>a+b,0)}
+                </div>
+              </React.Fragment>
+            );
+          })}
+          <div className="track-alloc-label" style={{fontWeight:700}}>Remaining</div>
+          {['backend','frontend','natives','qa'].map(d => (
+            <div key={d} className={`track-alloc-remaining ${unallocated[d] < 0 ? 'over' : unallocated[d] === 0 ? 'warn' : 'ok'}`}>
+              {unallocated[d]}
+            </div>
+          ))}
+          <div></div>
+        </div>
+      </div>
+
       <div className="capacity-overview">
         {renderCapBar('Backend', bufferedUsed.backend, capacity.backend)}
         {renderCapBar('Frontend', bufferedUsed.frontend, capacity.frontend)}
@@ -1454,6 +1572,17 @@ function App() {
                 <div className="track-row">
                   <div className="track-label" style={{background: track.gradient}}>
                     {track.label}
+                    {(() => {
+                      const tc = trackCapacity[track.key] || {backend:0,frontend:0,natives:0,qa:0};
+                      const tu = trackUsed[track.key] || {backend:0,frontend:0,natives:0,qa:0};
+                      const totalAlloc = Object.values(tc).reduce((a,b)=>a+b,0);
+                      const totalUsedTrack = Object.values(tu).reduce((a,b)=>a+b,0);
+                      return totalAlloc > 0 ? (
+                        <span style={{fontSize:9,opacity:0.9,display:'block',marginTop:2}}>
+                          {totalUsedTrack}/{totalAlloc}
+                        </span>
+                      ) : null;
+                    })()}
                   </div>
                   <div className="track-flow"
                     onDragOver={handleDragOver} onDragEnter={handleDragEnter}

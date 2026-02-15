@@ -161,11 +161,12 @@ app.get('/api/verticals/:key/state', (req, res) => {
 
 // ── Save state for a vertical ──
 app.put('/api/verticals/:key/state', (req, res) => {
-  const { capacity, tracks } = req.body;
+  const { capacity, tracks, trackCapacity } = req.body;
   if (!capacity || !tracks) {
     return res.status(400).json({ error: 'Missing capacity or tracks in body' });
   }
   const state = { capacity, tracks, updatedAt: new Date().toISOString() };
+  if (trackCapacity) state.trackCapacity = trackCapacity;
   saveJSON(getStateFile(req.params.key), state);
   res.json({ success: true });
 });
