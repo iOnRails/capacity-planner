@@ -2621,12 +2621,9 @@ function App() {
                                 clearTimelineOverride(bar.project.id, bar.trackKey);
                               }
                             }}
-                            title={`${bar.project.subTask}: ${bar.sprints}sp${bar.hasOverride ? ' (drag-adjusted, double-click to reset)' : ''}${bar.ghost ? ' (split from ' + (TRACKS.find(t=>t.key===bar.homeTrack)?.label||'') + ')' : ''}`}>
-                            <div className="tl-bar-handle left"
-                              onMouseDown={e => handleBarDragStart(e, bar, 'left')} />
+                            title={`${bar.project.subTask}${bar.hasOverride ? ' (double-click to reset)' : ''}${bar.ghost ? ' (split from ' + (TRACKS.find(t=>t.key===bar.homeTrack)?.label||'') + ')' : ''}`}>
                             <div className="tl-bar-row1">
                               <span className="tl-bar-label">{bar.project.subTask}</span>
-                              <span className="tl-bar-sp">{bar.sprints}sp</span>
                             </div>
                             <div className="tl-bar-row2">
                               {bar.project.nvrd && <span className="tl-bar-jira">{bar.project.nvrd}</span>}
@@ -2637,8 +2634,6 @@ function App() {
                                 {dQ > 0 && <span>Q:{dQ}</span>}
                               </div>
                             </div>
-                            <div className="tl-bar-handle right"
-                              onMouseDown={e => handleBarDragStart(e, bar, 'right')} />
                           </div>
                           );
                         })}
