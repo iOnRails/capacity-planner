@@ -2413,7 +2413,7 @@ function App({ onLogout, user: authUser }) {
           )}
           {authUser && (
             <div style={{display:'flex',alignItems:'center',gap:6,marginLeft:8}}>
-              <a href="/audit.html" target="_blank" rel="noopener" style={{fontSize:10,color:'var(--text2)',textDecoration:'none',border:'1px solid var(--border)',borderRadius:4,padding:'2px 6px'}} title="View activity log">📋 Log</a>
+              {authUser.email === 'kmermigkas@novibet.com' && <a href="/audit.html" target="_blank" rel="noopener" style={{fontSize:10,color:'var(--text2)',textDecoration:'none',border:'1px solid var(--border)',borderRadius:4,padding:'2px 6px'}} title="View activity log">📋 Log</a>}
               {authUser.picture && <img src={authUser.picture} style={{width:24,height:24,borderRadius:'50%'}} referrerPolicy="no-referrer" />}
               <span style={{fontSize:11,color:'var(--text2)'}}>{authUser.name?.split(' ')[0]}</span>
               <button onClick={onLogout} style={{fontSize:10,color:'var(--text2)',background:'none',border:'1px solid var(--border)',borderRadius:4,padding:'2px 6px',cursor:'pointer'}}>Logout</button>
