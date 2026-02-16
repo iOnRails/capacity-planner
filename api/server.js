@@ -33,6 +33,7 @@ const AUDIT_MAX_DAYS = 30;
 // ── Audit Logging ──
 function logAudit(req, action, details) {
   try {
+    if (details === 'No changes detected') return;
     const userEmail = req.headers['x-user-email'] || (req.body && req.body._userEmail) || 'unknown';
     const userName = req.headers['x-user-name'] ? decodeURIComponent(req.headers['x-user-name']) : (req.body && req.body._userName) || 'unknown';
     const vertical = req.params.key || '';
