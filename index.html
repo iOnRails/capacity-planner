@@ -58,23 +58,27 @@
   }
   .vertical-select:hover, .vertical-select:focus { border-color: var(--accent); }
 
+  /* ── Settings Panel (tabbed) ── */
+  .settings-panel {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+  }
+  .settings-tabs {
+    display: flex; gap: 0; padding: 0 28px; border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+  }
+  .settings-tab {
+    padding: 8px 16px; font-size: 11px; font-weight: 600; color: var(--text2);
+    cursor: pointer; border: none; background: none; border-bottom: 2px solid transparent;
+    transition: all 0.15s; white-space: nowrap;
+  }
+  .settings-tab:hover { color: var(--text); background: rgba(108,92,231,0.06); }
+  .settings-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .settings-tab-content { padding: 14px 28px; }
+
   /* ── Config Panel ── */
   .config-bar {
-    background: var(--surface); border-bottom: 1px solid var(--border);
-    padding: 14px 28px; display: flex; gap: 28px; align-items: flex-end; flex-wrap: wrap;
+    display: flex; gap: 28px; align-items: flex-end; flex-wrap: wrap;
   }
-  .config-bar > .section-title { width: 100%; margin-bottom: 0; }
-  .section-title {
-    font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 10px;
-    letter-spacing: -0.2px; cursor: pointer; display: flex; align-items: center; gap: 6px;
-    user-select: none;
-  }
-  .section-title:hover { color: var(--accent); }
-  .section-title .section-icon { margin-right: 6px; }
-  .section-title .collapse-arrow { font-size: 10px; color: var(--text2); transition: transform 0.2s; }
-  .section-title .collapse-arrow.collapsed { transform: rotate(-90deg); }
-  .collapsible-content { overflow: hidden; transition: max-height 0.25s ease, opacity 0.2s ease; max-height: 1000px; opacity: 1; }
-  .collapsible-content.collapsed { max-height: 0; opacity: 0; margin: 0; padding-top: 0; padding-bottom: 0; }
   .config-section h3 {
     font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
     color: var(--text2); margin-bottom: 6px; font-weight: 600;
@@ -100,10 +104,8 @@
 
   /* ── Capacity Bars ── */
   .capacity-overview {
-    padding: 14px 28px; display: flex; gap: 14px; flex-wrap: wrap;
-    background: var(--surface); border-bottom: 1px solid var(--border);
+    display: flex; gap: 14px; flex-wrap: wrap;
   }
-  .capacity-overview > .section-title { width: 100%; margin-bottom: 2px; }
   .cap-bar-container { flex: 1; min-width: 160px; }
   .cap-bar-label {
     display: flex; justify-content: space-between;
@@ -126,10 +128,7 @@
   .cap-total .cap-bar-label { font-weight: 700; font-size: 12px; }
 
   /* ── Track Capacity Allocation ── */
-  .track-alloc-section {
-    padding: 14px 28px; background: var(--surface); border-bottom: 1px solid var(--border);
-  }
-  .track-alloc-section h3 { font-size: 15px; font-weight: 700; margin: 0 0 10px 0; color: var(--text); }
+  .track-alloc-section { }
   .track-alloc-grid {
     display: grid; grid-template-columns: 120px repeat(4, 1fr) auto; gap: 6px 10px; align-items: center;
   }
@@ -150,10 +149,7 @@
 
   /* ── Total Demand ── */
   .demand-section {
-    padding: 14px 28px; display: flex; gap: 16px; flex-wrap: wrap;
-    background: var(--surface); border-bottom: 1px solid var(--border); align-items: stretch;
-  }
-  .demand-section > .section-title { width: 100%; margin-bottom: 2px; align-self: flex-start;
+    display: flex; gap: 16px; flex-wrap: wrap; align-items: stretch;
   }
   .demand-card {
     flex: 1; min-width: 150px; background: var(--surface2); border-radius: 8px;
@@ -999,15 +995,11 @@ function App({ onLogout, user: authUser }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('planner');
-  const [collapsedSections, setCollapsedSections] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('cp_collapsed') || '{}'); } catch { return {}; }
-  });
-  const toggleSection = (key) => {
-    setCollapsedSections(prev => {
-      const next = { ...prev, [key]: !prev[key] };
-      localStorage.setItem('cp_collapsed', JSON.stringify(next));
-      return next;
-    });
+  const [settingsTab, setSettingsTab] = useState(() => localStorage.getItem('cp_settings_tab') || 'none');
+  const toggleSettingsTab = (tab) => {
+    const next = settingsTab === tab ? 'none' : tab;
+    setSettingsTab(next);
+    localStorage.setItem('cp_settings_tab', next);
   };
   const [editingCell, setEditingCell] = useState(null);
   const [editValue, setEditValue] = useState('');
@@ -2454,121 +2446,123 @@ function App({ onLogout, user: authUser }) {
       ) : (<>
 
       {/* 1. Configuration */}
-      <div className="config-bar">
-        <div className="section-title" onClick={() => toggleSection('config')}>
-          <span className={`collapse-arrow ${collapsedSections.config ? 'collapsed' : ''}`}>▼</span> ⚙️ Configuration
+      <div className="settings-panel">
+        <div className="settings-tabs">
+          <button className={`settings-tab ${settingsTab === 'config' ? 'active' : ''}`} onClick={() => toggleSettingsTab('config')}>⚙️ Configuration</button>
+          <button className={`settings-tab ${settingsTab === 'alloc' ? 'active' : ''}`} onClick={() => toggleSettingsTab('alloc')}>📊 Swimlane Allocation</button>
+          <button className={`settings-tab ${settingsTab === 'demand' ? 'active' : ''}`} onClick={() => toggleSettingsTab('demand')}>🎯 Demand & Buffer</button>
+          <button className={`settings-tab ${settingsTab === 'usage' ? 'active' : ''}`} onClick={() => toggleSettingsTab('usage')}>📈 Capacity Usage</button>
         </div>
-        <div className={`collapsible-content ${collapsedSections.config ? 'collapsed' : ''}`} style={{display: collapsedSections.config ? 'none' : 'flex', gap: 28, flexWrap: 'wrap'}}>
-          <div className="config-section">
-            <h3>Team Capacity (man-sprints)</h3>
-            <div className="config-inputs">
-              {['backend','frontend','natives','qa'].map(k => (
-                <div key={k} className="config-field">
-                  <label>{k.charAt(0).toUpperCase() + k.slice(1)}</label>
-                  <input type="number" min="0" value={capacity[k]}
-                    onChange={e => setCapacity(prev => ({...prev, [k]: parseInt(e.target.value)||0}))} />
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="config-section">
-            <h3>T-shirt → Sprints</h3>
-            <div className="size-mapping">
-              {Object.entries(sizeMap).map(([size, val]) => (
-                <div key={size} className="size-chip">
-                  <span>{size}</span>
-                  <input type="number" min="0" step="0.5" value={val}
-                    onChange={e => setSizeMap(prev => ({...prev, [size]: parseFloat(e.target.value)||0}))} />
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
 
-      {/* 2. Capacity Allocation per Swimlane */}
-      <div className="track-alloc-section">
-        <div className="section-title" onClick={() => toggleSection('alloc')} style={{padding:'10px 28px 0', margin:0}}>
-          <span className={`collapse-arrow ${collapsedSections.alloc ? 'collapsed' : ''}`}>▼</span> 📊 Capacity Allocation per Swimlane
-        </div>
-        <div className={`collapsible-content ${collapsedSections.alloc ? 'collapsed' : ''}`} style={collapsedSections.alloc ? {display:'none'} : {}}>
-          <div className="track-alloc-grid">
-            <div className="track-alloc-header"></div>
-            {['backend','frontend','natives','qa'].map(d => (
-              <div key={d} className="track-alloc-header">{d.charAt(0).toUpperCase()+d.slice(1)}</div>
-            ))}
-            <div className="track-alloc-header"></div>
-            {TRACKS.map(t => {
-              const used = trackUsed[t.key] || { backend:0, frontend:0, natives:0, qa:0 };
-              const tc = trackCapacity[t.key] || { backend:0, frontend:0, natives:0, qa:0 };
-              return (
-                <React.Fragment key={t.key}>
-                  <div className="track-alloc-label" style={{borderLeft:`3px solid ${t.borderColor}`, paddingLeft:8}}>{t.label}</div>
-                  {['backend','frontend','natives','qa'].map(d => {
-                    const pct = tc[d] > 0 ? Math.round(used[d] / tc[d] * 100) : 0;
-                    const color = pct > 100 ? '#e17055' : pct > 80 ? '#fdcb6e' : '#00b894';
-                    return (
-                      <div key={d}>
-                        <input type="number" min="0" className={`track-alloc-input${used[d] > tc[d] && tc[d] > 0 ? ' over-cap' : ''}`}
-                          value={tc[d]} onChange={e => updateTrackCapacity(t.key, d, parseInt(e.target.value)||0)} />
-                        {tc[d] > 0 && <div className="track-cap-bar"><div className="track-cap-fill" style={{width:`${Math.min(pct,100)}%`, background: color}} /></div>}
+        {settingsTab === 'config' && (
+          <div className="settings-tab-content">
+            <div className="config-bar">
+              <div className="config-section">
+                <h3>Team Capacity (man-sprints)</h3>
+                <div className="config-inputs">
+                  {['backend','frontend','natives','qa'].map(k => (
+                    <div key={k} className="config-field">
+                      <label>{k.charAt(0).toUpperCase() + k.slice(1)}</label>
+                      <input type="number" min="0" value={capacity[k]}
+                        onChange={e => setCapacity(prev => ({...prev, [k]: parseInt(e.target.value)||0}))} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="config-section">
+                <h3>T-shirt → Sprints</h3>
+                <div className="size-mapping">
+                  {Object.entries(sizeMap).map(([size, val]) => (
+                    <div key={size} className="size-chip">
+                      <span>{size}</span>
+                      <input type="number" min="0" step="0.5" value={val}
+                        onChange={e => setSizeMap(prev => ({...prev, [size]: parseFloat(e.target.value)||0}))} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {settingsTab === 'alloc' && (
+          <div className="settings-tab-content">
+            <div className="track-alloc-section">
+              <div className="track-alloc-grid">
+                <div className="track-alloc-header"></div>
+                {['backend','frontend','natives','qa'].map(d => (
+                  <div key={d} className="track-alloc-header">{d.charAt(0).toUpperCase()+d.slice(1)}</div>
+                ))}
+                <div className="track-alloc-header"></div>
+                {TRACKS.map(t => {
+                  const used = trackUsed[t.key] || { backend:0, frontend:0, natives:0, qa:0 };
+                  const tc = trackCapacity[t.key] || { backend:0, frontend:0, natives:0, qa:0 };
+                  return (
+                    <React.Fragment key={t.key}>
+                      <div className="track-alloc-label" style={{borderLeft:`3px solid ${t.borderColor}`, paddingLeft:8}}>{t.label}</div>
+                      {['backend','frontend','natives','qa'].map(d => {
+                        const pct = tc[d] > 0 ? Math.round(used[d] / tc[d] * 100) : 0;
+                        const color = pct > 100 ? '#e17055' : pct > 80 ? '#fdcb6e' : '#00b894';
+                        return (
+                          <div key={d}>
+                            <input type="number" min="0" className={`track-alloc-input${used[d] > tc[d] && tc[d] > 0 ? ' over-cap' : ''}`}
+                              value={tc[d]} onChange={e => updateTrackCapacity(t.key, d, parseInt(e.target.value)||0)} />
+                            {tc[d] > 0 && <div className="track-cap-bar"><div className="track-cap-fill" style={{width:`${Math.min(pct,100)}%`, background: color}} /></div>}
+                          </div>
+                        );
+                      })}
+                      <div style={{fontSize:10,color:'var(--muted)'}}>
+                        {Object.values(used).reduce((a,b)=>a+b,0)}/{Object.values(tc).reduce((a,b)=>a+b,0)}
                       </div>
-                    );
-                  })}
-                  <div style={{fontSize:10,color:'var(--muted)'}}>
-                    {Object.values(used).reduce((a,b)=>a+b,0)}/{Object.values(tc).reduce((a,b)=>a+b,0)}
+                    </React.Fragment>
+                  );
+                })}
+                <div className="track-alloc-label" style={{fontWeight:700}}>Remaining</div>
+                {['backend','frontend','natives','qa'].map(d => (
+                  <div key={d} className={`track-alloc-remaining ${unallocated[d] < 0 ? 'over' : unallocated[d] === 0 ? 'warn' : 'ok'}`}>
+                    {unallocated[d]}
                   </div>
-                </React.Fragment>
-              );
-            })}
-            <div className="track-alloc-label" style={{fontWeight:700}}>Remaining</div>
-            {['backend','frontend','natives','qa'].map(d => (
-              <div key={d} className={`track-alloc-remaining ${unallocated[d] < 0 ? 'over' : unallocated[d] === 0 ? 'warn' : 'ok'}`}>
-                {unallocated[d]}
+                ))}
+                <div></div>
               </div>
-            ))}
-            <div></div>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. Total Demand & Buffer */}
-      <div className="demand-section">
-        <div className="section-title" onClick={() => toggleSection('demand')}>
-          <span className={`collapse-arrow ${collapsedSections.demand ? 'collapsed' : ''}`}>▼</span> 🎯 Total Demand & Buffer
-        </div>
-        <div className={`collapsible-content ${collapsedSections.demand ? 'collapsed' : ''}`} style={collapsedSections.demand ? {display:'none'} : {display:'flex', gap:14, flexWrap:'wrap'}}>
-          {['backend', 'frontend', 'natives', 'qa'].map(k => (
-            <div key={k} className="demand-card">
-              <div className="demand-card-title">{k.charAt(0).toUpperCase() + k.slice(1)} Total Demand</div>
-              <div className="demand-card-value">{totalDemand[k]} <span style={{fontSize:11,color:'var(--muted)',fontWeight:400}}>sprints</span></div>
-              <div className="demand-buffer-row">
-                <button className="demand-buffer-btn" onClick={() => updateBuffer(k, -5)}>−</button>
-                <span className="demand-buffer-pct">{buffer[k] >= 0 ? '+' : ''}{buffer[k]}%</span>
-                <button className="demand-buffer-btn" onClick={() => updateBuffer(k, 5)}>+</button>
-              </div>
-              {buffer[k] !== 0 && (
-                <div className="demand-card-buffered">With buffer: {bufferedDemand[k]} sprints</div>
-              )}
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* 4. Roadmap Capacity Usage */}
-      <div className="capacity-overview">
-        <div className="section-title" onClick={() => toggleSection('usage')}>
-          <span className={`collapse-arrow ${collapsedSections.usage ? 'collapsed' : ''}`}>▼</span> 📈 Roadmap Capacity Usage
-        </div>
-        <div className={`collapsible-content ${collapsedSections.usage ? 'collapsed' : ''}`} style={collapsedSections.usage ? {display:'none'} : {display:'flex', gap:14, flexWrap:'wrap', width:'100%'}}>
-          {renderCapBar('Backend', bufferedUsed.backend, capacity.backend)}
-          {renderCapBar('Frontend', bufferedUsed.frontend, capacity.frontend)}
-          {renderCapBar('Natives', bufferedUsed.natives, capacity.natives)}
-          {renderCapBar('QA', bufferedUsed.qa, capacity.qa)}
-          <div className="cap-total">
-            {renderCapBar('Total Capacity', totalUsed, totalCapacity)}
           </div>
-        </div>
+        )}
+
+        {settingsTab === 'demand' && (
+          <div className="settings-tab-content">
+            <div className="demand-section">
+              {['backend', 'frontend', 'natives', 'qa'].map(k => (
+                <div key={k} className="demand-card">
+                  <div className="demand-card-title">{k.charAt(0).toUpperCase() + k.slice(1)} Total Demand</div>
+                  <div className="demand-card-value">{totalDemand[k]} <span style={{fontSize:11,color:'var(--muted)',fontWeight:400}}>sprints</span></div>
+                  <div className="demand-buffer-row">
+                    <button className="demand-buffer-btn" onClick={() => updateBuffer(k, -5)}>−</button>
+                    <span className="demand-buffer-pct">{buffer[k] >= 0 ? '+' : ''}{buffer[k]}%</span>
+                    <button className="demand-buffer-btn" onClick={() => updateBuffer(k, 5)}>+</button>
+                  </div>
+                  {buffer[k] !== 0 && (
+                    <div className="demand-card-buffered">With buffer: {bufferedDemand[k]} sprints</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {settingsTab === 'usage' && (
+          <div className="settings-tab-content">
+            <div className="capacity-overview">
+              {renderCapBar('Backend', bufferedUsed.backend, capacity.backend)}
+              {renderCapBar('Frontend', bufferedUsed.frontend, capacity.frontend)}
+              {renderCapBar('Natives', bufferedUsed.natives, capacity.natives)}
+              {renderCapBar('QA', bufferedUsed.qa, capacity.qa)}
+              <div className="cap-total">
+                {renderCapBar('Total Capacity', totalUsed, totalCapacity)}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="filters-bar">
