@@ -709,7 +709,7 @@
     padding-top: 20px; /* space for milestone flags */
   }
   .tl-ruler-label {
-    width: 110px; min-width: 110px; padding: 8px 10px; font-size: 10px;
+    width: 140px; min-width: 140px; padding: 8px 10px; font-size: 10px;
     font-weight: 600; color: var(--text2); text-transform: uppercase;
     border-right: 1px solid var(--border); display: flex; align-items: flex-end;
   }
@@ -725,7 +725,7 @@
     display: flex; border-bottom: 1px solid var(--border); min-height: 80px;
   }
   .tl-track-label {
-    width: 110px; min-width: 110px; padding: 8px 10px;
+    width: 140px; min-width: 140px; padding: 8px 10px;
     font-size: 12px; font-weight: 700; color: white;
     text-shadow: 0 1px 2px rgba(0,0,0,0.3);
     border-right: 1px solid var(--border);
@@ -785,6 +785,18 @@
   .tl-bar.has-override {
     border-color: var(--yellow); border-width: 2px;
   }
+
+  /* Track capacity stats in timeline */
+  .tl-track-stats {
+    display: flex; flex-direction: column; gap: 1px; margin-top: 6px; width: 100%;
+  }
+  .tl-stat-row {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 9px; font-weight: 600; line-height: 1.4;
+  }
+  .tl-stat-label { color: rgba(255,255,255,0.6); }
+  .tl-stat-val { color: rgba(255,255,255,0.9); }
+  .tl-stat-val.over { color: #ff6b6b; }
 
   /* Sub-lane controls */
   .sub-lane-controls { display: flex; gap: 3px; align-items: center; margin-top: 6px; }
@@ -2600,13 +2612,30 @@ function App() {
                     <div key={track.key} className="tl-track" style={{minHeight: trackHeight}}>
                       <div className="tl-track-label" style={{background: track.gradient}}>
                         <span>{track.label}</span>
+                        {(() => {
+                          const tu = trackUsed[track.key] || {backend:0,frontend:0,natives:0,qa:0};
+                          const tc = trackCapacity[track.key] || {backend:0,frontend:0,natives:0,qa:0};
+                          return (
+                          <div className="tl-track-stats">
+                            {['backend','frontend','natives','qa'].map(d => {
+                              const label = d === 'backend' ? 'BE' : d === 'frontend' ? 'FE' : d === 'natives' ? 'NA' : 'QA';
+                              return tc[d] > 0 ? (
+                                <div key={d} className="tl-stat-row">
+                                  <span className="tl-stat-label">{label}</span>
+                                  <span className={`tl-stat-val${tu[d] > tc[d] ? ' over' : ''}`}>{tu[d]}/{tc[d]}</span>
+                                </div>
+                              ) : null;
+                            })}
+                          </div>
+                          );
+                        })()}
                         <div className="sub-lane-controls">
                           <button className="sub-lane-btn" onClick={() => addSubLane(track.key)} title="Add parallel lane">+</button>
                           {laneCount > 1 && <button className="sub-lane-btn" onClick={() => removeSubLane(track.key)} title="Remove last lane">−</button>}
                           {laneCount > 1 && <span style={{fontSize:'9px',color:'rgba(255,255,255,0.6)'}}>{laneCount}</span>}
                         </div>
                       </div>
-                      <div className="tl-track-bars" style={{width: timelineData.totalPx - 110, minHeight: trackHeight - 8}}>
+                      <div className="tl-track-bars" style={{width: timelineData.totalPx - 140, minHeight: trackHeight - 8}}>
                         {/* Sub-lane separator lines */}
                         {Array.from({length: laneCount - 1}, (_, i) => (
                           <div key={`sep-${i}`} className="tl-sublane-separator" style={{top: (i + 1) * 66}} />
