@@ -1760,7 +1760,6 @@ function App({ onLogout, user: authUser }) {
       }
 
       // Walk in display order, accumulating and checking overflow
-      if (t.key === 'gateway') console.log('[overflow-debug] Gateway order:', combined.map(it => (it.type === 'ghost' ? 'ghost:' : '') + it.project.subTask).join(' → '), 'capacity:', JSON.stringify(tc), 'blockOrder:', JSON.stringify(order));
       for (const item of combined) {
         if (item.type === 'real') {
           const s = effectiveSprints(item.project);
@@ -1770,7 +1769,6 @@ function App({ onLogout, user: authUser }) {
             if (tc[d] > 0 && running[d] > tc[d]) exceeded.push(d);
           }
           if (exceeded.length > 0) overflows[item.project.id] = exceeded;
-          if (t.key === 'gateway') console.log('[overflow-debug]', item.project.subTask, 'sprints:', JSON.stringify(s), 'running:', JSON.stringify(running), exceeded.length > 0 ? 'OVERFLOW:' + exceeded.join(',') : 'ok');
         } else {
           for (const d of ['backend','frontend','natives','qa']) running[d] += (item.sizing[d] || 0);
           const exceeded = [];
@@ -1778,7 +1776,6 @@ function App({ onLogout, user: authUser }) {
             if (tc[d] > 0 && running[d] > tc[d]) exceeded.push(d);
           }
           if (exceeded.length > 0) overflows[`ghost-${item.project.id}`] = exceeded;
-          if (t.key === 'gateway') console.log('[overflow-debug] ghost:', item.project.subTask, 'sizing:', JSON.stringify(item.sizing), 'running:', JSON.stringify(running), exceeded.length > 0 ? 'OVERFLOW:' + exceeded.join(',') : 'ok');
         }
       }
       result[t.key] = overflows;
