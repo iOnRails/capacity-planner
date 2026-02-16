@@ -903,6 +903,8 @@ const PX_PER_SPRINT = 20;
 function App() {
   const [activeVertical, setActiveVertical] = useState('growth');
   const [sizeMap, setSizeMap] = useState({...DEFAULT_SIZE_MAP});
+  const sizeMapRef = useRef(sizeMap);
+  useEffect(() => { sizeMapRef.current = sizeMap; }, [sizeMap]);
   const [tooltip, setTooltip] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -940,6 +942,7 @@ function App() {
       ]);
       console.log('[load]', key, 'timelineOverrides from server:', JSON.stringify(stateRes.timelineOverrides || {}));
       setVerticalData(prev => ({ ...prev, [key]: projRes.projects || [] }));
+      if (stateRes.sizeMap) setSizeMap(stateRes.sizeMap);
       setVerticalStates(prev => ({
         ...prev,
         [key]: {
@@ -970,7 +973,7 @@ function App() {
   const saveState = useCallback(async (key, state) => {
     try {
       setSaving(true);
-      const payload = { capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides };
+      const payload = { capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides, sizeMap: sizeMapRef.current };
       console.log('[save]', key, 'timelineOverrides:', JSON.stringify(state.timelineOverrides || {}));
       const resp = await fetch(`${API_URL}/api/verticals/${key}/state`, {
         method: 'POST',
@@ -1000,7 +1003,7 @@ function App() {
     const onBeforeUnload = () => {
       if (pendingSave.current) {
         const { key, state } = pendingSave.current;
-        const body = JSON.stringify({ capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides });
+        const body = JSON.stringify({ capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides, sizeMap: sizeMapRef.current });
         navigator.sendBeacon(`${API_URL}/api/verticals/${key}/state`, new Blob([body], { type: 'application/json' }));
         pendingSave.current = null;
       }
@@ -1008,6 +1011,15 @@ function App() {
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, []);
+
+  // Save sizeMap when it changes
+  const sizeMapInitialized = useRef(false);
+  useEffect(() => {
+    if (!sizeMapInitialized.current) { sizeMapInitialized.current = true; return; }
+    if (activeVertical && verticalStates[activeVertical]) {
+      debouncedSave(activeVertical, verticalStates[activeVertical]);
+    }
+  }, [sizeMap]);
 
   // Save projects to API
   const projectSaveTimer = useRef(null);

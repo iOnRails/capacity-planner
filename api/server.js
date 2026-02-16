@@ -161,7 +161,7 @@ app.get('/api/verticals/:key/state', (req, res) => {
 
 // ── Save state for a vertical (POST + PUT) ──
 function saveStateHandler(req, res) {
-  const { capacity, tracks, trackCapacity, splits, timelineConfig, milestones, timelineOverrides } = req.body;
+  const { capacity, tracks, trackCapacity, splits, timelineConfig, milestones, timelineOverrides, sizeMap } = req.body;
   if (!capacity || !tracks) {
     return res.status(400).json({ error: 'Missing capacity or tracks in body' });
   }
@@ -173,6 +173,7 @@ function saveStateHandler(req, res) {
   if (timelineConfig !== undefined) state.timelineConfig = timelineConfig;
   if (milestones !== undefined) state.milestones = milestones;
   if (timelineOverrides !== undefined) state.timelineOverrides = timelineOverrides;
+  if (sizeMap !== undefined) state.sizeMap = sizeMap;
   saveJSON(getStateFile(req.params.key), state);
   res.json({ success: true });
 }
