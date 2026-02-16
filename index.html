@@ -2515,10 +2515,11 @@ function App() {
                       {['backend','frontend','natives','qa'].map(d => {
                         if (!tc[d]) return null;
                         const label = d === 'backend' ? 'Backend' : d === 'frontend' ? 'Frontend' : d === 'natives' ? 'Natives' : 'QA';
-                        const isOver = tu[d] > tc[d];
+                        const buffered = Math.round(tu[d] * (1 + (buffer[d] || 0) / 100) * 10) / 10;
+                        const isOver = buffered > tc[d];
                         return (
                           <span key={d} className={`track-cap-chip${isOver ? ' over' : ''}`}>
-                            {label}: <strong>{tu[d]}</strong>/{tc[d]}
+                            {label}: <strong>{buffered}</strong>/{tc[d]}
                           </span>
                         );
                       })}
