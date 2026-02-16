@@ -2622,6 +2622,8 @@ function App() {
                               }
                             }}
                             title={`${bar.project.subTask}${bar.hasOverride ? ' (double-click to reset)' : ''}${bar.ghost ? ' (split from ' + (TRACKS.find(t=>t.key===bar.homeTrack)?.label||'') + ')' : ''}`}>
+                            <div className="tl-bar-handle left"
+                              onMouseDown={e => handleBarDragStart(e, bar, 'left')} />
                             <div className="tl-bar-row1">
                               <span className="tl-bar-label">{bar.project.subTask}</span>
                             </div>
@@ -2634,6 +2636,8 @@ function App() {
                                 {dQ > 0 && <span>Q:{dQ}</span>}
                               </div>
                             </div>
+                            <div className="tl-bar-handle right"
+                              onMouseDown={e => handleBarDragStart(e, bar, 'right')} />
                           </div>
                           );
                         })}
