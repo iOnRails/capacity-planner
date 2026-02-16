@@ -218,7 +218,7 @@ function saveProjectsHandler(req, res) {
       cleanedTracks[tk] = (ids || []).filter(id => validIds.has(id));
     }
     saveJSON(getStateFile(req.params.key), {
-      capacity: existingState.capacity,
+      ...existingState,
       tracks: cleanedTracks,
       updatedAt: new Date().toISOString(),
     });

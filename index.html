@@ -738,11 +738,13 @@
   .tl-bar {
     position: absolute; top: 6px; height: 60px; border-radius: 8px;
     display: flex; flex-direction: column; justify-content: center;
-    padding: 6px 10px; cursor: default;
+    padding: 6px 14px; cursor: grab;
     border: 1px solid rgba(255,255,255,0.15);
     box-shadow: 0 2px 6px rgba(0,0,0,0.2); overflow: hidden;
     transition: box-shadow 0.15s, border-color 0.15s;
+    user-select: none;
   }
+  .tl-bar:active { cursor: grabbing; }
   .tl-bar:hover {
     box-shadow: 0 4px 14px rgba(0,0,0,0.35);
     border-color: rgba(255,255,255,0.3); z-index: 5;
@@ -1759,7 +1761,7 @@ function App() {
     return { trackBars, marks, totalPx: totalPx, msPositions, pxPerSprint };
   }, [tracks, projectById, effectiveSprints, ghostsByTrack, timelineConfig, milestones, timelineOverrides]);
 
-  // Drag-to-resize handlers for timeline bars
+  // Drag handlers for timeline bars (resize left/right + move)
   const handleBarDragStart = useCallback((e, bar, side) => {
     e.preventDefault();
     e.stopPropagation();
@@ -1770,28 +1772,33 @@ function App() {
     const origStartSp = bar.startSprints;
     const origDurSp = bar.sprints;
 
+    const barEl = e.target.closest('.tl-bar');
     const onMouseMove = (ev) => {
       const dx = ev.clientX - startX;
+      const el = barEl;
       if (side === 'right') {
         const newWidth = Math.max(40, origWidth + dx);
         const newDurSp = Math.max(1, Math.round(newWidth / pxPerSprint));
         dragRef.current = { projectId: bar.project.id, trackKey: bar.trackKey, startSprints: origStartSp, durationSprints: newDurSp };
-        // Visual update via DOM for smoothness
-        const el = ev.target.closest('.tl-bar');
         if (el) { el.style.width = (newDurSp * pxPerSprint) + 'px'; }
-      } else { // left
+      } else if (side === 'left') {
         const newLeft = origLeft + dx;
         const newStartSp = Math.max(0, Math.round(newLeft / pxPerSprint));
         const newDurSp = Math.max(1, origDurSp + (origStartSp - newStartSp));
         dragRef.current = { projectId: bar.project.id, trackKey: bar.trackKey, startSprints: newStartSp, durationSprints: newDurSp };
-        const el = ev.target.closest('.tl-bar');
         if (el) { el.style.left = (newStartSp * pxPerSprint) + 'px'; el.style.width = (newDurSp * pxPerSprint) + 'px'; }
+      } else { // move
+        const newLeft = origLeft + dx;
+        const newStartSp = Math.max(0, Math.round(newLeft / pxPerSprint));
+        dragRef.current = { projectId: bar.project.id, trackKey: bar.trackKey, startSprints: newStartSp, durationSprints: origDurSp };
+        if (el) { el.style.left = (newStartSp * pxPerSprint) + 'px'; }
       }
     };
 
     const onMouseUp = () => {
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
+      document.body.style.cursor = '';
       if (dragRef.current) {
         updateTimelineOverride(dragRef.current.projectId, dragRef.current.trackKey, {
           startSprints: dragRef.current.startSprints,
@@ -1801,6 +1808,7 @@ function App() {
       }
     };
 
+    document.body.style.cursor = side === 'move' ? 'grabbing' : 'col-resize';
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
   }, [timelineData.pxPerSprint, updateTimelineOverride]);
@@ -2471,6 +2479,7 @@ function App() {
                             style={{left: bar.left, width: bar.width, background: getBlockBg(bar.project.pillar)}}
                             onMouseEnter={(e) => handleMouseEnter(e, bar.project)}
                             onMouseLeave={handleMouseLeave}
+                            onMouseDown={e => { if (!e.target.classList.contains('tl-bar-handle')) handleBarDragStart(e, bar, 'move'); }}
                             onDoubleClick={() => {
                               if (bar.hasOverride && confirm('Reset this bar to auto-layout?')) {
                                 clearTimelineOverride(bar.project.id, bar.trackKey);
