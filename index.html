@@ -971,15 +971,19 @@ const MILESTONE_COLORS = ['#e84393','#fdcb6e','#00b894','#0984e3','#e67e22','#a2
 const PX_PER_SPRINT = 20;
 
 function App({ onLogout, user: authUser }) {
-  // Auth headers for API requests (audit logging)
-  const getAuthHeaders = useCallback(() => {
+  // Auth headers for API requests (audit logging) — reads from localStorage to avoid dependency issues
+  const getAuthHeaders = () => {
     const h = { 'Content-Type': 'application/json' };
-    if (authUser) {
-      h['X-User-Email'] = authUser.email || '';
-      h['X-User-Name'] = encodeURIComponent(authUser.name || '');
-    }
+    try {
+      const stored = localStorage.getItem('cp_google_auth');
+      if (stored) {
+        const data = JSON.parse(stored);
+        if (data.email) h['X-User-Email'] = data.email;
+        if (data.name) h['X-User-Name'] = encodeURIComponent(data.name);
+      }
+    } catch {}
     return h;
-  }, [authUser]);
+  };
 
   const [activeVertical, setActiveVertical] = useState('growth');
   const [sizeMap, setSizeMap] = useState({...DEFAULT_SIZE_MAP});
@@ -1068,7 +1072,7 @@ function App({ onLogout, user: authUser }) {
     } finally {
       setSaving(false);
     }
-  }, [getAuthHeaders]);
+  }, []);
 
   const pendingSave = useRef(null);
   const debouncedSave = useCallback((key, state) => {
@@ -1086,7 +1090,7 @@ function App({ onLogout, user: authUser }) {
       if (pendingSave.current) {
         const { key, state } = pendingSave.current;
         const beaconPayload = { capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides, trackSubLaneCounts: state.trackSubLaneCounts, timelineLaneAssignments: state.timelineLaneAssignments, trackBlockOrder: state.trackBlockOrder, sizeMap: sizeMapRef.current, buffer: state.buffer };
-        if (authUser) { beaconPayload._userEmail = authUser.email; beaconPayload._userName = authUser.name; }
+        try { const u = JSON.parse(localStorage.getItem('cp_google_auth') || '{}'); if (u.email) { beaconPayload._userEmail = u.email; beaconPayload._userName = u.name; } } catch {}
         navigator.sendBeacon(`${API_URL}/api/verticals/${key}/state`, new Blob([JSON.stringify(beaconPayload)], { type: 'application/json' }));
         pendingSave.current = null;
       }
@@ -1137,7 +1141,7 @@ function App({ onLogout, user: authUser }) {
     } finally {
       setSaving(false);
     }
-  }, [getAuthHeaders]);
+  }, []);
 
   const debouncedSaveProjects = useCallback((key, projects) => {
     if (projectSaveTimer.current) clearTimeout(projectSaveTimer.current);
