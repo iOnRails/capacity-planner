@@ -1742,30 +1742,48 @@ function App({ onLogout, user: authUser }) {
       if (!hasAllocation) { result[t.key] = {}; continue; }
       const running = { backend:0, frontend:0, natives:0, qa:0 };
       const overflows = {};
-      // Check real projects (using effective sprints minus splits)
-      for (const p of (trackProjects[t.key] || [])) {
-        const s = effectiveSprints(p);
-        for (const d of ['backend','frontend','natives','qa']) running[d] += s[d];
-        const exceeded = [];
-        for (const d of ['backend','frontend','natives','qa']) {
-          if (tc[d] > 0 && running[d] > tc[d]) exceeded.push(d);
-        }
-        if (exceeded.length > 0) overflows[p.id] = exceeded;
+
+      // Build combined list in display order (respecting trackBlockOrder)
+      const realItems = (trackProjects[t.key] || []).map(p => ({ type: 'real', project: p }));
+      const ghostItems = (ghostsByTrack[t.key] || []).filter(g => g && g.sizing).map(g => ({ type: 'ghost', project: g.project, sizing: g.sizing }));
+      const combined = [...realItems, ...ghostItems];
+      const order = trackBlockOrder[t.key];
+      if (order && order.length > 0) {
+        combined.sort((a, b) => {
+          const aKey = a.type === 'ghost' ? `ghost:${a.project.id}` : String(a.project.id);
+          const bKey = b.type === 'ghost' ? `ghost:${b.project.id}` : String(b.project.id);
+          const aIdx = order.indexOf(aKey);
+          const bIdx = order.indexOf(bKey);
+          if (aIdx === -1 && bIdx === -1) return 0;
+          if (aIdx === -1) return 1;
+          if (bIdx === -1) return 1;
+          return aIdx - bIdx;
+        });
       }
-      // Check ghost blocks
-      for (const g of (ghostsByTrack[t.key] || [])) {
-        if (!g || !g.sizing) continue;
-        for (const d of ['backend','frontend','natives','qa']) running[d] += (g.sizing[d] || 0);
-        const exceeded = [];
-        for (const d of ['backend','frontend','natives','qa']) {
-          if (tc[d] > 0 && running[d] > tc[d]) exceeded.push(d);
+
+      // Walk in display order, accumulating and checking overflow
+      for (const item of combined) {
+        if (item.type === 'real') {
+          const s = effectiveSprints(item.project);
+          for (const d of ['backend','frontend','natives','qa']) running[d] += s[d];
+          const exceeded = [];
+          for (const d of ['backend','frontend','natives','qa']) {
+            if (tc[d] > 0 && running[d] > tc[d]) exceeded.push(d);
+          }
+          if (exceeded.length > 0) overflows[item.project.id] = exceeded;
+        } else {
+          for (const d of ['backend','frontend','natives','qa']) running[d] += (item.sizing[d] || 0);
+          const exceeded = [];
+          for (const d of ['backend','frontend','natives','qa']) {
+            if (tc[d] > 0 && running[d] > tc[d]) exceeded.push(d);
+          }
+          if (exceeded.length > 0) overflows[`ghost-${item.project.id}`] = exceeded;
         }
-        if (exceeded.length > 0) overflows[`ghost-${g.project.id}`] = exceeded;
       }
       result[t.key] = overflows;
     }
     return result;
-  }, [trackProjects, trackCapacity, effectiveSprints, ghostsByTrack]);
+  }, [trackProjects, trackCapacity, effectiveSprints, ghostsByTrack, trackBlockOrder]);
 
   // ── Timeline helpers ──
   const updateTimelineConfig = useCallback((updates) => {
