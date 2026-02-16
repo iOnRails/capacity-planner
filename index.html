@@ -944,7 +944,7 @@ function App() {
   const [verticalData, setVerticalData] = useState({});
   const [verticalStates, setVerticalStates] = useState(() => {
     const state = {};
-    for (const v of VERTICALS) state[v.key] = { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }, trackCapacity: JSON.parse(JSON.stringify(DEFAULT_TRACK_CAPACITY)), splits: {}, timelineConfig: {...DEFAULT_TIMELINE_CONFIG}, milestones: [], timelineOverrides: {} };
+    for (const v of VERTICALS) state[v.key] = { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }, trackCapacity: JSON.parse(JSON.stringify(DEFAULT_TRACK_CAPACITY)), splits: {}, timelineConfig: {...DEFAULT_TIMELINE_CONFIG}, milestones: [], timelineOverrides: {}, trackSubLaneCounts: {}, timelineLaneAssignments: {} };
     return state;
   });
 
@@ -1714,10 +1714,11 @@ function App() {
       const counts = { ...(prev[activeVertical].trackSubLaneCounts || {}) };
       counts[trackKey] = (counts[trackKey] || 1) + 1;
       const newState = { ...prev, [activeVertical]: { ...prev[activeVertical], trackSubLaneCounts: counts } };
-      debouncedSave(activeVertical, newState[activeVertical]);
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveState(activeVertical, newState[activeVertical]);
       return newState;
     });
-  }, [activeVertical, debouncedSave]);
+  }, [activeVertical, saveState]);
 
   const removeSubLane = useCallback((trackKey) => {
     setVerticalStates(prev => {
@@ -1732,10 +1733,11 @@ function App() {
         }
       }
       const newState = { ...prev, [activeVertical]: { ...prev[activeVertical], trackSubLaneCounts: counts, timelineLaneAssignments: assignments } };
-      debouncedSave(activeVertical, newState[activeVertical]);
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveState(activeVertical, newState[activeVertical]);
       return newState;
     });
-  }, [activeVertical, debouncedSave]);
+  }, [activeVertical, saveState]);
 
   const updateLaneAssignment = useCallback((projectId, trackKey, laneIndex) => {
     setVerticalStates(prev => {
