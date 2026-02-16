@@ -2449,13 +2449,18 @@ function App() {
                     {(() => {
                       const tc = trackCapacity[track.key] || {backend:0,frontend:0,natives:0,qa:0};
                       const tu = trackUsed[track.key] || {backend:0,frontend:0,natives:0,qa:0};
-                      const totalAlloc = Object.values(tc).reduce((a,b)=>a+b,0);
-                      const totalUsedTrack = Object.values(tu).reduce((a,b)=>a+b,0);
-                      return totalAlloc > 0 ? (
-                        <span style={{fontSize:9,opacity:0.9,display:'block',marginTop:2}}>
-                          {totalUsedTrack}/{totalAlloc}
+                      const hasAlloc = Object.values(tc).some(v => v > 0);
+                      if (!hasAlloc) return null;
+                      return (
+                        <span style={{fontSize:8,opacity:0.9,display:'block',marginTop:4,lineHeight:'1.5'}}>
+                          {['backend','frontend','natives','qa'].map(d => {
+                            if (!tc[d]) return null;
+                            const label = d === 'backend' ? 'BE' : d === 'frontend' ? 'FE' : d === 'natives' ? 'NA' : 'QA';
+                            const isOver = tu[d] > tc[d];
+                            return <span key={d} style={{display:'block',color: isOver ? '#ff6b6b' : 'inherit'}}>{label} {tu[d]}/{tc[d]}</span>;
+                          })}
                         </span>
-                      ) : null;
+                      );
                     })()}
                   </div>
                   <div className="track-flow"
