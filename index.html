@@ -1010,7 +1010,6 @@ function App({ onLogout, user: authUser }) {
         fetch(`${API_URL}/api/verticals/${key}/projects`).then(r => r.json()),
         fetch(`${API_URL}/api/verticals/${key}/state`).then(r => r.json()),
       ]);
-      console.log('[load]', key, 'timelineOverrides from server:', JSON.stringify(stateRes.timelineOverrides || {}));
       setVerticalData(prev => ({ ...prev, [key]: projRes.projects || [] }));
       if (stateRes.sizeMap) setSizeMap(stateRes.sizeMap);
       setVerticalStates(prev => ({
@@ -1048,7 +1047,6 @@ function App({ onLogout, user: authUser }) {
     try {
       setSaving(true);
       const payload = { capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides, trackSubLaneCounts: state.trackSubLaneCounts, timelineLaneAssignments: state.timelineLaneAssignments, trackBlockOrder: state.trackBlockOrder, sizeMap: sizeMapRef.current, buffer: state.buffer };
-      console.log('[save]', key, 'timelineOverrides:', JSON.stringify(state.timelineOverrides || {}));
       const resp = await fetch(`${API_URL}/api/verticals/${key}/state`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1762,7 +1760,6 @@ function App({ onLogout, user: authUser }) {
       }
 
       // Walk in display order, accumulating and checking overflow
-      console.log(`[overflow] ${t.key} order:`, combined.map(i => i.type === 'ghost' ? `ghost:${i.project.id}(${i.project.subTask?.slice(0,15)})` : `${i.project.id}(${i.project.subTask?.slice(0,15)})`), 'tc:', tc);
       for (const item of combined) {
         if (item.type === 'real') {
           const s = effectiveSprints(item.project);
@@ -1772,7 +1769,6 @@ function App({ onLogout, user: authUser }) {
             if (tc[d] > 0 && running[d] > tc[d]) exceeded.push(d);
           }
           if (exceeded.length > 0) overflows[item.project.id] = exceeded;
-          console.log(`  [overflow] real ${item.project.id}(${item.project.subTask?.slice(0,20)}) running:`, {...running}, exceeded.length > 0 ? 'EXCEEDED:'+exceeded : '');
         } else {
           for (const d of ['backend','frontend','natives','qa']) running[d] += (item.sizing[d] || 0);
           const exceeded = [];
@@ -1780,7 +1776,6 @@ function App({ onLogout, user: authUser }) {
             if (tc[d] > 0 && running[d] > tc[d]) exceeded.push(d);
           }
           if (exceeded.length > 0) overflows[`ghost-${item.project.id}`] = exceeded;
-          console.log(`  [overflow] ghost ${item.project.id}(${item.project.subTask?.slice(0,20)}) sizing:`, item.sizing, 'running:', {...running}, exceeded.length > 0 ? 'EXCEEDED:'+exceeded : '');
         }
       }
       result[t.key] = overflows;
@@ -2377,7 +2372,7 @@ function App({ onLogout, user: authUser }) {
       <div className="app-header">
         <h1>
           <span style={{color: activeV.color}}>{activeV.icon}</span>
-          {' '}{activeV.label} <span>Capacity Planner</span>
+          {' '}{activeV.label} <span>Capacity Planner</span> <span style={{fontSize:9,color:'var(--text2)',opacity:0.5}}>v2.1</span>
         </h1>
         <div className="header-right">
           <div className="tab-switcher">
