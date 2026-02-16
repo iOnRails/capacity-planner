@@ -858,12 +858,22 @@
   }
   .auth-box {
     background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
-    padding: 40px; text-align: center; width: 340px;
+    padding: 40px; text-align: center; width: 380px;
     box-shadow: 0 8px 32px rgba(0,0,0,0.4);
   }
   .auth-icon { font-size: 40px; margin-bottom: 12px; }
   .auth-box h2 { font-size: 20px; font-weight: 700; margin-bottom: 4px; color: var(--text); }
   .auth-box p { font-size: 13px; color: var(--text2); margin-bottom: 20px; }
+  .auth-google-wrap {
+    display: flex; justify-content: center; margin-bottom: 16px;
+  }
+  .auth-divider {
+    display: flex; align-items: center; gap: 12px; margin: 16px 0;
+    font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: 1px;
+  }
+  .auth-divider::before, .auth-divider::after {
+    content: ''; flex: 1; height: 1px; background: var(--border);
+  }
   .auth-input {
     width: 100%; padding: 10px 14px; background: var(--bg);
     border: 1px solid var(--border); border-radius: 8px;
@@ -884,10 +894,27 @@
   }
   .auth-btn:hover { background: var(--accent2); }
   .auth-msg { margin-top: 10px; font-size: 12px; color: var(--red); font-weight: 600; }
+  .auth-msg.success { color: var(--green); }
+  .auth-user {
+    display: flex; align-items: center; gap: 10px; justify-content: center;
+    margin-bottom: 14px; padding: 8px 14px; background: var(--surface2);
+    border-radius: 8px; border: 1px solid var(--border);
+  }
+  .auth-user img { width: 28px; height: 28px; border-radius: 50%; }
+  .auth-user-info { text-align: left; }
+  .auth-user-name { font-size: 13px; font-weight: 600; color: var(--text); }
+  .auth-user-email { font-size: 11px; color: var(--text2); }
+  .auth-logout {
+    font-size: 11px; color: var(--text2); background: none; border: none;
+    cursor: pointer; text-decoration: underline; margin-top: 8px;
+  }
+  .auth-logout:hover { color: var(--red); }
+  .auth-domain { font-size: 11px; color: var(--text2); margin-bottom: 8px; }
 </style>
 </head>
 <body>
 <div id="root"></div>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
@@ -970,7 +997,7 @@ const DEFAULT_TIMELINE_CONFIG = {
 const MILESTONE_COLORS = ['#e84393','#fdcb6e','#00b894','#0984e3','#e67e22','#a29bfe','#e17055'];
 const PX_PER_SPRINT = 20;
 
-function App() {
+function App({ onLogout, user: authUser }) {
   const [activeVertical, setActiveVertical] = useState('growth');
   const [sizeMap, setSizeMap] = useState({...DEFAULT_SIZE_MAP});
   const sizeMapRef = useRef(sizeMap);
@@ -2380,6 +2407,16 @@ function App() {
               {roadmapIds.size} in roadmap · {currentData.length - roadmapIds.size} in backlog
             </span>
           )}
+          {authUser && authUser.email !== 'password' && (
+            <div style={{display:'flex',alignItems:'center',gap:6,marginLeft:8}}>
+              {authUser.picture && <img src={authUser.picture} style={{width:24,height:24,borderRadius:'50%'}} referrerPolicy="no-referrer" />}
+              <span style={{fontSize:11,color:'var(--text2)'}}>{authUser.name?.split(' ')[0]}</span>
+              <button onClick={onLogout} style={{fontSize:10,color:'var(--text2)',background:'none',border:'1px solid var(--border)',borderRadius:4,padding:'2px 6px',cursor:'pointer'}}>Logout</button>
+            </div>
+          )}
+          {authUser && authUser.email === 'password' && onLogout && (
+            <button onClick={onLogout} style={{fontSize:10,color:'var(--text2)',background:'none',border:'1px solid var(--border)',borderRadius:4,padding:'2px 6px',cursor:'pointer'}}>Logout</button>
+          )}
         </div>
       </div>
 
@@ -2926,44 +2963,153 @@ function App() {
   );
 }
 
+const GOOGLE_CLIENT_ID = '487456084105-01l0m47e7up61qb40sf2v7gtjmrp6hqt.apps.googleusercontent.com';
+const ALLOWED_DOMAIN = 'novibet.com';
 const AUTH_KEY = 'cp_auth';
 const AUTH_PASS = 'N0vib3t';
+const GOOGLE_AUTH_KEY = 'cp_google_auth';
+
+function decodeJwt(token) {
+  try {
+    const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(atob(base64));
+  } catch { return null; }
+}
+
+function getStoredGoogleAuth() {
+  try {
+    const stored = localStorage.getItem(GOOGLE_AUTH_KEY);
+    if (!stored) return null;
+    const data = JSON.parse(stored);
+    // Check expiry (with 5min buffer)
+    if (data.exp && data.exp * 1000 < Date.now() + 300000) {
+      localStorage.removeItem(GOOGLE_AUTH_KEY);
+      return null;
+    }
+    // Check domain
+    if (!data.email || !data.email.endsWith('@' + ALLOWED_DOMAIN)) {
+      localStorage.removeItem(GOOGLE_AUTH_KEY);
+      return null;
+    }
+    return data;
+  } catch { return null; }
+}
 
 function AuthGate() {
-  const [authed, setAuthed] = useState(() => localStorage.getItem(AUTH_KEY) === AUTH_PASS);
+  const [user, setUser] = useState(() => getStoredGoogleAuth());
   const [pw, setPw] = useState('');
-  const [error, setError] = useState(false);
+  const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const googleBtnRef = useRef(null);
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (pw === AUTH_PASS) {
-      localStorage.setItem(AUTH_KEY, AUTH_PASS);
-      setAuthed(true);
-    } else {
-      setError(true);
-      setTimeout(() => setError(false), 1500);
+  // Initialize Google Sign-In
+  useEffect(() => {
+    if (user) return;
+    const initGoogle = () => {
+      if (!window.google?.accounts?.id) {
+        setTimeout(initGoogle, 200);
+        return;
+      }
+      window.google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: handleGoogleResponse,
+        auto_select: true,
+      });
+      if (googleBtnRef.current) {
+        window.google.accounts.id.renderButton(googleBtnRef.current, {
+          theme: 'filled_black',
+          size: 'large',
+          width: 300,
+          text: 'signin_with',
+          shape: 'pill',
+        });
+      }
+    };
+    initGoogle();
+  }, [user]);
+
+  const handleGoogleResponse = useCallback((response) => {
+    const payload = decodeJwt(response.credential);
+    if (!payload) {
+      setError('Failed to verify Google sign-in');
+      return;
+    }
+    if (!payload.email || !payload.email.endsWith('@' + ALLOWED_DOMAIN)) {
+      setError(`Access restricted to @${ALLOWED_DOMAIN} accounts`);
+      return;
+    }
+    const userData = {
+      email: payload.email,
+      name: payload.name,
+      picture: payload.picture,
+      exp: payload.exp,
+      credential: response.credential,
+    };
+    localStorage.setItem(GOOGLE_AUTH_KEY, JSON.stringify(userData));
+    setUser(userData);
+    setError('');
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem(GOOGLE_AUTH_KEY);
+    localStorage.removeItem(AUTH_KEY);
+    setUser(null);
+    if (window.google?.accounts?.id) {
+      window.google.accounts.id.disableAutoSelect();
     }
   };
 
-  if (authed) return <App />;
+  const handlePasswordSubmit = (e) => {
+    e.preventDefault();
+    if (pw === AUTH_PASS) {
+      localStorage.setItem(AUTH_KEY, AUTH_PASS);
+      setUser({ email: 'password', name: 'Password Access' });
+    } else {
+      setError('Incorrect password');
+      setTimeout(() => setError(''), 1500);
+    }
+  };
+
+  // Check password fallback
+  if (!user && localStorage.getItem(AUTH_KEY) === AUTH_PASS) {
+    return <App onLogout={handleLogout} user={{name: 'Password Access'}} />;
+  }
+
+  if (user) return <App onLogout={handleLogout} user={user} />;
 
   return (
     <div className="auth-gate">
-      <form className="auth-box" onSubmit={handleSubmit}>
+      <div className="auth-box">
         <div className="auth-icon">🔒</div>
         <h2>Capacity Planner</h2>
-        <p>Enter password to continue</p>
-        <input
-          type="password"
-          className={`auth-input ${error ? 'auth-error' : ''}`}
-          value={pw}
-          onChange={e => setPw(e.target.value)}
-          placeholder="Password"
-          autoFocus
-        />
-        <button type="submit" className="auth-btn">Unlock</button>
-        {error && <div className="auth-msg">Incorrect password</div>}
-      </form>
+        <p className="auth-domain">Restricted to @{ALLOWED_DOMAIN} accounts</p>
+
+        <div className="auth-google-wrap">
+          <div ref={googleBtnRef}></div>
+        </div>
+
+        {error && <div className="auth-msg">{error}</div>}
+
+        <div className="auth-divider">or</div>
+
+        {!showPassword ? (
+          <button className="auth-logout" style={{fontSize:'12px',marginTop:0}} onClick={() => setShowPassword(true)}>
+            Use password instead
+          </button>
+        ) : (
+          <form onSubmit={handlePasswordSubmit}>
+            <input
+              type="password"
+              className={`auth-input ${error ? 'auth-error' : ''}`}
+              value={pw}
+              onChange={e => setPw(e.target.value)}
+              placeholder="Password"
+              autoFocus
+            />
+            <button type="submit" className="auth-btn">Unlock</button>
+          </form>
+        )}
+      </div>
     </div>
   );
 }
