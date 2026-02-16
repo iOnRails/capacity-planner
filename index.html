@@ -938,6 +938,7 @@ function App() {
         fetch(`${API_URL}/api/verticals/${key}/projects`).then(r => r.json()),
         fetch(`${API_URL}/api/verticals/${key}/state`).then(r => r.json()),
       ]);
+      console.log('[load]', key, 'timelineOverrides from server:', JSON.stringify(stateRes.timelineOverrides || {}));
       setVerticalData(prev => ({ ...prev, [key]: projRes.projects || [] }));
       setVerticalStates(prev => ({
         ...prev,
@@ -969,11 +970,14 @@ function App() {
   const saveState = useCallback(async (key, state) => {
     try {
       setSaving(true);
-      await fetch(`${API_URL}/api/verticals/${key}/state`, {
+      const payload = { capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides };
+      console.log('[save]', key, 'timelineOverrides:', JSON.stringify(state.timelineOverrides || {}));
+      const resp = await fetch(`${API_URL}/api/verticals/${key}/state`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides }),
+        body: JSON.stringify(payload),
       });
+      if (!resp.ok) console.error('[save] server error:', resp.status, await resp.text());
     } catch (e) {
       console.error('Failed to save state:', e);
     } finally {
@@ -981,10 +985,29 @@ function App() {
     }
   }, []);
 
+  const pendingSave = useRef(null);
   const debouncedSave = useCallback((key, state) => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => saveState(key, state), 800);
+    pendingSave.current = { key, state };
+    saveTimer.current = setTimeout(() => {
+      pendingSave.current = null;
+      saveState(key, state);
+    }, 800);
   }, [saveState]);
+
+  // Flush pending saves before page unload
+  useEffect(() => {
+    const onBeforeUnload = () => {
+      if (pendingSave.current) {
+        const { key, state } = pendingSave.current;
+        const body = JSON.stringify({ capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides });
+        navigator.sendBeacon(`${API_URL}/api/verticals/${key}/state`, new Blob([body], { type: 'application/json' }));
+        pendingSave.current = null;
+      }
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, []);
 
   // Save projects to API
   const projectSaveTimer = useRef(null);
@@ -1636,20 +1659,23 @@ function App() {
       const key = `${trackKey}:${projectId}`;
       overrides[key] = { ...(overrides[key] || {}), ...updates };
       const newState = { ...prev, [activeVertical]: { ...prev[activeVertical], timelineOverrides: overrides } };
-      debouncedSave(activeVertical, newState[activeVertical]);
+      // Save immediately (not debounced) — only fires on mouseup so no rapid-fire risk
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveState(activeVertical, newState[activeVertical]);
       return newState;
     });
-  }, [activeVertical, debouncedSave]);
+  }, [activeVertical, saveState]);
 
   const clearTimelineOverride = useCallback((projectId, trackKey) => {
     setVerticalStates(prev => {
       const overrides = { ...(prev[activeVertical].timelineOverrides || {}) };
       delete overrides[`${trackKey}:${projectId}`];
       const newState = { ...prev, [activeVertical]: { ...prev[activeVertical], timelineOverrides: overrides } };
-      debouncedSave(activeVertical, newState[activeVertical]);
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveState(activeVertical, newState[activeVertical]);
       return newState;
     });
-  }, [activeVertical, debouncedSave]);
+  }, [activeVertical, saveState]);
 
   // Drag-to-resize state ref
   const dragRef = useRef(null);
