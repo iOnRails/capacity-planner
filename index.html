@@ -951,7 +951,7 @@ function App() {
   const [bulkField, setBulkField] = useState('pillar');
   const [bulkValue, setBulkValue] = useState('');
   const [saveStatus, setSaveStatus] = useState(null); // {type: 'ok'|'error', msg: '...'}
-  const [buffer, setBuffer] = useState({ backend: 0, frontend: 0, natives: 0, qa: 0 });
+  // buffer is now stored inside verticalStates and persisted to the server
   const [splitModal, setSplitModal] = useState(null); // { projectId, projectName, existing: {...} }
   const [showTimeline, setShowTimeline] = useState(false);
 
@@ -965,7 +965,7 @@ function App() {
   const [verticalData, setVerticalData] = useState({});
   const [verticalStates, setVerticalStates] = useState(() => {
     const state = {};
-    for (const v of VERTICALS) state[v.key] = { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }, trackCapacity: JSON.parse(JSON.stringify(DEFAULT_TRACK_CAPACITY)), splits: {}, timelineConfig: {...DEFAULT_TIMELINE_CONFIG}, milestones: [], timelineOverrides: {}, trackSubLaneCounts: {}, timelineLaneAssignments: {}, trackBlockOrder: {} };
+    for (const v of VERTICALS) state[v.key] = { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }, trackCapacity: JSON.parse(JSON.stringify(DEFAULT_TRACK_CAPACITY)), splits: {}, timelineConfig: {...DEFAULT_TIMELINE_CONFIG}, milestones: [], timelineOverrides: {}, trackSubLaneCounts: {}, timelineLaneAssignments: {}, trackBlockOrder: {}, buffer: { backend: 0, frontend: 0, natives: 0, qa: 0 } };
     return state;
   });
 
@@ -992,6 +992,7 @@ function App() {
           trackSubLaneCounts: stateRes.trackSubLaneCounts || {},
           timelineLaneAssignments: stateRes.timelineLaneAssignments || {},
           trackBlockOrder: stateRes.trackBlockOrder || {},
+          buffer: stateRes.buffer || { backend: 0, frontend: 0, natives: 0, qa: 0 },
         }
       }));
     } catch (e) {
@@ -1012,7 +1013,7 @@ function App() {
   const saveState = useCallback(async (key, state) => {
     try {
       setSaving(true);
-      const payload = { capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides, trackSubLaneCounts: state.trackSubLaneCounts, timelineLaneAssignments: state.timelineLaneAssignments, trackBlockOrder: state.trackBlockOrder, sizeMap: sizeMapRef.current };
+      const payload = { capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides, trackSubLaneCounts: state.trackSubLaneCounts, timelineLaneAssignments: state.timelineLaneAssignments, trackBlockOrder: state.trackBlockOrder, sizeMap: sizeMapRef.current, buffer: state.buffer };
       console.log('[save]', key, 'timelineOverrides:', JSON.stringify(state.timelineOverrides || {}));
       const resp = await fetch(`${API_URL}/api/verticals/${key}/state`, {
         method: 'POST',
@@ -1042,7 +1043,7 @@ function App() {
     const onBeforeUnload = () => {
       if (pendingSave.current) {
         const { key, state } = pendingSave.current;
-        const body = JSON.stringify({ capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides, trackSubLaneCounts: state.trackSubLaneCounts, timelineLaneAssignments: state.timelineLaneAssignments, trackBlockOrder: state.trackBlockOrder, sizeMap: sizeMapRef.current });
+        const body = JSON.stringify({ capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides, trackSubLaneCounts: state.trackSubLaneCounts, timelineLaneAssignments: state.timelineLaneAssignments, trackBlockOrder: state.trackBlockOrder, sizeMap: sizeMapRef.current, buffer: state.buffer });
         navigator.sendBeacon(`${API_URL}/api/verticals/${key}/state`, new Blob([body], { type: 'application/json' }));
         pendingSave.current = null;
       }
@@ -1101,7 +1102,7 @@ function App() {
   }, [saveProjects]);
 
   const currentData = verticalData[activeVertical] || [];
-  const currentState = verticalStates[activeVertical] || { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }, trackCapacity: JSON.parse(JSON.stringify(DEFAULT_TRACK_CAPACITY)), splits: {}, timelineConfig: {...DEFAULT_TIMELINE_CONFIG}, milestones: [], timelineOverrides: {}, trackSubLaneCounts: {}, timelineLaneAssignments: {}, trackBlockOrder: {} };
+  const currentState = verticalStates[activeVertical] || { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }, trackCapacity: JSON.parse(JSON.stringify(DEFAULT_TRACK_CAPACITY)), splits: {}, timelineConfig: {...DEFAULT_TIMELINE_CONFIG}, milestones: [], timelineOverrides: {}, trackSubLaneCounts: {}, timelineLaneAssignments: {}, trackBlockOrder: {}, buffer: { backend: 0, frontend: 0, natives: 0, qa: 0 } };
   const capacity = currentState.capacity;
   const tracks = currentState.tracks;
   const trackCapacity = currentState.trackCapacity || JSON.parse(JSON.stringify(DEFAULT_TRACK_CAPACITY));
@@ -1112,6 +1113,17 @@ function App() {
   const trackSubLaneCounts = currentState.trackSubLaneCounts || {};
   const timelineLaneAssignments = currentState.timelineLaneAssignments || {};
   const trackBlockOrder = currentState.trackBlockOrder || {};
+  const buffer = currentState.buffer || { backend: 0, frontend: 0, natives: 0, qa: 0 };
+
+  const updateBuffer = useCallback((discipline, delta) => {
+    setVerticalStates(prev => {
+      const buf = { ...(prev[activeVertical].buffer || { backend: 0, frontend: 0, natives: 0, qa: 0 }) };
+      buf[discipline] = (buf[discipline] || 0) + delta;
+      const newState = { ...prev, [activeVertical]: { ...prev[activeVertical], buffer: buf } };
+      debouncedSave(activeVertical, newState[activeVertical]);
+      return newState;
+    });
+  }, [activeVertical, debouncedSave]);
 
   const roadmapIds = useMemo(() => {
     const s = new Set();
@@ -2439,9 +2451,9 @@ function App() {
             <div className="demand-card-title">{k.charAt(0).toUpperCase() + k.slice(1)} Total Demand</div>
             <div className="demand-card-value">{totalDemand[k]} <span style={{fontSize:11,color:'var(--muted)',fontWeight:400}}>sprints</span></div>
             <div className="demand-buffer-row">
-              <button className="demand-buffer-btn" onClick={() => setBuffer(prev => ({...prev, [k]: prev[k] - 5}))}>−</button>
+              <button className="demand-buffer-btn" onClick={() => updateBuffer(k, -5)}>−</button>
               <span className="demand-buffer-pct">{buffer[k] >= 0 ? '+' : ''}{buffer[k]}%</span>
-              <button className="demand-buffer-btn" onClick={() => setBuffer(prev => ({...prev, [k]: prev[k] + 5}))}>+</button>
+              <button className="demand-buffer-btn" onClick={() => updateBuffer(k, 5)}>+</button>
             </div>
             {buffer[k] !== 0 && (
               <div className="demand-card-buffered">With buffer: {bufferedDemand[k]} sprints</div>
