@@ -850,6 +850,40 @@
     box-shadow: 0 2px 8px rgba(108,92,231,0.3);
   }
   .btn-timeline:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(108,92,231,0.4); }
+
+  /* Auth Gate */
+  .auth-gate {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh; background: var(--bg);
+  }
+  .auth-box {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+    padding: 40px; text-align: center; width: 340px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+  .auth-icon { font-size: 40px; margin-bottom: 12px; }
+  .auth-box h2 { font-size: 20px; font-weight: 700; margin-bottom: 4px; color: var(--text); }
+  .auth-box p { font-size: 13px; color: var(--text2); margin-bottom: 20px; }
+  .auth-input {
+    width: 100%; padding: 10px 14px; background: var(--bg);
+    border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); font-size: 15px; outline: none;
+    text-align: center; letter-spacing: 2px; transition: border-color 0.2s;
+  }
+  .auth-input:focus { border-color: var(--accent); }
+  .auth-input.auth-error { border-color: var(--red); animation: shake 0.3s ease-in-out; }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-6px); }
+    75% { transform: translateX(6px); }
+  }
+  .auth-btn {
+    margin-top: 14px; width: 100%; padding: 10px; background: var(--accent);
+    border: none; border-radius: 8px; color: white; font-size: 14px;
+    font-weight: 600; cursor: pointer; transition: background 0.15s;
+  }
+  .auth-btn:hover { background: var(--accent2); }
+  .auth-msg { margin-top: 10px; font-size: 12px; color: var(--red); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -2892,7 +2926,49 @@ function App() {
   );
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+const AUTH_KEY = 'cp_auth';
+const AUTH_PASS = 'N0vib3t';
+
+function AuthGate() {
+  const [authed, setAuthed] = useState(() => localStorage.getItem(AUTH_KEY) === AUTH_PASS);
+  const [pw, setPw] = useState('');
+  const [error, setError] = useState(false);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (pw === AUTH_PASS) {
+      localStorage.setItem(AUTH_KEY, AUTH_PASS);
+      setAuthed(true);
+    } else {
+      setError(true);
+      setTimeout(() => setError(false), 1500);
+    }
+  };
+
+  if (authed) return <App />;
+
+  return (
+    <div className="auth-gate">
+      <form className="auth-box" onSubmit={handleSubmit}>
+        <div className="auth-icon">🔒</div>
+        <h2>Capacity Planner</h2>
+        <p>Enter password to continue</p>
+        <input
+          type="password"
+          className={`auth-input ${error ? 'auth-error' : ''}`}
+          value={pw}
+          onChange={e => setPw(e.target.value)}
+          placeholder="Password"
+          autoFocus
+        />
+        <button type="submit" className="auth-btn">Unlock</button>
+        {error && <div className="auth-msg">Incorrect password</div>}
+      </form>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<AuthGate />);
 </script>
 </body>
 </html>
