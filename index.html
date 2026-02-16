@@ -706,6 +706,7 @@
   .tl-ruler {
     display: flex; position: sticky; top: 0; z-index: 10;
     background: var(--surface); border-bottom: 1px solid var(--border);
+    padding-top: 20px; /* space for milestone flags */
   }
   .tl-ruler-label {
     width: 110px; min-width: 110px; padding: 8px 10px; font-size: 10px;
@@ -815,7 +816,7 @@
     pointer-events: none;
   }
   .tl-milestone-flag {
-    position: absolute; top: -16px; transform: translateX(-50%);
+    position: absolute; top: 2px; transform: translateX(-50%);
     font-size: 9px; font-weight: 700; color: white; padding: 2px 6px;
     border-radius: 3px; white-space: nowrap; pointer-events: auto; cursor: default;
     z-index: 11;
@@ -2582,6 +2583,13 @@ function App() {
                       {timelineData.marks.map((m, i) => (
                         <div key={i} className="tl-ruler-mark" style={{width: m.width}}>{m.label}</div>
                       ))}
+                      {/* Milestone flags in ruler */}
+                      {timelineData.msPositions.map(m => (
+                        <div key={m.id} className="tl-milestone-flag"
+                          style={{left: m.px, background: m.color}}>
+                          {m.name}
+                        </div>
+                      ))}
                     </div>
                   </div>
                   {/* Track rows */}
@@ -2650,15 +2658,6 @@ function App() {
                     </div>
                     );
                   })}
-                  {/* Milestone flags on the ruler */}
-                  <div style={{position:'absolute',top:0,left:110,right:0,pointerEvents:'none',zIndex:12}}>
-                    {timelineData.msPositions.map(m => (
-                      <div key={m.id} className="tl-milestone-flag"
-                        style={{left: m.px, background: m.color}}>
-                        {m.name}
-                      </div>
-                    ))}
-                  </div>
                 </div>
               </div>
             </div>
