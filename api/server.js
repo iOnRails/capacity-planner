@@ -165,12 +165,14 @@ function saveStateHandler(req, res) {
   if (!capacity || !tracks) {
     return res.status(400).json({ error: 'Missing capacity or tracks in body' });
   }
-  const state = { capacity, tracks, updatedAt: new Date().toISOString() };
-  if (trackCapacity) state.trackCapacity = trackCapacity;
-  if (splits) state.splits = splits;
-  if (timelineConfig) state.timelineConfig = timelineConfig;
-  if (milestones) state.milestones = milestones;
-  if (timelineOverrides) state.timelineOverrides = timelineOverrides;
+  // Merge with existing state so we never lose fields
+  const existing = loadJSON(getStateFile(req.params.key), {});
+  const state = { ...existing, capacity, tracks, updatedAt: new Date().toISOString() };
+  if (trackCapacity !== undefined) state.trackCapacity = trackCapacity;
+  if (splits !== undefined) state.splits = splits;
+  if (timelineConfig !== undefined) state.timelineConfig = timelineConfig;
+  if (milestones !== undefined) state.milestones = milestones;
+  if (timelineOverrides !== undefined) state.timelineOverrides = timelineOverrides;
   saveJSON(getStateFile(req.params.key), state);
   res.json({ success: true });
 }
