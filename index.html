@@ -971,6 +971,16 @@ const MILESTONE_COLORS = ['#e84393','#fdcb6e','#00b894','#0984e3','#e67e22','#a2
 const PX_PER_SPRINT = 20;
 
 function App({ onLogout, user: authUser }) {
+  // Auth headers for API requests (audit logging)
+  const getAuthHeaders = useCallback(() => {
+    const h = { 'Content-Type': 'application/json' };
+    if (authUser) {
+      h['X-User-Email'] = authUser.email || '';
+      h['X-User-Name'] = encodeURIComponent(authUser.name || '');
+    }
+    return h;
+  }, [authUser]);
+
   const [activeVertical, setActiveVertical] = useState('growth');
   const [sizeMap, setSizeMap] = useState({...DEFAULT_SIZE_MAP});
   const sizeMapRef = useRef(sizeMap);
@@ -1049,7 +1059,7 @@ function App({ onLogout, user: authUser }) {
       const payload = { capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides, trackSubLaneCounts: state.trackSubLaneCounts, timelineLaneAssignments: state.timelineLaneAssignments, trackBlockOrder: state.trackBlockOrder, sizeMap: sizeMapRef.current, buffer: state.buffer };
       const resp = await fetch(`${API_URL}/api/verticals/${key}/state`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(payload),
       });
       if (!resp.ok) console.error('[save] server error:', resp.status, await resp.text());
@@ -1058,7 +1068,7 @@ function App({ onLogout, user: authUser }) {
     } finally {
       setSaving(false);
     }
-  }, []);
+  }, [getAuthHeaders]);
 
   const pendingSave = useRef(null);
   const debouncedSave = useCallback((key, state) => {
@@ -1075,8 +1085,9 @@ function App({ onLogout, user: authUser }) {
     const onBeforeUnload = () => {
       if (pendingSave.current) {
         const { key, state } = pendingSave.current;
-        const body = JSON.stringify({ capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides, trackSubLaneCounts: state.trackSubLaneCounts, timelineLaneAssignments: state.timelineLaneAssignments, trackBlockOrder: state.trackBlockOrder, sizeMap: sizeMapRef.current, buffer: state.buffer });
-        navigator.sendBeacon(`${API_URL}/api/verticals/${key}/state`, new Blob([body], { type: 'application/json' }));
+        const beaconPayload = { capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides, trackSubLaneCounts: state.trackSubLaneCounts, timelineLaneAssignments: state.timelineLaneAssignments, trackBlockOrder: state.trackBlockOrder, sizeMap: sizeMapRef.current, buffer: state.buffer };
+        if (authUser) { beaconPayload._userEmail = authUser.email; beaconPayload._userName = authUser.name; }
+        navigator.sendBeacon(`${API_URL}/api/verticals/${key}/state`, new Blob([JSON.stringify(beaconPayload)], { type: 'application/json' }));
         pendingSave.current = null;
       }
     };
@@ -1103,7 +1114,7 @@ function App({ onLogout, user: authUser }) {
       const url = `${API_URL}/api/verticals/${encodeURIComponent(key)}/projects`;
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ projects }),
       });
       let data;
@@ -1126,7 +1137,7 @@ function App({ onLogout, user: authUser }) {
     } finally {
       setSaving(false);
     }
-  }, []);
+  }, [getAuthHeaders]);
 
   const debouncedSaveProjects = useCallback((key, projects) => {
     if (projectSaveTimer.current) clearTimeout(projectSaveTimer.current);
@@ -2372,7 +2383,7 @@ function App({ onLogout, user: authUser }) {
       <div className="app-header">
         <h1>
           <span style={{color: activeV.color}}>{activeV.icon}</span>
-          {' '}{activeV.label} <span>Capacity Planner</span> <span style={{fontSize:9,color:'var(--text2)',opacity:0.5}}>v2.2</span>
+          {' '}{activeV.label} <span>Capacity Planner</span> <span style={{fontSize:9,color:'var(--text2)',opacity:0.5}}>v2.3</span>
         </h1>
         <div className="header-right">
           <div className="tab-switcher">
@@ -2398,6 +2409,7 @@ function App({ onLogout, user: authUser }) {
           )}
           {authUser && (
             <div style={{display:'flex',alignItems:'center',gap:6,marginLeft:8}}>
+              <a href="/audit.html" target="_blank" rel="noopener" style={{fontSize:10,color:'var(--text2)',textDecoration:'none',border:'1px solid var(--border)',borderRadius:4,padding:'2px 6px'}} title="View activity log">📋 Log</a>
               {authUser.picture && <img src={authUser.picture} style={{width:24,height:24,borderRadius:'50%'}} referrerPolicy="no-referrer" />}
               <span style={{fontSize:11,color:'var(--text2)'}}>{authUser.name?.split(' ')[0]}</span>
               <button onClick={onLogout} style={{fontSize:10,color:'var(--text2)',background:'none',border:'1px solid var(--border)',borderRadius:4,padding:'2px 6px',cursor:'pointer'}}>Logout</button>

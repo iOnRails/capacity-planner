@@ -27,6 +27,42 @@ function saveJSON(filename, data) {
 
 function getProjectsFile(key) { return `projects_${key}.json`; }
 function getStateFile(key) { return `state_${key}.json`; }
+const AUDIT_FILE = 'audit_log.json';
+const AUDIT_MAX_DAYS = 30;
+
+// ── Audit Logging ──
+function logAudit(req, action, details) {
+  try {
+    const userEmail = req.headers['x-user-email'] || (req.body && req.body._userEmail) || 'unknown';
+    const userName = req.headers['x-user-name'] ? decodeURIComponent(req.headers['x-user-name']) : (req.body && req.body._userName) || 'unknown';
+    const vertical = req.params.key || '';
+    const entry = {
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      timestamp: new Date().toISOString(),
+      userEmail,
+      userName,
+      action,
+      vertical,
+      details,
+      method: req.method,
+      endpoint: req.originalUrl || req.url,
+    };
+    const log = loadJSON(AUDIT_FILE, []);
+    log.unshift(entry);
+    // Prune entries older than 30 days
+    const cutoff = Date.now() - AUDIT_MAX_DAYS * 24 * 60 * 60 * 1000;
+    const pruned = log.filter(e => new Date(e.timestamp).getTime() > cutoff);
+    saveJSON(AUDIT_FILE, pruned);
+  } catch (err) {
+    console.error('Audit log error:', err.message);
+  }
+}
+
+function describeStateChanges(body) {
+  const fields = ['capacity', 'tracks', 'trackCapacity', 'splits', 'timelineConfig', 'milestones', 'timelineOverrides', 'sizeMap', 'trackSubLaneCounts', 'timelineLaneAssignments', 'trackBlockOrder', 'buffer'];
+  const changed = fields.filter(f => body[f] !== undefined);
+  return changed.length > 0 ? 'Changed: ' + changed.join(', ') : 'No fields specified';
+}
 
 const DEFAULT_CAPACITY = { backend: 40, frontend: 30, natives: 25, qa: 20 };
 const DEFAULT_TRACKS = { 'core-bonus': [], 'gateway': [], 'seo-aff': [] };
@@ -114,7 +150,7 @@ const app = express();
 app.use(cors({
   origin: CORS_ORIGIN === '*' ? true : CORS_ORIGIN.split(','),
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-User-Email', 'X-User-Name'],
 }));
 app.use(express.json({ limit: '5mb' }));
 
@@ -179,6 +215,7 @@ function saveStateHandler(req, res) {
   if (trackBlockOrder !== undefined) state.trackBlockOrder = trackBlockOrder;
   if (buffer !== undefined) state.buffer = buffer;
   saveJSON(getStateFile(req.params.key), state);
+  logAudit(req, 'Updated state', describeStateChanges(req.body));
   res.json({ success: true });
 }
 app.post('/api/verticals/:key/state', saveStateHandler);
@@ -230,12 +267,26 @@ function saveProjectsHandler(req, res) {
       updatedAt: new Date().toISOString(),
     });
 
+    logAudit(req, 'Updated projects', `Saved ${projects.length} projects`);
     res.json({ success: true, projectCount: projects.length });
   } catch (err) {
     console.error('Save projects error:', err);
     res.status(500).json({ error: 'Failed to save projects' });
   }
 }
+
+// ── Audit log endpoint ──
+app.get('/api/audit-log', (req, res) => {
+  let log = loadJSON(AUDIT_FILE, []);
+  const { user, vertical, days } = req.query;
+  if (user) log = log.filter(e => e.userEmail.toLowerCase().includes(user.toLowerCase()) || e.userName.toLowerCase().includes(user.toLowerCase()));
+  if (vertical) log = log.filter(e => e.vertical === vertical);
+  if (days) {
+    const cutoff = Date.now() - parseInt(days) * 24 * 60 * 60 * 1000;
+    log = log.filter(e => new Date(e.timestamp).getTime() > cutoff);
+  }
+  res.json({ entries: log.slice(0, 500), total: log.length });
+});
 
 // ── Catch-all 404 (debug) ──
 app.use((req, res) => {
