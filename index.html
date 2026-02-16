@@ -265,6 +265,14 @@
 
   /* ── Track (sub-lane within roadmap) ── */
   .track-group { margin-top: 10px; }
+  .track-capacity-bar {
+    display: flex; gap: 12px; padding: 4px 12px 2px 48px;
+    font-size: 11px; color: var(--text2);
+  }
+  .track-cap-chip { white-space: nowrap; }
+  .track-cap-chip strong { color: var(--text); }
+  .track-cap-chip.over { color: #ff6b6b; }
+  .track-cap-chip.over strong { color: #ff6b6b; }
   .track-row {
     display: flex; align-items: stretch; gap: 0;
   }
@@ -709,7 +717,7 @@
     padding-top: 20px; /* space for milestone flags */
   }
   .tl-ruler-label {
-    width: 140px; min-width: 140px; padding: 8px 10px; font-size: 10px;
+    width: 110px; min-width: 110px; padding: 8px 10px; font-size: 10px;
     font-weight: 600; color: var(--text2); text-transform: uppercase;
     border-right: 1px solid var(--border); display: flex; align-items: flex-end;
   }
@@ -725,7 +733,7 @@
     display: flex; border-bottom: 1px solid var(--border); min-height: 80px;
   }
   .tl-track-label {
-    width: 140px; min-width: 140px; padding: 8px 10px;
+    width: 110px; min-width: 110px; padding: 8px 10px;
     font-size: 12px; font-weight: 700; color: white;
     text-shadow: 0 1px 2px rgba(0,0,0,0.3);
     border-right: 1px solid var(--border);
@@ -2443,25 +2451,28 @@ function App() {
             {TRACKS.map((track, i) => (
               <React.Fragment key={track.key}>
                 {i > 0 && <div className="track-divider" />}
+                {(() => {
+                  const tc = trackCapacity[track.key] || {backend:0,frontend:0,natives:0,qa:0};
+                  const tu = trackUsed[track.key] || {backend:0,frontend:0,natives:0,qa:0};
+                  const hasAlloc = Object.values(tc).some(v => v > 0);
+                  return hasAlloc ? (
+                    <div className="track-capacity-bar">
+                      {['backend','frontend','natives','qa'].map(d => {
+                        if (!tc[d]) return null;
+                        const label = d === 'backend' ? 'Backend' : d === 'frontend' ? 'Frontend' : d === 'natives' ? 'Natives' : 'QA';
+                        const isOver = tu[d] > tc[d];
+                        return (
+                          <span key={d} className={`track-cap-chip${isOver ? ' over' : ''}`}>
+                            {label}: <strong>{tu[d]}</strong>/{tc[d]}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  ) : null;
+                })()}
                 <div className="track-row">
                   <div className="track-label" style={{background: track.gradient}}>
                     {track.label}
-                    {(() => {
-                      const tc = trackCapacity[track.key] || {backend:0,frontend:0,natives:0,qa:0};
-                      const tu = trackUsed[track.key] || {backend:0,frontend:0,natives:0,qa:0};
-                      const hasAlloc = Object.values(tc).some(v => v > 0);
-                      if (!hasAlloc) return null;
-                      return (
-                        <span style={{fontSize:8,opacity:0.9,display:'block',marginTop:4,lineHeight:'1.5'}}>
-                          {['backend','frontend','natives','qa'].map(d => {
-                            if (!tc[d]) return null;
-                            const label = d === 'backend' ? 'BE' : d === 'frontend' ? 'FE' : d === 'natives' ? 'NA' : 'QA';
-                            const isOver = tu[d] > tc[d];
-                            return <span key={d} style={{display:'block',color: isOver ? '#ff6b6b' : 'inherit'}}>{label} {tu[d]}/{tc[d]}</span>;
-                          })}
-                        </span>
-                      );
-                    })()}
                   </div>
                   <div className="track-flow"
                     onDragOver={handleDragOver} onDragEnter={handleDragEnter}
@@ -2617,30 +2628,13 @@ function App() {
                     <div key={track.key} className="tl-track" style={{minHeight: trackHeight}}>
                       <div className="tl-track-label" style={{background: track.gradient}}>
                         <span>{track.label}</span>
-                        {(() => {
-                          const tu = trackUsed[track.key] || {backend:0,frontend:0,natives:0,qa:0};
-                          const tc = trackCapacity[track.key] || {backend:0,frontend:0,natives:0,qa:0};
-                          return (
-                          <div className="tl-track-stats">
-                            {['backend','frontend','natives','qa'].map(d => {
-                              const label = d === 'backend' ? 'BE' : d === 'frontend' ? 'FE' : d === 'natives' ? 'NA' : 'QA';
-                              return tc[d] > 0 ? (
-                                <div key={d} className="tl-stat-row">
-                                  <span className="tl-stat-label">{label}</span>
-                                  <span className={`tl-stat-val${tu[d] > tc[d] ? ' over' : ''}`}>{tu[d]}/{tc[d]}</span>
-                                </div>
-                              ) : null;
-                            })}
-                          </div>
-                          );
-                        })()}
                         <div className="sub-lane-controls">
                           <button className="sub-lane-btn" onClick={() => addSubLane(track.key)} title="Add parallel lane">+</button>
                           {laneCount > 1 && <button className="sub-lane-btn" onClick={() => removeSubLane(track.key)} title="Remove last lane">−</button>}
                           {laneCount > 1 && <span style={{fontSize:'9px',color:'rgba(255,255,255,0.6)'}}>{laneCount}</span>}
                         </div>
                       </div>
-                      <div className="tl-track-bars" style={{width: timelineData.totalPx - 140, minHeight: trackHeight - 8}}>
+                      <div className="tl-track-bars" style={{width: timelineData.totalPx - 110, minHeight: trackHeight - 8}}>
                         {/* Sub-lane separator lines */}
                         {Array.from({length: laneCount - 1}, (_, i) => (
                           <div key={`sep-${i}`} className="tl-sublane-separator" style={{top: (i + 1) * 66}} />
