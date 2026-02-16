@@ -965,7 +965,7 @@ function App() {
   const [verticalData, setVerticalData] = useState({});
   const [verticalStates, setVerticalStates] = useState(() => {
     const state = {};
-    for (const v of VERTICALS) state[v.key] = { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }, trackCapacity: JSON.parse(JSON.stringify(DEFAULT_TRACK_CAPACITY)), splits: {}, timelineConfig: {...DEFAULT_TIMELINE_CONFIG}, milestones: [], timelineOverrides: {}, trackSubLaneCounts: {}, timelineLaneAssignments: {} };
+    for (const v of VERTICALS) state[v.key] = { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }, trackCapacity: JSON.parse(JSON.stringify(DEFAULT_TRACK_CAPACITY)), splits: {}, timelineConfig: {...DEFAULT_TIMELINE_CONFIG}, milestones: [], timelineOverrides: {}, trackSubLaneCounts: {}, timelineLaneAssignments: {}, trackBlockOrder: {} };
     return state;
   });
 
@@ -991,6 +991,7 @@ function App() {
           timelineOverrides: stateRes.timelineOverrides || {},
           trackSubLaneCounts: stateRes.trackSubLaneCounts || {},
           timelineLaneAssignments: stateRes.timelineLaneAssignments || {},
+          trackBlockOrder: stateRes.trackBlockOrder || {},
         }
       }));
     } catch (e) {
@@ -1011,7 +1012,7 @@ function App() {
   const saveState = useCallback(async (key, state) => {
     try {
       setSaving(true);
-      const payload = { capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides, trackSubLaneCounts: state.trackSubLaneCounts, timelineLaneAssignments: state.timelineLaneAssignments, sizeMap: sizeMapRef.current };
+      const payload = { capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides, trackSubLaneCounts: state.trackSubLaneCounts, timelineLaneAssignments: state.timelineLaneAssignments, trackBlockOrder: state.trackBlockOrder, sizeMap: sizeMapRef.current };
       console.log('[save]', key, 'timelineOverrides:', JSON.stringify(state.timelineOverrides || {}));
       const resp = await fetch(`${API_URL}/api/verticals/${key}/state`, {
         method: 'POST',
@@ -1041,7 +1042,7 @@ function App() {
     const onBeforeUnload = () => {
       if (pendingSave.current) {
         const { key, state } = pendingSave.current;
-        const body = JSON.stringify({ capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides, trackSubLaneCounts: state.trackSubLaneCounts, timelineLaneAssignments: state.timelineLaneAssignments, sizeMap: sizeMapRef.current });
+        const body = JSON.stringify({ capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides, trackSubLaneCounts: state.trackSubLaneCounts, timelineLaneAssignments: state.timelineLaneAssignments, trackBlockOrder: state.trackBlockOrder, sizeMap: sizeMapRef.current });
         navigator.sendBeacon(`${API_URL}/api/verticals/${key}/state`, new Blob([body], { type: 'application/json' }));
         pendingSave.current = null;
       }
@@ -1100,7 +1101,7 @@ function App() {
   }, [saveProjects]);
 
   const currentData = verticalData[activeVertical] || [];
-  const currentState = verticalStates[activeVertical] || { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }, trackCapacity: JSON.parse(JSON.stringify(DEFAULT_TRACK_CAPACITY)), splits: {}, timelineConfig: {...DEFAULT_TIMELINE_CONFIG}, milestones: [], timelineOverrides: {}, trackSubLaneCounts: {}, timelineLaneAssignments: {} };
+  const currentState = verticalStates[activeVertical] || { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }, trackCapacity: JSON.parse(JSON.stringify(DEFAULT_TRACK_CAPACITY)), splits: {}, timelineConfig: {...DEFAULT_TIMELINE_CONFIG}, milestones: [], timelineOverrides: {}, trackSubLaneCounts: {}, timelineLaneAssignments: {}, trackBlockOrder: {} };
   const capacity = currentState.capacity;
   const tracks = currentState.tracks;
   const trackCapacity = currentState.trackCapacity || JSON.parse(JSON.stringify(DEFAULT_TRACK_CAPACITY));
@@ -1110,6 +1111,7 @@ function App() {
   const timelineOverrides = currentState.timelineOverrides || {};
   const trackSubLaneCounts = currentState.trackSubLaneCounts || {};
   const timelineLaneAssignments = currentState.timelineLaneAssignments || {};
+  const trackBlockOrder = currentState.trackBlockOrder || {};
 
   const roadmapIds = useMemo(() => {
     const s = new Set();
@@ -1319,22 +1321,70 @@ function App() {
     e.preventDefault(); e.currentTarget.classList.remove('drag-over');
     document.querySelectorAll('.drop-indicator').forEach(el => el.remove());
     if (!dragItem.current) return;
+    // Ghost blocks can't be moved to another track via track drop
+    if (String(dragItem.current).startsWith('ghost:')) return;
     moveToTrack(dragItem.current, trackKey);
   };
+
+  // Build combined block order for a track (regular + ghosts)
+  const getCombinedOrder = useCallback((trackKey) => {
+    const realIds = (tracks[trackKey] || []).map(id => String(id));
+    const ghostIds = (ghostsByTrack[trackKey] || []).map(g => `ghost:${g.project.id}`);
+    const all = [...realIds, ...ghostIds];
+    const order = trackBlockOrder[trackKey];
+    if (order && order.length > 0) {
+      all.sort((a, b) => {
+        const aIdx = order.indexOf(a);
+        const bIdx = order.indexOf(b);
+        if (aIdx === -1 && bIdx === -1) return 0;
+        if (aIdx === -1) return 1;
+        if (bIdx === -1) return 1;
+        return aIdx - bIdx;
+      });
+    }
+    return all;
+  }, [tracks, ghostsByTrack, trackBlockOrder]);
+
+  const saveBlockOrder = useCallback((trackKey, newOrder) => {
+    setVerticalStates(prev => {
+      const orders = { ...(prev[activeVertical].trackBlockOrder || {}) };
+      orders[trackKey] = newOrder;
+      const newState = { ...prev, [activeVertical]: { ...prev[activeVertical], trackBlockOrder: orders } };
+      debouncedSave(activeVertical, newState[activeVertical]);
+      return newState;
+    });
+  }, [activeVertical, debouncedSave]);
 
   const handleDropOnBlock = (e, trackKey, blockId, blockIndex) => {
     e.preventDefault(); e.stopPropagation();
     document.querySelectorAll('.drop-indicator').forEach(el => el.remove());
     if (!dragItem.current || dragItem.current === blockId) return;
+    const draggedId = dragItem.current;
+    const isGhostDrag = String(draggedId).startsWith('ghost:');
+
+    if (!isGhostDrag) {
+      // Regular project drag — still use moveToTrack for cross-track moves
+      const rect = e.currentTarget.getBoundingClientRect();
+      const dropAfter = (e.clientX - rect.left) > rect.width / 2;
+      const insertIdx = dropAfter ? blockIndex + 1 : blockIndex;
+      const currentTrackIds = tracks[trackKey] || [];
+      const currentIdx = currentTrackIds.indexOf(draggedId);
+      let adjustedIdx = insertIdx;
+      if (currentIdx !== -1 && currentIdx < insertIdx) adjustedIdx = insertIdx - 1;
+      moveToTrack(draggedId, trackKey, adjustedIdx);
+    }
+
+    // Update combined block order for visual ordering
+    const combined = getCombinedOrder(trackKey);
+    const dragKey = isGhostDrag ? String(draggedId) : String(draggedId);
+    const filtered = combined.filter(k => k !== dragKey);
     const rect = e.currentTarget.getBoundingClientRect();
     const dropAfter = (e.clientX - rect.left) > rect.width / 2;
-    const insertIdx = dropAfter ? blockIndex + 1 : blockIndex;
-    // Adjust index if dragging from same track before this position
-    const currentTrackIds = tracks[trackKey] || [];
-    const currentIdx = currentTrackIds.indexOf(dragItem.current);
-    let adjustedIdx = insertIdx;
-    if (currentIdx !== -1 && currentIdx < insertIdx) adjustedIdx = insertIdx - 1;
-    moveToTrack(dragItem.current, trackKey, adjustedIdx);
+    const targetKey = String(blockId).startsWith('ghost:') ? String(blockId) : String(blockId);
+    const targetIdx = filtered.indexOf(targetKey);
+    const insertAt = targetIdx === -1 ? filtered.length : (dropAfter ? targetIdx + 1 : targetIdx);
+    filtered.splice(insertAt, 0, dragKey);
+    saveBlockOrder(trackKey, filtered);
   };
 
   const handleDragOverBlock = (e, trackKey, blockId) => {
@@ -1495,7 +1545,7 @@ function App() {
     );
   };
 
-  const renderGhostBlock = (p, splitSizing, trackKey, homeTrack) => {
+  const renderGhostBlock = (p, splitSizing, trackKey, homeTrack, blockIndex) => {
     if (!p || !splitSizing) return null;
     const totalSp = (splitSizing.backend || 0) + (splitSizing.frontend || 0) + (splitSizing.natives || 0) + (splitSizing.qa || 0);
     const w = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, totalSp * PX_PER_SPRINT));
@@ -1507,6 +1557,11 @@ function App() {
       <div key={`ghost-${p.id}`}
         className={`project-block ghost-block ${isOverflow ? 'overflow-block' : ''}`}
         style={{ width: w, height: BLOCK_HEIGHT, background: getBlockBg(p.pillar) }}
+        draggable
+        onDragStart={(e) => { dragItem.current = `ghost:${p.id}`; dragSource.current = 'roadmap'; e.dataTransfer.effectAllowed = 'move'; setTimeout(() => e.target.classList.add('dragging'), 0); }}
+        onDragEnd={handleDragEnd}
+        onDragOver={(e) => handleDragOverBlock(e, trackKey, `ghost:${p.id}`)}
+        onDrop={(e) => handleDropOnBlock(e, trackKey, `ghost:${p.id}`, blockIndex)}
         onMouseEnter={(e) => handleMouseEnter(e, p)}
         onMouseLeave={handleMouseLeave}
       >
@@ -2480,8 +2535,33 @@ function App() {
                     onDrop={(e) => handleDropOnTrack(e, track.key)}
                     style={{borderColor: track.borderColor}}>
                     {(trackProjects[track.key] || []).length === 0 && (ghostsByTrack[track.key] || []).length === 0 && <div className="track-empty">Drag projects here</div>}
-                    {(trackProjects[track.key] || []).map((p, idx) => renderBlock(p, 'roadmap', track.key, idx))}
-                    {(ghostsByTrack[track.key] || []).map(g => renderGhostBlock(g.project, g.sizing, track.key, g.homeTrack))}
+                    {(() => {
+                      const realProjects = (trackProjects[track.key] || []).map(p => ({ type: 'real', project: p }));
+                      const ghosts = (ghostsByTrack[track.key] || []).map(g => ({ type: 'ghost', project: g.project, sizing: g.sizing, homeTrack: g.homeTrack }));
+                      const combined = [...realProjects, ...ghosts];
+                      // Sort by stored order if available
+                      const orderKey = track.key;
+                      const order = trackBlockOrder[orderKey];
+                      if (order && order.length > 0) {
+                        combined.sort((a, b) => {
+                          const aKey = a.type === 'ghost' ? `ghost:${a.project.id}` : String(a.project.id);
+                          const bKey = b.type === 'ghost' ? `ghost:${b.project.id}` : String(b.project.id);
+                          const aIdx = order.indexOf(aKey);
+                          const bIdx = order.indexOf(bKey);
+                          if (aIdx === -1 && bIdx === -1) return 0;
+                          if (aIdx === -1) return 1;
+                          if (bIdx === -1) return 1;
+                          return aIdx - bIdx;
+                        });
+                      }
+                      return combined.map((item, idx) => {
+                        if (item.type === 'ghost') {
+                          return renderGhostBlock(item.project, item.sizing, track.key, item.homeTrack, idx);
+                        } else {
+                          return renderBlock(item.project, 'roadmap', track.key, idx);
+                        }
+                      });
+                    })()}
                   </div>
                 </div>
               </React.Fragment>
