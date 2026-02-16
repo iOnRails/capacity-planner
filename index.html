@@ -2693,24 +2693,6 @@ function App({ onLogout, user: authUser }) {
               <span className="badge backlog-badge">{backlogProjects.length}</span>
             </h2>
             <div style={{display:'flex',gap:6}}>
-              <button className="btn btn-primary" onClick={() => {
-                const sorted = [...currentData].sort((a,b) => (impactOrder[b.impact]||0) - (impactOrder[a.impact]||0));
-                let used = {backend:0,frontend:0,natives:0,qa:0};
-                const newTracks = {};
-                for (const t of TRACKS) newTracks[t.key] = [];
-                for (const p of sorted) {
-                  const s = projectSprints(p);
-                  if (used.backend+s.backend <= capacity.backend && used.frontend+s.frontend <= capacity.frontend && used.natives+s.natives <= capacity.natives && used.qa+s.qa <= capacity.qa) {
-                    newTracks['core-bonus'].push(p.id); used.backend += s.backend; used.frontend += s.frontend; used.natives += s.natives; used.qa += s.qa;
-                  }
-                }
-                setTracks(newTracks);
-              }}>Auto-fill by Impact</button>
-              <button className="btn" onClick={() => {
-                const empty = {};
-                for (const t of TRACKS) empty[t.key] = [];
-                setTracks(empty);
-              }}>Clear All</button>
             </div>
           </div>
           <div className="flow-container"
