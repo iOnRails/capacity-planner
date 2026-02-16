@@ -58,10 +58,16 @@ function logAudit(req, action, details) {
   }
 }
 
-function describeStateChanges(body) {
+function describeStateChanges(body, existing) {
   const fields = ['capacity', 'tracks', 'trackCapacity', 'splits', 'timelineConfig', 'milestones', 'timelineOverrides', 'sizeMap', 'trackSubLaneCounts', 'timelineLaneAssignments', 'trackBlockOrder', 'buffer'];
-  const changed = fields.filter(f => body[f] !== undefined);
-  return changed.length > 0 ? 'Changed: ' + changed.join(', ') : 'No fields specified';
+  const friendly = { capacity: 'capacity allocation', tracks: 'swimlane assignments', trackCapacity: 'track capacity', splits: 'project splits', timelineConfig: 'timeline settings', milestones: 'milestones', timelineOverrides: 'timeline bar positions', sizeMap: 'size map', trackSubLaneCounts: 'sub-lane counts', timelineLaneAssignments: 'timeline lane assignments', trackBlockOrder: 'block order', buffer: 'buffer' };
+  const changed = fields.filter(f => {
+    if (body[f] === undefined) return false;
+    if (!existing || existing[f] === undefined) return true;
+    return JSON.stringify(body[f]) !== JSON.stringify(existing[f]);
+  });
+  if (changed.length === 0) return 'No changes detected';
+  return changed.map(f => friendly[f] || f).join(', ');
 }
 
 const DEFAULT_CAPACITY = { backend: 40, frontend: 30, natives: 25, qa: 20 };
@@ -215,7 +221,7 @@ function saveStateHandler(req, res) {
   if (trackBlockOrder !== undefined) state.trackBlockOrder = trackBlockOrder;
   if (buffer !== undefined) state.buffer = buffer;
   saveJSON(getStateFile(req.params.key), state);
-  logAudit(req, 'Updated state', describeStateChanges(req.body));
+  logAudit(req, 'Updated state', describeStateChanges(req.body, existing));
   res.json({ success: true });
 }
 app.post('/api/verticals/:key/state', saveStateHandler);
