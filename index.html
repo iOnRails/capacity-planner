@@ -1762,6 +1762,7 @@ function App({ onLogout, user: authUser }) {
       }
 
       // Walk in display order, accumulating and checking overflow
+      console.log(`[overflow] ${t.key} order:`, combined.map(i => i.type === 'ghost' ? `ghost:${i.project.id}(${i.project.subTask?.slice(0,15)})` : `${i.project.id}(${i.project.subTask?.slice(0,15)})`), 'tc:', tc);
       for (const item of combined) {
         if (item.type === 'real') {
           const s = effectiveSprints(item.project);
@@ -1771,6 +1772,7 @@ function App({ onLogout, user: authUser }) {
             if (tc[d] > 0 && running[d] > tc[d]) exceeded.push(d);
           }
           if (exceeded.length > 0) overflows[item.project.id] = exceeded;
+          console.log(`  [overflow] real ${item.project.id}(${item.project.subTask?.slice(0,20)}) running:`, {...running}, exceeded.length > 0 ? 'EXCEEDED:'+exceeded : '');
         } else {
           for (const d of ['backend','frontend','natives','qa']) running[d] += (item.sizing[d] || 0);
           const exceeded = [];
@@ -1778,6 +1780,7 @@ function App({ onLogout, user: authUser }) {
             if (tc[d] > 0 && running[d] > tc[d]) exceeded.push(d);
           }
           if (exceeded.length > 0) overflows[`ghost-${item.project.id}`] = exceeded;
+          console.log(`  [overflow] ghost ${item.project.id}(${item.project.subTask?.slice(0,20)}) sizing:`, item.sizing, 'running:', {...running}, exceeded.length > 0 ? 'EXCEEDED:'+exceeded : '');
         }
       }
       result[t.key] = overflows;
