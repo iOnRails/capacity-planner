@@ -721,7 +721,7 @@
 
   /* Track rows */
   .tl-track {
-    display: flex; border-bottom: 1px solid var(--border); min-height: 56px;
+    display: flex; border-bottom: 1px solid var(--border); min-height: 80px;
   }
   .tl-track-label {
     width: 110px; min-width: 110px; padding: 8px 10px;
@@ -731,28 +731,47 @@
     display: flex; align-items: center;
   }
   .tl-track-bars {
-    position: relative; flex: 1; padding: 6px 0; min-height: 48px;
+    position: relative; flex: 1; padding: 6px 0; min-height: 72px;
   }
 
-  /* Project bars */
+  /* Project bars — tall with room for info */
   .tl-bar {
-    position: absolute; top: 6px; height: 36px; border-radius: 6px;
-    display: flex; align-items: center; padding: 0 8px; cursor: default;
-    border: 1px solid rgba(255,255,255,0.15); transition: all 0.15s;
+    position: absolute; top: 6px; height: 60px; border-radius: 8px;
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 6px 10px; cursor: default;
+    border: 1px solid rgba(255,255,255,0.15);
     box-shadow: 0 2px 6px rgba(0,0,0,0.2); overflow: hidden;
+    transition: box-shadow 0.15s, border-color 0.15s;
   }
   .tl-bar:hover {
-    transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.35);
     border-color: rgba(255,255,255,0.3); z-index: 5;
   }
+  .tl-bar-row1 {
+    display: flex; align-items: center; gap: 6px;
+  }
   .tl-bar-label {
-    font-size: 11px; font-weight: 600; color: white;
+    font-size: 12px; font-weight: 600; color: white;
     text-shadow: 0 1px 2px rgba(0,0,0,0.3);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    flex: 1; min-width: 0;
   }
   .tl-bar-sp {
-    font-size: 9px; font-weight: 800; color: rgba(255,255,255,0.85);
-    background: rgba(0,0,0,0.25); padding: 1px 5px; border-radius: 3px; margin-left: 6px; flex-shrink: 0;
+    font-size: 9px; font-weight: 800; color: rgba(255,255,255,0.9);
+    background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 3px; flex-shrink: 0;
+  }
+  .tl-bar-row2 {
+    display: flex; gap: 6px; align-items: center; margin-top: 3px;
+  }
+  .tl-bar-jira {
+    font-size: 9px; color: rgba(255,255,255,0.6); font-weight: 600;
+  }
+  .tl-bar-disciplines {
+    display: flex; gap: 4px; font-size: 8px; font-weight: 700;
+    color: rgba(255,255,255,0.7);
+  }
+  .tl-bar-disciplines span {
+    background: rgba(0,0,0,0.2); padding: 1px 4px; border-radius: 2px;
   }
   .tl-bar.ghost {
     border-style: dashed; opacity: 0.6;
@@ -760,6 +779,18 @@
   .tl-bar.in-progress {
     box-shadow: 0 2px 6px rgba(0,0,0,0.2), inset 0 0 0 2px var(--green);
   }
+  .tl-bar.has-override {
+    border-color: var(--yellow); border-width: 2px;
+  }
+
+  /* Drag handles for resizing */
+  .tl-bar-handle {
+    position: absolute; top: 0; width: 8px; height: 100%; cursor: col-resize;
+    z-index: 6; opacity: 0; transition: opacity 0.15s;
+  }
+  .tl-bar:hover .tl-bar-handle { opacity: 1; }
+  .tl-bar-handle.left { left: 0; border-radius: 8px 0 0 8px; background: linear-gradient(90deg, rgba(255,255,255,0.3), transparent); }
+  .tl-bar-handle.right { right: 0; border-radius: 0 8px 8px 0; background: linear-gradient(-90deg, rgba(255,255,255,0.3), transparent); }
 
   /* Milestone lines */
   .tl-milestone-line {
@@ -894,7 +925,7 @@ function App() {
   const [verticalData, setVerticalData] = useState({});
   const [verticalStates, setVerticalStates] = useState(() => {
     const state = {};
-    for (const v of VERTICALS) state[v.key] = { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }, trackCapacity: JSON.parse(JSON.stringify(DEFAULT_TRACK_CAPACITY)), splits: {}, timelineConfig: {...DEFAULT_TIMELINE_CONFIG}, milestones: [] };
+    for (const v of VERTICALS) state[v.key] = { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }, trackCapacity: JSON.parse(JSON.stringify(DEFAULT_TRACK_CAPACITY)), splits: {}, timelineConfig: {...DEFAULT_TIMELINE_CONFIG}, milestones: [], timelineOverrides: {} };
     return state;
   });
 
@@ -915,6 +946,7 @@ function App() {
           splits: stateRes.splits || {},
           timelineConfig: stateRes.timelineConfig || {...DEFAULT_TIMELINE_CONFIG},
           milestones: stateRes.milestones || [],
+          timelineOverrides: stateRes.timelineOverrides || {},
         }
       }));
     } catch (e) {
@@ -938,7 +970,7 @@ function App() {
       await fetch(`${API_URL}/api/verticals/${key}/state`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones }),
+        body: JSON.stringify({ capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides }),
       });
     } catch (e) {
       console.error('Failed to save state:', e);
@@ -993,13 +1025,14 @@ function App() {
   }, [saveProjects]);
 
   const currentData = verticalData[activeVertical] || [];
-  const currentState = verticalStates[activeVertical] || { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }, trackCapacity: JSON.parse(JSON.stringify(DEFAULT_TRACK_CAPACITY)), splits: {}, timelineConfig: {...DEFAULT_TIMELINE_CONFIG}, milestones: [] };
+  const currentState = verticalStates[activeVertical] || { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }, trackCapacity: JSON.parse(JSON.stringify(DEFAULT_TRACK_CAPACITY)), splits: {}, timelineConfig: {...DEFAULT_TIMELINE_CONFIG}, milestones: [], timelineOverrides: {} };
   const capacity = currentState.capacity;
   const tracks = currentState.tracks;
   const trackCapacity = currentState.trackCapacity || JSON.parse(JSON.stringify(DEFAULT_TRACK_CAPACITY));
   const splits = currentState.splits || {};
   const timelineConfig = currentState.timelineConfig || {...DEFAULT_TIMELINE_CONFIG};
   const milestones = currentState.milestones || [];
+  const timelineOverrides = currentState.timelineOverrides || {};
 
   const roadmapIds = useMemo(() => {
     const s = new Set();
@@ -1595,6 +1628,30 @@ function App() {
     });
   }, [activeVertical, debouncedSave]);
 
+  const updateTimelineOverride = useCallback((projectId, trackKey, updates) => {
+    setVerticalStates(prev => {
+      const overrides = { ...(prev[activeVertical].timelineOverrides || {}) };
+      const key = `${trackKey}:${projectId}`;
+      overrides[key] = { ...(overrides[key] || {}), ...updates };
+      const newState = { ...prev, [activeVertical]: { ...prev[activeVertical], timelineOverrides: overrides } };
+      debouncedSave(activeVertical, newState[activeVertical]);
+      return newState;
+    });
+  }, [activeVertical, debouncedSave]);
+
+  const clearTimelineOverride = useCallback((projectId, trackKey) => {
+    setVerticalStates(prev => {
+      const overrides = { ...(prev[activeVertical].timelineOverrides || {}) };
+      delete overrides[`${trackKey}:${projectId}`];
+      const newState = { ...prev, [activeVertical]: { ...prev[activeVertical], timelineOverrides: overrides } };
+      debouncedSave(activeVertical, newState[activeVertical]);
+      return newState;
+    });
+  }, [activeVertical, debouncedSave]);
+
+  // Drag-to-resize state ref
+  const dragRef = useRef(null);
+
   // Compute timeline layout data
   const timelineData = useMemo(() => {
     const sprintWeeks = timelineConfig.sprintDurationWeeks || 2;
@@ -1606,7 +1663,7 @@ function App() {
       : scale === 'months' ? PX_PER_SPRINT_WEEK * sprintWeeks * 0.7
       : PX_PER_SPRINT_WEEK * sprintWeeks * 0.35; // quarters
 
-    // Build track bars: { trackKey: [{project, left, width, sprints}] }
+    // Build track bars: { trackKey: [{project, left, width, sprints, trackKey, disciplines}] }
     const trackBars = {};
     let maxPx = 0;
     for (const t of TRACKS) {
@@ -1616,21 +1673,35 @@ function App() {
         const p = projectById[pid];
         if (!p) continue;
         const eff = effectiveSprints(p);
-        const left = cumSprints * pxPerSprint;
-        const width = Math.max(40, eff.total * pxPerSprint);
-        bars.push({ project: p, left, width, sprints: eff.total, startSprints: cumSprints });
-        cumSprints += eff.total;
+        const ovKey = `${t.key}:${pid}`;
+        const ov = timelineOverrides[ovKey];
+        const autoStart = cumSprints;
+        const autoSprints = eff.total;
+        const startSp = ov && ov.startSprints != null ? ov.startSprints : autoStart;
+        const durSp = ov && ov.durationSprints != null ? ov.durationSprints : autoSprints;
+        const left = startSp * pxPerSprint;
+        const width = Math.max(40, durSp * pxPerSprint);
+        bars.push({ project: p, left, width, sprints: durSp, autoSprints, startSprints: startSp, autoStart, trackKey: t.key, hasOverride: !!ov, disciplines: eff });
+        cumSprints = Math.max(cumSprints, startSp + durSp);
+        if (!ov) cumSprints = autoStart + autoSprints; // without override, sequential
       }
       // Ghost blocks appended at the end of the track
       for (const g of (ghostsByTrack[t.key] || [])) {
         const totalSp = (g.sizing.backend||0) + (g.sizing.frontend||0) + (g.sizing.natives||0) + (g.sizing.qa||0);
-        const left = cumSprints * pxPerSprint;
-        const width = Math.max(40, totalSp * pxPerSprint);
-        bars.push({ project: g.project, left, width, sprints: totalSp, startSprints: cumSprints, ghost: true, homeTrack: g.homeTrack });
-        cumSprints += totalSp;
+        const ovKey = `${t.key}:${g.project.id}`;
+        const ov = timelineOverrides[ovKey];
+        const autoStart = cumSprints;
+        const startSp = ov && ov.startSprints != null ? ov.startSprints : autoStart;
+        const durSp = ov && ov.durationSprints != null ? ov.durationSprints : totalSp;
+        const left = startSp * pxPerSprint;
+        const width = Math.max(40, durSp * pxPerSprint);
+        bars.push({ project: g.project, left, width, sprints: durSp, autoSprints: totalSp, startSprints: startSp, autoStart, trackKey: t.key, hasOverride: !!ov, ghost: true, homeTrack: g.homeTrack, disciplines: g.sizing });
+        cumSprints = Math.max(cumSprints, startSp + durSp);
+        if (!ov) cumSprints = autoStart + totalSp;
       }
       trackBars[t.key] = bars;
-      maxPx = Math.max(maxPx, cumSprints * pxPerSprint);
+      const trackMax = bars.reduce((m, b) => Math.max(m, b.left + b.width), 0);
+      maxPx = Math.max(maxPx, trackMax);
     }
 
     const totalWeeks = (maxPx / PX_PER_SPRINT_WEEK) * (scale === 'months' ? 1/0.7 : scale === 'quarters' ? 1/0.35 : 1);
@@ -1686,7 +1757,53 @@ function App() {
     }).filter(m => m.px >= 0);
 
     return { trackBars, marks, totalPx: totalPx, msPositions, pxPerSprint };
-  }, [tracks, projectById, effectiveSprints, ghostsByTrack, timelineConfig, milestones]);
+  }, [tracks, projectById, effectiveSprints, ghostsByTrack, timelineConfig, milestones, timelineOverrides]);
+
+  // Drag-to-resize handlers for timeline bars
+  const handleBarDragStart = useCallback((e, bar, side) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const pxPerSprint = timelineData.pxPerSprint;
+    const origLeft = bar.left;
+    const origWidth = bar.width;
+    const origStartSp = bar.startSprints;
+    const origDurSp = bar.sprints;
+
+    const onMouseMove = (ev) => {
+      const dx = ev.clientX - startX;
+      if (side === 'right') {
+        const newWidth = Math.max(40, origWidth + dx);
+        const newDurSp = Math.max(1, Math.round(newWidth / pxPerSprint));
+        dragRef.current = { projectId: bar.project.id, trackKey: bar.trackKey, startSprints: origStartSp, durationSprints: newDurSp };
+        // Visual update via DOM for smoothness
+        const el = ev.target.closest('.tl-bar');
+        if (el) { el.style.width = (newDurSp * pxPerSprint) + 'px'; }
+      } else { // left
+        const newLeft = origLeft + dx;
+        const newStartSp = Math.max(0, Math.round(newLeft / pxPerSprint));
+        const newDurSp = Math.max(1, origDurSp + (origStartSp - newStartSp));
+        dragRef.current = { projectId: bar.project.id, trackKey: bar.trackKey, startSprints: newStartSp, durationSprints: newDurSp };
+        const el = ev.target.closest('.tl-bar');
+        if (el) { el.style.left = (newStartSp * pxPerSprint) + 'px'; el.style.width = (newDurSp * pxPerSprint) + 'px'; }
+      }
+    };
+
+    const onMouseUp = () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      if (dragRef.current) {
+        updateTimelineOverride(dragRef.current.projectId, dragRef.current.trackKey, {
+          startSprints: dragRef.current.startSprints,
+          durationSprints: dragRef.current.durationSprints,
+        });
+        dragRef.current = null;
+      }
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  }, [timelineData.pxPerSprint, updateTimelineOverride]);
 
   const activeV = VERTICALS.find(v => v.key === activeVertical);
   const roadmapTotalSprints = currentData.filter(p => roadmapIds.has(p.id)).reduce((s, p) => s + projectSprints(p).total, 0);
@@ -2342,17 +2459,44 @@ function App() {
                     <div key={track.key} className="tl-track">
                       <div className="tl-track-label" style={{background: track.gradient}}>{track.label}</div>
                       <div className="tl-track-bars" style={{width: timelineData.totalPx - 110}}>
-                        {(timelineData.trackBars[track.key] || []).map((bar, i) => (
+                        {(timelineData.trackBars[track.key] || []).map((bar, i) => {
+                          const d = bar.disciplines || {};
+                          const dB = bar.ghost ? (d.backend||0) : (d.backend||0);
+                          const dF = bar.ghost ? (d.frontend||0) : (d.frontend||0);
+                          const dN = bar.ghost ? (d.natives||0) : (d.natives||0);
+                          const dQ = bar.ghost ? (d.qa||0) : (d.qa||0);
+                          return (
                           <div key={bar.ghost ? `g-${bar.project.id}` : bar.project.id}
-                            className={`tl-bar ${bar.ghost ? 'ghost' : ''} ${bar.project.inProgress ? 'in-progress' : ''}`}
+                            className={`tl-bar ${bar.ghost ? 'ghost' : ''} ${bar.project.inProgress ? 'in-progress' : ''} ${bar.hasOverride ? 'has-override' : ''}`}
                             style={{left: bar.left, width: bar.width, background: getBlockBg(bar.project.pillar)}}
                             onMouseEnter={(e) => handleMouseEnter(e, bar.project)}
                             onMouseLeave={handleMouseLeave}
-                            title={`${bar.project.subTask}: ${bar.sprints}sp${bar.ghost ? ' (split from ' + (TRACKS.find(t=>t.key===bar.homeTrack)?.label||'') + ')' : ''}`}>
-                            <span className="tl-bar-label">{bar.project.subTask}</span>
-                            <span className="tl-bar-sp">{bar.sprints}sp</span>
+                            onDoubleClick={() => {
+                              if (bar.hasOverride && confirm('Reset this bar to auto-layout?')) {
+                                clearTimelineOverride(bar.project.id, bar.trackKey);
+                              }
+                            }}
+                            title={`${bar.project.subTask}: ${bar.sprints}sp${bar.hasOverride ? ' (drag-adjusted, double-click to reset)' : ''}${bar.ghost ? ' (split from ' + (TRACKS.find(t=>t.key===bar.homeTrack)?.label||'') + ')' : ''}`}>
+                            <div className="tl-bar-handle left"
+                              onMouseDown={e => handleBarDragStart(e, bar, 'left')} />
+                            <div className="tl-bar-row1">
+                              <span className="tl-bar-label">{bar.project.subTask}</span>
+                              <span className="tl-bar-sp">{bar.sprints}sp</span>
+                            </div>
+                            <div className="tl-bar-row2">
+                              {bar.project.nvrd && <span className="tl-bar-jira">{bar.project.nvrd}</span>}
+                              <div className="tl-bar-disciplines">
+                                {dB > 0 && <span>B:{dB}</span>}
+                                {dF > 0 && <span>F:{dF}</span>}
+                                {dN > 0 && <span>N:{dN}</span>}
+                                {dQ > 0 && <span>Q:{dQ}</span>}
+                              </div>
+                            </div>
+                            <div className="tl-bar-handle right"
+                              onMouseDown={e => handleBarDragStart(e, bar, 'right')} />
                           </div>
-                        ))}
+                          );
+                        })}
                         {/* Milestone lines in each track */}
                         {timelineData.msPositions.map(m => (
                           <div key={m.id} className="tl-milestone-line"
