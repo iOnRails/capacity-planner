@@ -867,34 +867,7 @@
   .auth-google-wrap {
     display: flex; justify-content: center; margin-bottom: 16px;
   }
-  .auth-divider {
-    display: flex; align-items: center; gap: 12px; margin: 16px 0;
-    font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: 1px;
-  }
-  .auth-divider::before, .auth-divider::after {
-    content: ''; flex: 1; height: 1px; background: var(--border);
-  }
-  .auth-input {
-    width: 100%; padding: 10px 14px; background: var(--bg);
-    border: 1px solid var(--border); border-radius: 8px;
-    color: var(--text); font-size: 15px; outline: none;
-    text-align: center; letter-spacing: 2px; transition: border-color 0.2s;
-  }
-  .auth-input:focus { border-color: var(--accent); }
-  .auth-input.auth-error { border-color: var(--red); animation: shake 0.3s ease-in-out; }
-  @keyframes shake {
-    0%, 100% { transform: translateX(0); }
-    25% { transform: translateX(-6px); }
-    75% { transform: translateX(6px); }
-  }
-  .auth-btn {
-    margin-top: 14px; width: 100%; padding: 10px; background: var(--accent);
-    border: none; border-radius: 8px; color: white; font-size: 14px;
-    font-weight: 600; cursor: pointer; transition: background 0.15s;
-  }
-  .auth-btn:hover { background: var(--accent2); }
   .auth-msg { margin-top: 10px; font-size: 12px; color: var(--red); font-weight: 600; }
-  .auth-msg.success { color: var(--green); }
   .auth-user {
     display: flex; align-items: center; gap: 10px; justify-content: center;
     margin-bottom: 14px; padding: 8px 14px; background: var(--surface2);
@@ -2407,15 +2380,12 @@ function App({ onLogout, user: authUser }) {
               {roadmapIds.size} in roadmap · {currentData.length - roadmapIds.size} in backlog
             </span>
           )}
-          {authUser && authUser.email !== 'password' && (
+          {authUser && (
             <div style={{display:'flex',alignItems:'center',gap:6,marginLeft:8}}>
               {authUser.picture && <img src={authUser.picture} style={{width:24,height:24,borderRadius:'50%'}} referrerPolicy="no-referrer" />}
               <span style={{fontSize:11,color:'var(--text2)'}}>{authUser.name?.split(' ')[0]}</span>
               <button onClick={onLogout} style={{fontSize:10,color:'var(--text2)',background:'none',border:'1px solid var(--border)',borderRadius:4,padding:'2px 6px',cursor:'pointer'}}>Logout</button>
             </div>
-          )}
-          {authUser && authUser.email === 'password' && onLogout && (
-            <button onClick={onLogout} style={{fontSize:10,color:'var(--text2)',background:'none',border:'1px solid var(--border)',borderRadius:4,padding:'2px 6px',cursor:'pointer'}}>Logout</button>
           )}
         </div>
       </div>
@@ -2965,8 +2935,6 @@ function App({ onLogout, user: authUser }) {
 
 const GOOGLE_CLIENT_ID = '487456084105-01l0m47e7up61qb40sf2v7gtjmrp6hqt.apps.googleusercontent.com';
 const ALLOWED_DOMAIN = 'novibet.com';
-const AUTH_KEY = 'cp_auth';
-const AUTH_PASS = 'N0vib3t';
 const GOOGLE_AUTH_KEY = 'cp_google_auth';
 
 function decodeJwt(token) {
@@ -2981,12 +2949,10 @@ function getStoredGoogleAuth() {
     const stored = localStorage.getItem(GOOGLE_AUTH_KEY);
     if (!stored) return null;
     const data = JSON.parse(stored);
-    // Check expiry (with 5min buffer)
     if (data.exp && data.exp * 1000 < Date.now() + 300000) {
       localStorage.removeItem(GOOGLE_AUTH_KEY);
       return null;
     }
-    // Check domain
     if (!data.email || !data.email.endsWith('@' + ALLOWED_DOMAIN)) {
       localStorage.removeItem(GOOGLE_AUTH_KEY);
       return null;
@@ -2997,12 +2963,9 @@ function getStoredGoogleAuth() {
 
 function AuthGate() {
   const [user, setUser] = useState(() => getStoredGoogleAuth());
-  const [pw, setPw] = useState('');
   const [error, setError] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const googleBtnRef = useRef(null);
 
-  // Initialize Google Sign-In
   useEffect(() => {
     if (user) return;
     const initGoogle = () => {
@@ -3052,28 +3015,11 @@ function AuthGate() {
 
   const handleLogout = () => {
     localStorage.removeItem(GOOGLE_AUTH_KEY);
-    localStorage.removeItem(AUTH_KEY);
     setUser(null);
     if (window.google?.accounts?.id) {
       window.google.accounts.id.disableAutoSelect();
     }
   };
-
-  const handlePasswordSubmit = (e) => {
-    e.preventDefault();
-    if (pw === AUTH_PASS) {
-      localStorage.setItem(AUTH_KEY, AUTH_PASS);
-      setUser({ email: 'password', name: 'Password Access' });
-    } else {
-      setError('Incorrect password');
-      setTimeout(() => setError(''), 1500);
-    }
-  };
-
-  // Check password fallback
-  if (!user && localStorage.getItem(AUTH_KEY) === AUTH_PASS) {
-    return <App onLogout={handleLogout} user={{name: 'Password Access'}} />;
-  }
 
   if (user) return <App onLogout={handleLogout} user={user} />;
 
@@ -3089,26 +3035,6 @@ function AuthGate() {
         </div>
 
         {error && <div className="auth-msg">{error}</div>}
-
-        <div className="auth-divider">or</div>
-
-        {!showPassword ? (
-          <button className="auth-logout" style={{fontSize:'12px',marginTop:0}} onClick={() => setShowPassword(true)}>
-            Use password instead
-          </button>
-        ) : (
-          <form onSubmit={handlePasswordSubmit}>
-            <input
-              type="password"
-              className={`auth-input ${error ? 'auth-error' : ''}`}
-              value={pw}
-              onChange={e => setPw(e.target.value)}
-              placeholder="Password"
-              autoFocus
-            />
-            <button type="submit" className="auth-btn">Unlock</button>
-          </form>
-        )}
       </div>
     </div>
   );
