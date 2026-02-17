@@ -2154,36 +2154,78 @@ function App({ onLogout, user: authUser }) {
           if (colMap[key]) headerMap[h] = colMap[key];
         });
 
-        let maxId = currentData.length > 0 ? Math.max(...currentData.map(p => p.id)) : 0;
-        const imported = rows.map(row => {
-          maxId++;
-          const proj = {
-            id: maxId, nvrd: '', masterEpic: '', subTask: '',
-            pillar: '', targetMarket: '', targetKPI: '', impact: 'M',
-            backend: '', frontend: '', natives: '', qa: '', inProgress: false,
-          };
+        // Parse each row's values using headerMap
+        const parseRow = (row) => {
+          const vals = {};
           Object.entries(headerMap).forEach(([excelCol, field]) => {
             let val = String(row[excelCol] ?? '').trim();
             if (field === 'inProgress') {
-              proj[field] = ['true', 'yes', '1', 'x'].includes(val.toLowerCase());
+              vals[field] = ['true', 'yes', '1', 'x'].includes(val.toLowerCase());
             } else if (['backend', 'frontend', 'natives', 'qa'].includes(field)) {
               const upper = val.toUpperCase();
-              proj[field] = VALID_SIZES.includes(upper) ? upper : '';
+              vals[field] = VALID_SIZES.includes(upper) ? upper : '';
             } else if (field === 'impact') {
               const upper = val.toUpperCase();
-              proj[field] = VALID_IMPACTS.includes(upper) ? upper : 'M';
+              vals[field] = VALID_IMPACTS.includes(upper) ? upper : 'M';
             } else {
-              proj[field] = val;
+              vals[field] = val;
             }
           });
-          return proj;
+          return vals;
+        };
+
+        // Build lookup of existing projects by masterEpic+subTask
+        const existingMap = {};
+        currentData.forEach(p => {
+          const key = (p.masterEpic || '').trim().toLowerCase() + '||' + (p.subTask || '').trim().toLowerCase();
+          if (key !== '||') existingMap[key] = p.id;
         });
 
-        const updated = [...currentData, ...imported];
+        let maxId = currentData.length > 0 ? Math.max(...currentData.map(p => p.id)) : 0;
+        let updatedCount = 0, addedCount = 0;
+        const newProjects = [];
+        const updateMap = {}; // id -> fields to update
+
+        rows.forEach(row => {
+          const vals = parseRow(row);
+          const epic = (vals.masterEpic || '').trim().toLowerCase();
+          const sub = (vals.subTask || '').trim().toLowerCase();
+          const matchKey = epic + '||' + sub;
+
+          if (matchKey !== '||' && existingMap[matchKey] !== undefined) {
+            // Existing project — update values but keep id, inProgress, and swimlane assignments intact
+            updateMap[existingMap[matchKey]] = vals;
+            updatedCount++;
+          } else {
+            // New project
+            maxId++;
+            newProjects.push({
+              id: maxId, nvrd: '', masterEpic: '', subTask: '',
+              pillar: '', targetMarket: '', targetKPI: '', impact: 'M',
+              backend: '', frontend: '', natives: '', qa: '', inProgress: false,
+              ...vals,
+            });
+            addedCount++;
+          }
+        });
+
+        // Apply updates to existing projects (keeps their id and position)
+        const merged = currentData.map(p => {
+          if (updateMap[p.id]) {
+            return { ...p, ...updateMap[p.id] };
+          }
+          return p;
+        });
+        // Append new projects at end
+        const updated = [...merged, ...newProjects];
         setVerticalData(prev => ({ ...prev, [activeVertical]: updated }));
         saveProjects(activeVertical, updated);
-        setSaveStatus({ type: 'ok', msg: `Imported ${imported.length} projects` });
-        setTimeout(() => setSaveStatus(null), 3000);
+
+        const parts = [];
+        if (addedCount) parts.push(`${addedCount} added`);
+        if (updatedCount) parts.push(`${updatedCount} updated`);
+        setSaveStatus({ type: 'ok', msg: parts.length ? parts.join(', ') : 'No changes' });
+        setTimeout(() => setSaveStatus(null), 4000);
       } catch (err) {
         alert('Failed to parse Excel file: ' + err.message);
       }
