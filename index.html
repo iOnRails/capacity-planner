@@ -893,6 +893,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script type="text/babel">
 const { useState, useMemo, useCallback, useRef, useEffect } = React;
 
@@ -2124,6 +2125,73 @@ function App({ onLogout, user: authUser }) {
     setEditValue('New Project');
   };
 
+  const fileInputRef = useRef(null);
+
+  const handleExcelImport = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const wb = XLSX.read(evt.target.result, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+        if (!rows.length) { alert('No data found in Excel file.'); return; }
+
+        const colMap = {
+          'nvrd': 'nvrd', 'master epic': 'masterEpic', 'masterepic': 'masterEpic',
+          'sub task': 'subTask', 'subtask': 'subTask', 'pillar': 'pillar',
+          'target market': 'targetMarket', 'targetmarket': 'targetMarket',
+          'target kpi': 'targetKPI', 'targetkpi': 'targetKPI',
+          'impact': 'impact', 'backend': 'backend', 'frontend': 'frontend',
+          'natives': 'natives', 'native': 'natives', 'qa': 'qa',
+          'in progress': 'inProgress', 'inprogress': 'inProgress',
+        };
+
+        const headerMap = {};
+        Object.keys(rows[0]).forEach(h => {
+          const key = h.trim().toLowerCase();
+          if (colMap[key]) headerMap[h] = colMap[key];
+        });
+
+        let maxId = currentData.length > 0 ? Math.max(...currentData.map(p => p.id)) : 0;
+        const imported = rows.map(row => {
+          maxId++;
+          const proj = {
+            id: maxId, nvrd: '', masterEpic: '', subTask: '',
+            pillar: '', targetMarket: '', targetKPI: '', impact: 'M',
+            backend: '', frontend: '', natives: '', qa: '', inProgress: false,
+          };
+          Object.entries(headerMap).forEach(([excelCol, field]) => {
+            let val = String(row[excelCol] ?? '').trim();
+            if (field === 'inProgress') {
+              proj[field] = ['true', 'yes', '1', 'x'].includes(val.toLowerCase());
+            } else if (['backend', 'frontend', 'natives', 'qa'].includes(field)) {
+              const upper = val.toUpperCase();
+              proj[field] = VALID_SIZES.includes(upper) ? upper : '';
+            } else if (field === 'impact') {
+              const upper = val.toUpperCase();
+              proj[field] = VALID_IMPACTS.includes(upper) ? upper : 'M';
+            } else {
+              proj[field] = val;
+            }
+          });
+          return proj;
+        });
+
+        const updated = [...currentData, ...imported];
+        setVerticalData(prev => ({ ...prev, [activeVertical]: updated }));
+        saveProjects(activeVertical, updated);
+        setSaveStatus({ type: 'ok', msg: `Imported ${imported.length} projects` });
+        setTimeout(() => setSaveStatus(null), 3000);
+      } catch (err) {
+        alert('Failed to parse Excel file: ' + err.message);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value = '';
+  };
+
   const deleteProject = (projectId) => {
     if (!window.confirm('Delete this project?')) return;
     const updated = currentData.filter(p => p.id !== projectId);
@@ -2255,6 +2323,10 @@ function App({ onLogout, user: authUser }) {
     <div className="projects-container">
       <div className="projects-toolbar">
         <button className="btn btn-primary" onClick={addProject}>+ Add Project</button>
+        <button className="btn btn-primary" onClick={() => fileInputRef.current?.click()}
+          style={{background:'var(--blue)'}}>Import Excel</button>
+        <input type="file" ref={fileInputRef} accept=".xlsx,.xls,.csv"
+          style={{display:'none'}} onChange={handleExcelImport} />
         <span className="project-count-badge">{currentData.length} projects</span>
         {selectedIds.size > 0 && (
           <button className="btn-sm" onClick={() => setSelectedIds(new Set())} style={{marginLeft:4}}>
