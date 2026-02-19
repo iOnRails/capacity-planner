@@ -1134,19 +1134,17 @@ function App({ onLogout, user: authUser }) {
 
   // ── Live polling for multi-user sync ──
   const POLL_INTERVAL = 5000;
-  const isPolling = useRef(false);
-  const savingRef = useRef(false);
   const isApplyingPollData = useRef(false);
-  useEffect(() => { savingRef.current = saving; }, [saving]);
 
   useEffect(() => {
     if (activeTab !== 'planner') return;
     let cancelled = false;
+    let polling = false; // local lock — cannot get stuck across effect cycles
 
     const poll = async () => {
-      // Skip only during active drag or save operations
-      if (dragItem.current || pendingSave.current || isPolling.current || savingRef.current) return;
-      isPolling.current = true;
+      // Only skip during active drag — nothing else
+      if (dragItem.current || polling) return;
+      polling = true;
       try {
         const [stateRes, projRes] = await Promise.all([
           fetch(`${API_URL}/api/verticals/${activeVertical}/state`).then(r => r.json()),
@@ -1154,30 +1152,24 @@ function App({ onLogout, user: authUser }) {
         ]);
         if (cancelled) return;
 
-        // Always apply — applyStateFromServer only updates sizeMap if actually
-        // changed, and React will skip re-renders if state objects are equivalent
         isApplyingPollData.current = true;
         applyStateFromServer(activeVertical, stateRes);
         setVerticalData(prev => ({ ...prev, [activeVertical]: projRes.projects || [] }));
         loadedAtRef.current[activeVertical] = stateRes._loadedAt || Date.now();
-        // Keep guard up long enough for React to process effects
         setTimeout(() => { isApplyingPollData.current = false; }, 500);
       } catch (e) {
         // Silently ignore poll errors
       } finally {
-        isPolling.current = false;
+        polling = false;
       }
     };
 
     poll();
     const interval = setInterval(poll, POLL_INTERVAL);
 
-    // Immediately poll when tab becomes visible again (browsers throttle background timers)
+    // Immediately poll when tab becomes visible (browsers throttle background tab timers)
     const onVisibilityChange = () => {
-      if (!document.hidden && !cancelled) {
-        console.log('[poll] Tab became visible, syncing...');
-        poll();
-      }
+      if (!document.hidden && !cancelled) poll();
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
 
