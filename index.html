@@ -1027,6 +1027,30 @@ function App({ onLogout, user: authUser }) {
   });
 
   // Load data from API
+  // Track server timestamp per vertical for conflict-free merging
+  const loadedAtRef = useRef({});
+
+  const applyStateFromServer = useCallback((key, stateRes) => {
+    if (stateRes.sizeMap) setSizeMap(stateRes.sizeMap);
+    loadedAtRef.current[key] = stateRes._loadedAt || Date.now();
+    setVerticalStates(prev => ({
+      ...prev,
+      [key]: {
+        capacity: stateRes.capacity || {...DEFAULT_CAPACITY},
+        tracks: migrateTracks(stateRes.tracks || { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }),
+        trackCapacity: migrateTrackCapacity(stateRes.trackCapacity),
+        splits: stateRes.splits || {},
+        timelineConfig: stateRes.timelineConfig || {...DEFAULT_TIMELINE_CONFIG},
+        milestones: stateRes.milestones || [],
+        timelineOverrides: stateRes.timelineOverrides || {},
+        trackSubLaneCounts: stateRes.trackSubLaneCounts || {},
+        timelineLaneAssignments: stateRes.timelineLaneAssignments || {},
+        trackBlockOrder: stateRes.trackBlockOrder || {},
+        buffer: stateRes.buffer || { backend: 0, frontend: 0, natives: 0, qa: 0 },
+      }
+    }));
+  }, []);
+
   const loadVertical = useCallback(async (key) => {
     try {
       const [projRes, stateRes] = await Promise.all([
@@ -1034,27 +1058,11 @@ function App({ onLogout, user: authUser }) {
         fetch(`${API_URL}/api/verticals/${key}/state`).then(r => r.json()),
       ]);
       setVerticalData(prev => ({ ...prev, [key]: projRes.projects || [] }));
-      if (stateRes.sizeMap) setSizeMap(stateRes.sizeMap);
-      setVerticalStates(prev => ({
-        ...prev,
-        [key]: {
-          capacity: stateRes.capacity || {...DEFAULT_CAPACITY},
-          tracks: migrateTracks(stateRes.tracks || { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }),
-          trackCapacity: migrateTrackCapacity(stateRes.trackCapacity),
-          splits: stateRes.splits || {},
-          timelineConfig: stateRes.timelineConfig || {...DEFAULT_TIMELINE_CONFIG},
-          milestones: stateRes.milestones || [],
-          timelineOverrides: stateRes.timelineOverrides || {},
-          trackSubLaneCounts: stateRes.trackSubLaneCounts || {},
-          timelineLaneAssignments: stateRes.timelineLaneAssignments || {},
-          trackBlockOrder: stateRes.trackBlockOrder || {},
-          buffer: stateRes.buffer || { backend: 0, frontend: 0, natives: 0, qa: 0 },
-        }
-      }));
+      applyStateFromServer(key, stateRes);
     } catch (e) {
       console.error('Failed to load vertical:', key, e);
     }
-  }, []);
+  }, [applyStateFromServer]);
 
   useEffect(() => {
     (async () => {
@@ -1069,19 +1077,34 @@ function App({ onLogout, user: authUser }) {
   const saveState = useCallback(async (key, state) => {
     try {
       setSaving(true);
-      const payload = { capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides, trackSubLaneCounts: state.trackSubLaneCounts, timelineLaneAssignments: state.timelineLaneAssignments, trackBlockOrder: state.trackBlockOrder, sizeMap: sizeMapRef.current, buffer: state.buffer };
+      const payload = { capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides, trackSubLaneCounts: state.trackSubLaneCounts, timelineLaneAssignments: state.timelineLaneAssignments, trackBlockOrder: state.trackBlockOrder, sizeMap: sizeMapRef.current, buffer: state.buffer, _loadedAt: loadedAtRef.current[key] || 0 };
       const resp = await fetch(`${API_URL}/api/verticals/${key}/state`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify(payload),
       });
-      if (!resp.ok) console.error('[save] server error:', resp.status, await resp.text());
+      if (!resp.ok) {
+        console.error('[save] server error:', resp.status, await resp.text());
+      } else {
+        const result = await resp.json();
+        // If server returned merged state (with conflicts resolved), sync local state
+        if (result.mergedState) {
+          loadedAtRef.current[key] = result.mergedState._loadedAt || Date.now();
+          if (result.conflicts && result.conflicts.length > 0) {
+            console.log('[merge] Server resolved conflicts on:', result.conflicts.join(', '));
+            applyStateFromServer(key, result.mergedState);
+          } else {
+            // No conflicts — just update our loadedAt
+            loadedAtRef.current[key] = result.mergedState._loadedAt || Date.now();
+          }
+        }
+      }
     } catch (e) {
       console.error('Failed to save state:', e);
     } finally {
       setSaving(false);
     }
-  }, []);
+  }, [applyStateFromServer]);
 
   const pendingSave = useRef(null);
   const debouncedSave = useCallback((key, state) => {
@@ -1098,7 +1121,7 @@ function App({ onLogout, user: authUser }) {
     const onBeforeUnload = () => {
       if (pendingSave.current) {
         const { key, state } = pendingSave.current;
-        const beaconPayload = { capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides, trackSubLaneCounts: state.trackSubLaneCounts, timelineLaneAssignments: state.timelineLaneAssignments, trackBlockOrder: state.trackBlockOrder, sizeMap: sizeMapRef.current, buffer: state.buffer };
+        const beaconPayload = { capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides, trackSubLaneCounts: state.trackSubLaneCounts, timelineLaneAssignments: state.timelineLaneAssignments, trackBlockOrder: state.trackBlockOrder, sizeMap: sizeMapRef.current, buffer: state.buffer, _loadedAt: loadedAtRef.current[key] || 0 };
         try { const u = JSON.parse(localStorage.getItem('cp_google_auth') || '{}'); if (u.email) { beaconPayload._userEmail = u.email; beaconPayload._userName = u.name; } } catch {}
         navigator.sendBeacon(`${API_URL}/api/verticals/${key}/state`, new Blob([JSON.stringify(beaconPayload)], { type: 'application/json' }));
         pendingSave.current = null;

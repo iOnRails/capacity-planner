@@ -193,37 +193,70 @@ app.get('/api/verticals/:key/projects', (req, res) => {
   res.json({ projects, totalCount: projects.length });
 });
 
+// ── Merge-safe fields list ──
+const STATE_FIELDS = ['capacity', 'tracks', 'trackCapacity', 'splits', 'timelineConfig', 'milestones', 'timelineOverrides', 'sizeMap', 'trackSubLaneCounts', 'timelineLaneAssignments', 'trackBlockOrder', 'buffer'];
+
 // ── Get state for a vertical ──
 app.get('/api/verticals/:key/state', (req, res) => {
   const state = loadJSON(getStateFile(req.params.key), {
     capacity: { ...DEFAULT_CAPACITY },
     tracks: { ...DEFAULT_TRACKS },
   });
+  // Include server timestamp so clients can do conflict-free merges
+  state._loadedAt = Date.now();
   res.json(state);
 });
 
 // ── Save state for a vertical (POST + PUT) ──
 function saveStateHandler(req, res) {
-  const { capacity, tracks, trackCapacity, splits, timelineConfig, milestones, timelineOverrides, sizeMap, trackSubLaneCounts, timelineLaneAssignments, trackBlockOrder, buffer } = req.body;
+  const { capacity, tracks, _loadedAt } = req.body;
   if (!capacity || !tracks) {
     return res.status(400).json({ error: 'Missing capacity or tracks in body' });
   }
-  // Merge with existing state so we never lose fields
+
   const existing = loadJSON(getStateFile(req.params.key), {});
-  const state = { ...existing, capacity, tracks, updatedAt: new Date().toISOString() };
-  if (trackCapacity !== undefined) state.trackCapacity = trackCapacity;
-  if (splits !== undefined) state.splits = splits;
-  if (timelineConfig !== undefined) state.timelineConfig = timelineConfig;
-  if (milestones !== undefined) state.milestones = milestones;
-  if (timelineOverrides !== undefined) state.timelineOverrides = timelineOverrides;
-  if (sizeMap !== undefined) state.sizeMap = sizeMap;
-  if (trackSubLaneCounts !== undefined) state.trackSubLaneCounts = trackSubLaneCounts;
-  if (timelineLaneAssignments !== undefined) state.timelineLaneAssignments = timelineLaneAssignments;
-  if (trackBlockOrder !== undefined) state.trackBlockOrder = trackBlockOrder;
-  if (buffer !== undefined) state.buffer = buffer;
+  const fieldTs = existing._fieldTs || {};
+  const now = Date.now();
+  const clientLoadedAt = _loadedAt || 0;
+
+  // Build merged state: for each field, only accept client's version
+  // if the field wasn't updated by someone else after this client loaded
+  const state = { ...existing, updatedAt: new Date().toISOString() };
+  const accepted = [];
+  const rejected = [];
+
+  for (const field of STATE_FIELDS) {
+    const clientValue = req.body[field];
+    if (clientValue === undefined) continue;
+
+    const fieldLastModified = fieldTs[field] || 0;
+
+    if (clientLoadedAt === 0 || fieldLastModified <= clientLoadedAt) {
+      // No conflict — accept client's value
+      state[field] = clientValue;
+      fieldTs[field] = now;
+      accepted.push(field);
+    } else {
+      // Conflict — another user updated this field after we loaded
+      // Keep server's version (already in state via spread)
+      rejected.push(field);
+    }
+  }
+
+  state._fieldTs = fieldTs;
   saveJSON(getStateFile(req.params.key), state);
+
+  if (rejected.length > 0) {
+    console.log(`[merge] Vertical ${req.params.key}: accepted=[${accepted}] rejected=[${rejected}] (stale by ${now - clientLoadedAt}ms)`);
+  }
+
   logAudit(req, 'Updated state', describeStateChanges(req.body, existing));
-  res.json({ success: true });
+
+  // Return merged state so client can sync up
+  const responseState = { ...state };
+  responseState._loadedAt = now;
+  delete responseState._fieldTs;
+  res.json({ success: true, mergedState: responseState, conflicts: rejected });
 }
 app.post('/api/verticals/:key/state', saveStateHandler);
 app.put('/api/verticals/:key/state', saveStateHandler);
