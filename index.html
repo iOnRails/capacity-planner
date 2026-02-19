@@ -1092,7 +1092,9 @@ function App({ onLogout, user: authUser }) {
           loadedAtRef.current[key] = result.mergedState._loadedAt || Date.now();
           if (result.conflicts && result.conflicts.length > 0) {
             console.log('[merge] Server resolved conflicts on:', result.conflicts.join(', '));
+            isApplyingPollData.current = true;
             applyStateFromServer(key, result.mergedState);
+            setTimeout(() => { isApplyingPollData.current = false; }, 100);
           } else {
             // No conflicts — just update our loadedAt
             loadedAtRef.current[key] = result.mergedState._loadedAt || Date.now();
@@ -1137,6 +1139,7 @@ function App({ onLogout, user: authUser }) {
   const lastKnownProjectCount = useRef({});
   const isPolling = useRef(false);
   const savingRef = useRef(false);
+  const isApplyingPollData = useRef(false);
   useEffect(() => { savingRef.current = saving; }, [saving]);
 
   useEffect(() => {
@@ -1168,12 +1171,16 @@ function App({ onLogout, user: authUser }) {
             projectsChanged ? fetch(`${API_URL}/api/verticals/${activeVertical}/projects`).then(r => r.json()) : null,
           ]);
           if (cancelled) return;
+          // Guard: prevent poll-triggered state updates from firing save effects
+          isApplyingPollData.current = true;
           applyStateFromServer(activeVertical, stateRes);
           if (projRes) {
             setVerticalData(prev => ({ ...prev, [activeVertical]: projRes.projects || [] }));
           }
           lastKnownUpdatedAt.current[activeVertical] = data.updatedAt;
           lastKnownProjectCount.current[activeVertical] = data.projectCount;
+          // Release guard after React has processed the state updates
+          setTimeout(() => { isApplyingPollData.current = false; }, 100);
         } else if (lastStateUpdate === undefined) {
           // First poll — just record current values
           lastKnownUpdatedAt.current[activeVertical] = data.updatedAt;
@@ -1192,10 +1199,11 @@ function App({ onLogout, user: authUser }) {
     return () => { cancelled = true; clearInterval(interval); };
   }, [activeTab, activeVertical, applyStateFromServer]);
 
-  // Save sizeMap when it changes
+  // Save sizeMap when it changes (skip if change came from polling)
   const sizeMapInitialized = useRef(false);
   useEffect(() => {
     if (!sizeMapInitialized.current) { sizeMapInitialized.current = true; return; }
+    if (isApplyingPollData.current) return;
     if (activeVertical && verticalStates[activeVertical]) {
       debouncedSave(activeVertical, verticalStates[activeVertical]);
     }
