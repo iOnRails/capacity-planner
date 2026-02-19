@@ -1101,21 +1101,44 @@ function App({ onLogout, user: authUser }) {
   // Auto-save state to API (debounced)
   const saveTimer = useRef(null);
   const savingRef = useRef(false); // ref mirror of saving state for poll guard
-  const saveState = useCallback(async (key, state, capturedLoadedAt) => {
+  // For object fields (tracks, trackBlockOrder, etc.), deep-merge local changes
+  // with the LATEST server state so we only overwrite sub-keys the user changed
+  const deepMergeField = useCallback((fieldName, localValue, capturedSnapshotJson) => {
+    // Only deep-merge plain objects (not arrays, not primitives)
+    if (typeof localValue !== 'object' || localValue === null || Array.isArray(localValue)) return localValue;
+    // Get the LATEST server value (not the captured one) to preserve other users' changes
+    const latestSnapshot = serverSnapshotRef.current[activeVertical] || {};
+    const latestServerJson = latestSnapshot[fieldName];
+    if (!latestServerJson) return localValue;
+    const latestServer = JSON.parse(latestServerJson);
+    const capturedServer = capturedSnapshotJson ? JSON.parse(capturedSnapshotJson) : latestServer;
+    // Start with latest server data, then overlay only sub-keys that the user changed
+    const merged = { ...latestServer };
+    for (const subKey of Object.keys(localValue)) {
+      // Include this sub-key if it differs from what the server had at change time
+      if (JSON.stringify(localValue[subKey]) !== JSON.stringify(capturedServer[subKey])) {
+        merged[subKey] = localValue[subKey];
+      }
+    }
+    return merged;
+  }, [activeVertical]);
+
+  const saveState = useCallback(async (key, state, capturedLoadedAt, capturedSnapshot) => {
     try {
       setSaving(true);
       savingRef.current = true;
       // Use capturedLoadedAt if provided (from debouncedSave), otherwise read current
       const loadedAt = capturedLoadedAt !== undefined ? capturedLoadedAt : (loadedAtRef.current[key] || 0);
-      // Only send fields that actually differ from what the server last sent us.
-      // This prevents overwriting other users' changes for fields we didn't touch.
-      const snapshot = serverSnapshotRef.current[key] || {};
+      // Diff against the snapshot from CHANGE TIME (not current) to correctly identify
+      // what the user actually changed, even if polls updated the snapshot since then.
+      const snapshot = capturedSnapshot || serverSnapshotRef.current[key] || {};
       const fullState = { capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides, trackSubLaneCounts: state.trackSubLaneCounts, timelineLaneAssignments: state.timelineLaneAssignments, trackBlockOrder: state.trackBlockOrder, buffer: state.buffer };
       const payload = { _loadedAt: loadedAt };
       const changedFields = [];
       for (const f of STATE_FIELD_NAMES) {
         if (fullState[f] !== undefined && JSON.stringify(fullState[f]) !== snapshot[f]) {
-          payload[f] = fullState[f];
+          // Deep-merge object fields to only overwrite the sub-keys the user changed
+          payload[f] = deepMergeField(f, fullState[f], snapshot[f]);
           changedFields.push(f);
         }
       }
@@ -1155,19 +1178,20 @@ function App({ onLogout, user: authUser }) {
       setSaving(false);
       savingRef.current = false;
     }
-  }, [applyStateFromServer]);
+  }, [applyStateFromServer, deepMergeField]);
 
   const pendingSave = useRef(null);
   const debouncedSave = useCallback((key, state) => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    // Capture _loadedAt NOW so a poll arriving during the debounce window
-    // can't make our stale save appear "fresh" to the server's merge logic
+    // Capture _loadedAt and server snapshot NOW so the diff is against
+    // what the server had at change time, not what polls might update it to later
     const capturedLoadedAt = loadedAtRef.current[key] || 0;
+    const capturedSnapshot = { ...(serverSnapshotRef.current[key] || {}) };
     pendingSave.current = { key, state };
     saveTimer.current = setTimeout(() => {
       saveTimer.current = null;
       pendingSave.current = null;
-      saveState(key, state, capturedLoadedAt);
+      saveState(key, state, capturedLoadedAt, capturedSnapshot);
     }, 800);
   }, [saveState]);
 
