@@ -1082,10 +1082,12 @@ function App({ onLogout, user: authUser }) {
 
   // Auto-save state to API (debounced)
   const saveTimer = useRef(null);
-  const saveState = useCallback(async (key, state) => {
+  const saveState = useCallback(async (key, state, capturedLoadedAt) => {
     try {
       setSaving(true);
-      const payload = { capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides, trackSubLaneCounts: state.trackSubLaneCounts, timelineLaneAssignments: state.timelineLaneAssignments, trackBlockOrder: state.trackBlockOrder, sizeMap: sizeMapRef.current, buffer: state.buffer, _loadedAt: loadedAtRef.current[key] || 0 };
+      // Use capturedLoadedAt if provided (from debouncedSave), otherwise read current
+      const loadedAt = capturedLoadedAt !== undefined ? capturedLoadedAt : (loadedAtRef.current[key] || 0);
+      const payload = { capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides, trackSubLaneCounts: state.trackSubLaneCounts, timelineLaneAssignments: state.timelineLaneAssignments, trackBlockOrder: state.trackBlockOrder, sizeMap: sizeMapRef.current, buffer: state.buffer, _loadedAt: loadedAt };
       const resp = await fetch(`${API_URL}/api/verticals/${key}/state`, {
         method: 'POST',
         headers: getAuthHeaders(),
@@ -1113,11 +1115,14 @@ function App({ onLogout, user: authUser }) {
   const pendingSave = useRef(null);
   const debouncedSave = useCallback((key, state) => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
+    // Capture _loadedAt NOW so a poll arriving during the debounce window
+    // can't make our stale save appear "fresh" to the server's merge logic
+    const capturedLoadedAt = loadedAtRef.current[key] || 0;
     pendingSave.current = { key, state };
     saveTimer.current = setTimeout(() => {
       saveTimer.current = null;
       pendingSave.current = null;
-      saveState(key, state);
+      saveState(key, state, capturedLoadedAt);
     }, 800);
   }, [saveState]);
 
@@ -1148,18 +1153,10 @@ function App({ onLogout, user: authUser }) {
       if (dragItem.current) { console.log('[poll] skip: dragging'); return; }
       if (polling) { console.log('[poll] skip: already in flight'); return; }
       polling = true;
-      console.log('[poll] fetching...');
+      console.log('[poll] fetching via loadVertical...');
       try {
-        const [stateRes, projRes] = await Promise.all([
-          fetch(`${API_URL}/api/verticals/${activeVertical}/state`).then(r => r.json()),
-          fetch(`${API_URL}/api/verticals/${activeVertical}/projects`).then(r => r.json()),
-        ]);
-        if (cancelled) { console.log('[poll] cancelled'); return; }
-
-        console.log('[poll] applying state');
-        applyStateFromServer(activeVertical, stateRes);
-        setVerticalData(prev => ({ ...prev, [activeVertical]: projRes.projects || [] }));
-        loadedAtRef.current[activeVertical] = stateRes._loadedAt || Date.now();
+        await loadVertical(activeVertical);
+        console.log('[poll] loadVertical complete');
       } catch (e) {
         console.log('[poll] error:', e.message);
       } finally {
@@ -1177,7 +1174,7 @@ function App({ onLogout, user: authUser }) {
     document.addEventListener('visibilitychange', onVisibilityChange);
 
     return () => { cancelled = true; clearInterval(interval); document.removeEventListener('visibilitychange', onVisibilityChange); };
-  }, [activeTab, activeVertical, applyStateFromServer]);
+  }, [activeTab, activeVertical, loadVertical]);
 
   // Save sizeMap when USER changes it (skip if value matches what server sent)
   const sizeMapInitialized = useRef(false);
