@@ -1171,7 +1171,17 @@ function App({ onLogout, user: authUser }) {
 
     poll();
     const interval = setInterval(poll, POLL_INTERVAL);
-    return () => { cancelled = true; clearInterval(interval); };
+
+    // Immediately poll when tab becomes visible again (browsers throttle background timers)
+    const onVisibilityChange = () => {
+      if (!document.hidden && !cancelled) {
+        console.log('[poll] Tab became visible, syncing...');
+        poll();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => { cancelled = true; clearInterval(interval); document.removeEventListener('visibilitychange', onVisibilityChange); };
   }, [activeTab, activeVertical, applyStateFromServer]);
 
   // Save sizeMap when it changes (skip if change came from polling)
