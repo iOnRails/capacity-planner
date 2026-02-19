@@ -1115,6 +1115,7 @@ function App({ onLogout, user: authUser }) {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     pendingSave.current = { key, state };
     saveTimer.current = setTimeout(() => {
+      saveTimer.current = null;
       pendingSave.current = null;
       saveState(key, state);
     }, 800);
