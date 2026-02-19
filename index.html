@@ -1131,6 +1131,61 @@ function App({ onLogout, user: authUser }) {
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, []);
 
+  // ── Live polling for multi-user sync ──
+  const POLL_INTERVAL = 5000;
+  const lastKnownUpdatedAt = useRef({});
+  const lastKnownProjectCount = useRef({});
+  const isPolling = useRef(false);
+
+  useEffect(() => {
+    // Only poll on planner tab (roadmap/timeline)
+    if (activeTab !== 'planner') return;
+
+    const poll = async () => {
+      // Skip if user is dragging or we have a pending save
+      if (dragItem.current || pendingSave.current || isPolling.current || saving) return;
+      isPolling.current = true;
+      try {
+        const resp = await fetch(`${API_URL}/api/verticals/${activeVertical}/poll`);
+        if (!resp.ok) return;
+        const data = await resp.json();
+
+        const lastStateUpdate = lastKnownUpdatedAt.current[activeVertical];
+        const lastProjCount = lastKnownProjectCount.current[activeVertical];
+        const stateChanged = data.updatedAt && data.updatedAt !== lastStateUpdate;
+        const projectsChanged = data.projectCount !== lastProjCount;
+
+        if (stateChanged || projectsChanged) {
+          console.log(`[poll] Changes detected for ${activeVertical}, syncing...`);
+          // Fetch full state + projects
+          const [stateRes, projRes] = await Promise.all([
+            fetch(`${API_URL}/api/verticals/${activeVertical}/state`).then(r => r.json()),
+            projectsChanged ? fetch(`${API_URL}/api/verticals/${activeVertical}/projects`).then(r => r.json()) : null,
+          ]);
+          applyStateFromServer(activeVertical, stateRes);
+          if (projRes) {
+            setVerticalData(prev => ({ ...prev, [activeVertical]: projRes.projects || [] }));
+          }
+          lastKnownUpdatedAt.current[activeVertical] = data.updatedAt;
+          lastKnownProjectCount.current[activeVertical] = data.projectCount;
+        } else if (!lastStateUpdate) {
+          // First poll — just record current values
+          lastKnownUpdatedAt.current[activeVertical] = data.updatedAt;
+          lastKnownProjectCount.current[activeVertical] = data.projectCount;
+        }
+      } catch (e) {
+        // Silently ignore poll errors
+      } finally {
+        isPolling.current = false;
+      }
+    };
+
+    // Initial baseline
+    poll();
+    const interval = setInterval(poll, POLL_INTERVAL);
+    return () => clearInterval(interval);
+  }, [activeTab, activeVertical, applyStateFromServer, saving]);
+
   // Save sizeMap when it changes
   const sizeMapInitialized = useRef(false);
   useEffect(() => {

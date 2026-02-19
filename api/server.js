@@ -193,6 +193,18 @@ app.get('/api/verticals/:key/projects', (req, res) => {
   res.json({ projects, totalCount: projects.length });
 });
 
+// ── Lightweight poll endpoint — returns updatedAt + project count without full state ──
+app.get('/api/verticals/:key/poll', (req, res) => {
+  const state = loadJSON(getStateFile(req.params.key), {});
+  const projects = loadJSON(getProjectsFile(req.params.key), []);
+  res.json({
+    updatedAt: state.updatedAt || null,
+    _fieldTs: state._fieldTs || {},
+    projectCount: projects.length,
+    projectsUpdatedAt: projects.length > 0 ? state.updatedAt : null,
+  });
+});
+
 // ── Merge-safe fields list ──
 const STATE_FIELDS = ['capacity', 'tracks', 'trackCapacity', 'splits', 'timelineConfig', 'milestones', 'timelineOverrides', 'sizeMap', 'trackSubLaneCounts', 'timelineLaneAssignments', 'trackBlockOrder', 'buffer'];
 
