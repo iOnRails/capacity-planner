@@ -1145,23 +1145,23 @@ function App({ onLogout, user: authUser }) {
     let polling = false;
 
     const poll = async () => {
-      // Skip during drag, pending saves, or if already polling
-      if (dragItem.current || polling || saveTimer.current || pendingSave.current) return;
+      if (dragItem.current) { console.log('[poll] skip: dragging'); return; }
+      if (polling) { console.log('[poll] skip: already in flight'); return; }
       polling = true;
+      console.log('[poll] fetching...');
       try {
         const [stateRes, projRes] = await Promise.all([
           fetch(`${API_URL}/api/verticals/${activeVertical}/state`).then(r => r.json()),
           fetch(`${API_URL}/api/verticals/${activeVertical}/projects`).then(r => r.json()),
         ]);
-        if (cancelled) return;
-        // Don't apply if user started a save while we were fetching
-        if (saveTimer.current || pendingSave.current) return;
+        if (cancelled) { console.log('[poll] cancelled'); return; }
 
+        console.log('[poll] applying state');
         applyStateFromServer(activeVertical, stateRes);
         setVerticalData(prev => ({ ...prev, [activeVertical]: projRes.projects || [] }));
         loadedAtRef.current[activeVertical] = stateRes._loadedAt || Date.now();
       } catch (e) {
-        // Silently ignore poll errors
+        console.log('[poll] error:', e.message);
       } finally {
         polling = false;
       }
