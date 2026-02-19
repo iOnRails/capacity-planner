@@ -1031,7 +1031,10 @@ function App({ onLogout, user: authUser }) {
   const loadedAtRef = useRef({});
 
   const applyStateFromServer = useCallback((key, stateRes) => {
-    if (stateRes.sizeMap) setSizeMap(stateRes.sizeMap);
+    // Only update sizeMap if values actually changed — avoids triggering the save effect
+    if (stateRes.sizeMap && JSON.stringify(stateRes.sizeMap) !== JSON.stringify(sizeMapRef.current)) {
+      setSizeMap(stateRes.sizeMap);
+    }
     loadedAtRef.current[key] = stateRes._loadedAt || Date.now();
     setVerticalStates(prev => ({
       ...prev,
@@ -1088,15 +1091,12 @@ function App({ onLogout, user: authUser }) {
       } else {
         const result = await resp.json();
         if (result.mergedState) {
-          const serverTs = result.mergedState._loadedAt || Date.now();
-          loadedAtRef.current[key] = serverTs;
-          // Invalidate poll hash so next poll picks up our save + any concurrent changes
-          lastPollHash.current[key] = null;
+          loadedAtRef.current[key] = result.mergedState._loadedAt || Date.now();
           if (result.conflicts && result.conflicts.length > 0) {
             console.log('[merge] Server resolved conflicts on:', result.conflicts.join(', '));
             isApplyingPollData.current = true;
             applyStateFromServer(key, result.mergedState);
-            setTimeout(() => { isApplyingPollData.current = false; }, 200);
+            setTimeout(() => { isApplyingPollData.current = false; }, 500);
           }
         }
       }
@@ -1137,7 +1137,6 @@ function App({ onLogout, user: authUser }) {
   const isPolling = useRef(false);
   const savingRef = useRef(false);
   const isApplyingPollData = useRef(false);
-  const lastPollHash = useRef({});
   useEffect(() => { savingRef.current = saving; }, [saving]);
 
   useEffect(() => {
@@ -1145,7 +1144,8 @@ function App({ onLogout, user: authUser }) {
     let cancelled = false;
 
     const poll = async () => {
-      if (dragItem.current || pendingSave.current || isPolling.current || savingRef.current || isApplyingPollData.current) return;
+      // Skip only during active drag or save operations
+      if (dragItem.current || pendingSave.current || isPolling.current || savingRef.current) return;
       isPolling.current = true;
       try {
         const [stateRes, projRes] = await Promise.all([
@@ -1154,35 +1154,14 @@ function App({ onLogout, user: authUser }) {
         ]);
         if (cancelled) return;
 
-        // Build a hash of the server data to compare with what we last applied
-        const stateHash = JSON.stringify({
-          tracks: stateRes.tracks,
-          capacity: stateRes.capacity,
-          trackCapacity: stateRes.trackCapacity,
-          splits: stateRes.splits,
-          timelineConfig: stateRes.timelineConfig,
-          milestones: stateRes.milestones,
-          timelineOverrides: stateRes.timelineOverrides,
-          trackSubLaneCounts: stateRes.trackSubLaneCounts,
-          timelineLaneAssignments: stateRes.timelineLaneAssignments,
-          trackBlockOrder: stateRes.trackBlockOrder,
-          buffer: stateRes.buffer,
-          sizeMap: stateRes.sizeMap,
-          projects: projRes.projects,
-        });
-
-        if (lastPollHash.current[activeVertical] === stateHash) return;
-        const isFirstPoll = !lastPollHash.current[activeVertical];
-        lastPollHash.current[activeVertical] = stateHash;
-        if (isFirstPoll) return; // First poll just sets the baseline
-
-        console.log(`[poll] Remote changes detected for ${activeVertical}, syncing view...`);
+        // Always apply — applyStateFromServer only updates sizeMap if actually
+        // changed, and React will skip re-renders if state objects are equivalent
         isApplyingPollData.current = true;
         applyStateFromServer(activeVertical, stateRes);
         setVerticalData(prev => ({ ...prev, [activeVertical]: projRes.projects || [] }));
-        // Update loadedAt so our next save has the correct baseline
         loadedAtRef.current[activeVertical] = stateRes._loadedAt || Date.now();
-        setTimeout(() => { isApplyingPollData.current = false; }, 200);
+        // Keep guard up long enough for React to process effects
+        setTimeout(() => { isApplyingPollData.current = false; }, 500);
       } catch (e) {
         // Silently ignore poll errors
       } finally {
