@@ -1035,6 +1035,12 @@ function App({ onLogout, user: authUser }) {
   // Track the last sizeMap received from server — used to distinguish user vs server changes
   const serverSizeMapRef = useRef(JSON.stringify(sizeMap));
 
+  // Track the last state snapshot received from the server per vertical
+  // Used by saveState to only send fields that actually changed locally
+  const serverSnapshotRef = useRef({});
+
+  const STATE_FIELD_NAMES = ['capacity', 'tracks', 'trackCapacity', 'splits', 'timelineConfig', 'milestones', 'timelineOverrides', 'trackSubLaneCounts', 'timelineLaneAssignments', 'trackBlockOrder', 'buffer'];
+
   const applyStateFromServer = useCallback((key, stateRes) => {
     if (stateRes.sizeMap) {
       serverSizeMapRef.current = JSON.stringify(stateRes.sizeMap);
@@ -1043,31 +1049,30 @@ function App({ onLogout, user: authUser }) {
       }
     }
     loadedAtRef.current[key] = stateRes._loadedAt || Date.now();
-    setVerticalStates(prev => {
-      const prevTracks = prev[key] && prev[key].tracks;
-      const serverTracks = stateRes.tracks;
-      const tracksChanged = JSON.stringify(prevTracks) !== JSON.stringify(serverTracks);
-      const orderChanged = JSON.stringify(prev[key] && prev[key].trackBlockOrder) !== JSON.stringify(stateRes.trackBlockOrder);
-      if (tracksChanged || orderChanged) {
-        console.log('[sync] State update — tracks changed:', tracksChanged, 'order changed:', orderChanged);
+    // Snapshot server state for each field (used by saveState to diff)
+    const snapshot = {};
+    for (const f of STATE_FIELD_NAMES) {
+      if (stateRes[f] !== undefined) snapshot[f] = JSON.stringify(stateRes[f]);
+    }
+    if (stateRes.sizeMap !== undefined) snapshot.sizeMap = JSON.stringify(stateRes.sizeMap);
+    serverSnapshotRef.current[key] = snapshot;
+
+    setVerticalStates(prev => ({
+      ...prev,
+      [key]: {
+        capacity: stateRes.capacity || {...DEFAULT_CAPACITY},
+        tracks: migrateTracks(stateRes.tracks || { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }),
+        trackCapacity: migrateTrackCapacity(stateRes.trackCapacity),
+        splits: stateRes.splits || {},
+        timelineConfig: stateRes.timelineConfig || {...DEFAULT_TIMELINE_CONFIG},
+        milestones: stateRes.milestones || [],
+        timelineOverrides: stateRes.timelineOverrides || {},
+        trackSubLaneCounts: stateRes.trackSubLaneCounts || {},
+        timelineLaneAssignments: stateRes.timelineLaneAssignments || {},
+        trackBlockOrder: stateRes.trackBlockOrder || {},
+        buffer: stateRes.buffer || { backend: 0, frontend: 0, natives: 0, qa: 0 },
       }
-      return {
-        ...prev,
-        [key]: {
-          capacity: stateRes.capacity || {...DEFAULT_CAPACITY},
-          tracks: migrateTracks(stateRes.tracks || { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }),
-          trackCapacity: migrateTrackCapacity(stateRes.trackCapacity),
-          splits: stateRes.splits || {},
-          timelineConfig: stateRes.timelineConfig || {...DEFAULT_TIMELINE_CONFIG},
-          milestones: stateRes.milestones || [],
-          timelineOverrides: stateRes.timelineOverrides || {},
-          trackSubLaneCounts: stateRes.trackSubLaneCounts || {},
-          timelineLaneAssignments: stateRes.timelineLaneAssignments || {},
-          trackBlockOrder: stateRes.trackBlockOrder || {},
-          buffer: stateRes.buffer || { backend: 0, frontend: 0, natives: 0, qa: 0 },
-        }
-      };
-    });
+    }));
   }, []);
 
   const loadVertical = useCallback(async (key) => {
@@ -1102,8 +1107,29 @@ function App({ onLogout, user: authUser }) {
       savingRef.current = true;
       // Use capturedLoadedAt if provided (from debouncedSave), otherwise read current
       const loadedAt = capturedLoadedAt !== undefined ? capturedLoadedAt : (loadedAtRef.current[key] || 0);
-      console.log('[save] saving with _loadedAt=' + loadedAt + ' (current ref=' + loadedAtRef.current[key] + ')');
-      const payload = { capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides, trackSubLaneCounts: state.trackSubLaneCounts, timelineLaneAssignments: state.timelineLaneAssignments, trackBlockOrder: state.trackBlockOrder, sizeMap: sizeMapRef.current, buffer: state.buffer, _loadedAt: loadedAt };
+      // Only send fields that actually differ from what the server last sent us.
+      // This prevents overwriting other users' changes for fields we didn't touch.
+      const snapshot = serverSnapshotRef.current[key] || {};
+      const fullState = { capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides, trackSubLaneCounts: state.trackSubLaneCounts, timelineLaneAssignments: state.timelineLaneAssignments, trackBlockOrder: state.trackBlockOrder, buffer: state.buffer };
+      const payload = { _loadedAt: loadedAt };
+      const changedFields = [];
+      for (const f of STATE_FIELD_NAMES) {
+        if (fullState[f] !== undefined && JSON.stringify(fullState[f]) !== snapshot[f]) {
+          payload[f] = fullState[f];
+          changedFields.push(f);
+        }
+      }
+      // Always include sizeMap if it changed
+      const currentSizeMap = sizeMapRef.current;
+      if (JSON.stringify(currentSizeMap) !== snapshot.sizeMap) {
+        payload.sizeMap = currentSizeMap;
+        changedFields.push('sizeMap');
+      }
+      if (changedFields.length === 0) {
+        console.log('[save] no fields changed, skipping');
+        return;
+      }
+      console.log('[save] saving changed fields:', changedFields.join(', '));
       const resp = await fetch(`${API_URL}/api/verticals/${key}/state`, {
         method: 'POST',
         headers: getAuthHeaders(),

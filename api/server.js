@@ -224,9 +224,11 @@ app.get('/api/verticals/:key/state', (req, res) => {
 
 // ── Save state for a vertical (POST + PUT) ──
 function saveStateHandler(req, res) {
-  const { capacity, tracks, _loadedAt } = req.body;
-  if (!capacity || !tracks) {
-    return res.status(400).json({ error: 'Missing capacity or tracks in body' });
+  const { _loadedAt } = req.body;
+  // No longer require all fields — clients now send only changed fields
+  const hasAnyField = STATE_FIELDS.some(f => req.body[f] !== undefined);
+  if (!hasAnyField) {
+    return res.status(400).json({ error: 'No state fields provided' });
   }
 
   const existing = loadJSON(getStateFile(req.params.key), {});
