@@ -189,12 +189,14 @@ app.get('/api/verticals', (req, res) => {
 
 // ── Get projects for a vertical ──
 app.get('/api/verticals/:key/projects', (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   const projects = loadJSON(getProjectsFile(req.params.key), []);
   res.json({ projects, totalCount: projects.length });
 });
 
 // ── Lightweight poll endpoint — returns updatedAt + project count without full state ──
 app.get('/api/verticals/:key/poll', (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   const state = loadJSON(getStateFile(req.params.key), {});
   const projects = loadJSON(getProjectsFile(req.params.key), []);
   res.json({
@@ -210,6 +212,7 @@ const STATE_FIELDS = ['capacity', 'tracks', 'trackCapacity', 'splits', 'timeline
 
 // ── Get state for a vertical ──
 app.get('/api/verticals/:key/state', (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   const state = loadJSON(getStateFile(req.params.key), {
     capacity: { ...DEFAULT_CAPACITY },
     tracks: { ...DEFAULT_TRACKS },

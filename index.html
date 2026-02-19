@@ -1061,9 +1061,12 @@ function App({ onLogout, user: authUser }) {
 
   const loadVertical = useCallback(async (key) => {
     try {
+      // cache: 'no-store' is critical — Safari aggressively caches GET requests,
+      // which would make polls return stale data and break multi-user sync
+      const nocache = { cache: 'no-store' };
       const [projRes, stateRes] = await Promise.all([
-        fetch(`${API_URL}/api/verticals/${key}/projects`).then(r => r.json()),
-        fetch(`${API_URL}/api/verticals/${key}/state`).then(r => r.json()),
+        fetch(`${API_URL}/api/verticals/${key}/projects`, nocache).then(r => r.json()),
+        fetch(`${API_URL}/api/verticals/${key}/state`, nocache).then(r => r.json()),
       ]);
       setVerticalData(prev => ({ ...prev, [key]: projRes.projects || [] }));
       applyStateFromServer(key, stateRes);
@@ -1100,11 +1103,10 @@ function App({ onLogout, user: authUser }) {
       } else {
         const result = await resp.json();
         if (result.mergedState) {
-          // Always apply merged state from server — keeps client in sync
-          // even when other users changed fields we didn't touch
-          applyStateFromServer(key, result.mergedState);
+          loadedAtRef.current[key] = result.mergedState._loadedAt || Date.now();
           if (result.conflicts && result.conflicts.length > 0) {
             console.log('[merge] Server resolved conflicts on:', result.conflicts.join(', '));
+            applyStateFromServer(key, result.mergedState);
           }
         }
       }
@@ -1158,7 +1160,10 @@ function App({ onLogout, user: authUser }) {
       if (polling) return;
       // Skip poll while a save is pending or in-flight — avoids overwriting
       // local changes with stale server data before the save completes
-      if (pendingSave.current || saveTimer.current || savingRef.current) return;
+      if (pendingSave.current || saveTimer.current || savingRef.current) {
+        console.log('[poll] skip: save active (pending=' + !!pendingSave.current + ' timer=' + !!saveTimer.current + ' saving=' + savingRef.current + ')');
+        return;
+      }
       polling = true;
       try {
         await loadVertical(activeVertical);
