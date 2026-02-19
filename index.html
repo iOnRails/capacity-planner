@@ -1041,32 +1041,40 @@ function App({ onLogout, user: authUser }) {
       }
     }
     loadedAtRef.current[key] = stateRes._loadedAt || Date.now();
-    setVerticalStates(prev => ({
-      ...prev,
-      [key]: {
-        capacity: stateRes.capacity || {...DEFAULT_CAPACITY},
-        tracks: migrateTracks(stateRes.tracks || { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }),
-        trackCapacity: migrateTrackCapacity(stateRes.trackCapacity),
-        splits: stateRes.splits || {},
-        timelineConfig: stateRes.timelineConfig || {...DEFAULT_TIMELINE_CONFIG},
-        milestones: stateRes.milestones || [],
-        timelineOverrides: stateRes.timelineOverrides || {},
-        trackSubLaneCounts: stateRes.trackSubLaneCounts || {},
-        timelineLaneAssignments: stateRes.timelineLaneAssignments || {},
-        trackBlockOrder: stateRes.trackBlockOrder || {},
-        buffer: stateRes.buffer || { backend: 0, frontend: 0, natives: 0, qa: 0 },
+    setVerticalStates(prev => {
+      const prevTracks = prev[key] && prev[key].tracks;
+      const serverTracks = stateRes.tracks;
+      const tracksChanged = JSON.stringify(prevTracks) !== JSON.stringify(serverTracks);
+      const orderChanged = JSON.stringify(prev[key] && prev[key].trackBlockOrder) !== JSON.stringify(stateRes.trackBlockOrder);
+      if (tracksChanged || orderChanged) {
+        console.log('[sync] State update — tracks changed:', tracksChanged, 'order changed:', orderChanged);
       }
-    }));
+      return {
+        ...prev,
+        [key]: {
+          capacity: stateRes.capacity || {...DEFAULT_CAPACITY},
+          tracks: migrateTracks(stateRes.tracks || { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }),
+          trackCapacity: migrateTrackCapacity(stateRes.trackCapacity),
+          splits: stateRes.splits || {},
+          timelineConfig: stateRes.timelineConfig || {...DEFAULT_TIMELINE_CONFIG},
+          milestones: stateRes.milestones || [],
+          timelineOverrides: stateRes.timelineOverrides || {},
+          trackSubLaneCounts: stateRes.trackSubLaneCounts || {},
+          timelineLaneAssignments: stateRes.timelineLaneAssignments || {},
+          trackBlockOrder: stateRes.trackBlockOrder || {},
+          buffer: stateRes.buffer || { backend: 0, frontend: 0, natives: 0, qa: 0 },
+        }
+      };
+    });
   }, []);
 
   const loadVertical = useCallback(async (key) => {
     try {
-      // cache: 'no-store' is critical — Safari aggressively caches GET requests,
-      // which would make polls return stale data and break multi-user sync
-      const nocache = { cache: 'no-store' };
+      // Use timestamp query param for bulletproof cache busting (Safari ignores cache:'no-store')
+      const _t = Date.now();
       const [projRes, stateRes] = await Promise.all([
-        fetch(`${API_URL}/api/verticals/${key}/projects`, nocache).then(r => r.json()),
-        fetch(`${API_URL}/api/verticals/${key}/state`, nocache).then(r => r.json()),
+        fetch(`${API_URL}/api/verticals/${key}/projects?_t=${_t}`, { cache: 'no-store' }).then(r => r.json()),
+        fetch(`${API_URL}/api/verticals/${key}/state?_t=${_t}`, { cache: 'no-store' }).then(r => r.json()),
       ]);
       setVerticalData(prev => ({ ...prev, [key]: projRes.projects || [] }));
       applyStateFromServer(key, stateRes);
@@ -1092,6 +1100,7 @@ function App({ onLogout, user: authUser }) {
       savingRef.current = true;
       // Use capturedLoadedAt if provided (from debouncedSave), otherwise read current
       const loadedAt = capturedLoadedAt !== undefined ? capturedLoadedAt : (loadedAtRef.current[key] || 0);
+      console.log('[save] saving with _loadedAt=' + loadedAt + ' (current ref=' + loadedAtRef.current[key] + ')');
       const payload = { capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides, trackSubLaneCounts: state.trackSubLaneCounts, timelineLaneAssignments: state.timelineLaneAssignments, trackBlockOrder: state.trackBlockOrder, sizeMap: sizeMapRef.current, buffer: state.buffer, _loadedAt: loadedAt };
       const resp = await fetch(`${API_URL}/api/verticals/${key}/state`, {
         method: 'POST',
