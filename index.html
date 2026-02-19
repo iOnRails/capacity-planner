@@ -1103,25 +1103,29 @@ function App({ onLogout, user: authUser }) {
   const savingRef = useRef(false); // ref mirror of saving state for poll guard
   // For object fields (tracks, trackBlockOrder, etc.), deep-merge local changes
   // with the LATEST server state so we only overwrite sub-keys the user changed
-  const deepMergeField = useCallback((fieldName, localValue, capturedSnapshotJson) => {
+  const deepMergeField = useCallback((key, fieldName, localValue, capturedSnapshotJson) => {
     // Only deep-merge plain objects (not arrays, not primitives)
     if (typeof localValue !== 'object' || localValue === null || Array.isArray(localValue)) return localValue;
-    // Get the LATEST server value (not the captured one) to preserve other users' changes
-    const latestSnapshot = serverSnapshotRef.current[activeVertical] || {};
+    // Get the LATEST server value using the key param (not activeVertical from closure)
+    const latestSnapshot = serverSnapshotRef.current[key] || {};
     const latestServerJson = latestSnapshot[fieldName];
     if (!latestServerJson) return localValue;
     const latestServer = JSON.parse(latestServerJson);
     const capturedServer = capturedSnapshotJson ? JSON.parse(capturedSnapshotJson) : latestServer;
     // Start with latest server data, then overlay only sub-keys that the user changed
     const merged = { ...latestServer };
+    const overlaid = [];
     for (const subKey of Object.keys(localValue)) {
-      // Include this sub-key if it differs from what the server had at change time
       if (JSON.stringify(localValue[subKey]) !== JSON.stringify(capturedServer[subKey])) {
         merged[subKey] = localValue[subKey];
+        overlaid.push(subKey);
       }
     }
+    if (overlaid.length > 0) {
+      console.log('[deepMerge] ' + fieldName + ': user changed sub-keys=[' + overlaid.join(',') + '], preserved others from server');
+    }
     return merged;
-  }, [activeVertical]);
+  }, []);
 
   const saveState = useCallback(async (key, state, capturedLoadedAt, capturedSnapshot) => {
     try {
@@ -1138,7 +1142,7 @@ function App({ onLogout, user: authUser }) {
       for (const f of STATE_FIELD_NAMES) {
         if (fullState[f] !== undefined && JSON.stringify(fullState[f]) !== snapshot[f]) {
           // Deep-merge object fields to only overwrite the sub-keys the user changed
-          payload[f] = deepMergeField(f, fullState[f], snapshot[f]);
+          payload[f] = deepMergeField(key, f, fullState[f], snapshot[f]);
           changedFields.push(f);
         }
       }
