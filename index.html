@@ -975,8 +975,11 @@ const PX_PER_SPRINT = 20;
 
 function App({ onLogout, user: authUser }) {
   // Auth headers for API requests (audit logging) — reads from localStorage to avoid dependency issues
+  // Unique ID for this browser tab — used to skip own WS broadcasts
+  const wsIdRef = useRef(Math.random().toString(36).slice(2, 10));
+
   const getAuthHeaders = () => {
-    const h = { 'Content-Type': 'application/json' };
+    const h = { 'Content-Type': 'application/json', 'X-WS-ID': wsIdRef.current };
     try {
       const stored = localStorage.getItem('cp_google_auth');
       if (stored) {
@@ -1222,60 +1225,110 @@ function App({ onLogout, user: authUser }) {
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, []);
 
-  // ── Live polling for multi-user sync ──
-  const POLL_INTERVAL = 5000;
+  // ── WebSocket + fallback poll for live multi-user sync ──
+  const wsRef = useRef(null);
+  const FALLBACK_POLL_INTERVAL = 30000; // Slow fallback only
 
   useEffect(() => {
     if (activeTab !== 'planner') return;
     let cancelled = false;
-    let polling = false;
 
-    const poll = async () => {
+    // ── Fetch helper (used by both WS and poll) ──
+    const fetchAndApply = async (reason) => {
       if (dragItem.current) return;
-      if (polling) return;
-      polling = true;
+      if (savingRef.current) {
+        console.log('[sync] ' + reason + ' but save in-flight, deferring');
+        return;
+      }
       try {
-        const _t = Date.now();
-        // Step 1: Lightweight check — did anything change on the server?
-        const pollRes = await fetch(`${API_URL}/api/verticals/${activeVertical}/poll?_t=${_t}`, { cache: 'no-store' }).then(r => r.json());
-        const serverUpdatedAt = pollRes.updatedAt;
-
-        // Nothing changed on server since we last applied — skip
-        if (serverUpdatedAt && serverUpdatedAt === lastAppliedUpdatedAt.current) {
-          return;
-        }
-
-        // Step 2: Server has newer data. If a save is in-flight, defer to next cycle
-        // (the save response will update our state anyway)
-        if (savingRef.current) {
-          console.log('[poll] server has new data but save in-flight, deferring');
-          return;
-        }
-
-        // Step 3: If a debounced save is pending, we still want to fetch and apply
-        // server changes for OTHER fields. But the pending save will send our local
-        // changes shortly. Apply server state — the debounced save has already
-        // captured its state and _loadedAt, so it won't be affected.
-        console.log('[poll] applying update (server updatedAt=' + serverUpdatedAt + ')');
+        console.log('[sync] ' + reason + ' — refreshing');
         await loadVertical(activeVertical);
-        lastAppliedUpdatedAt.current = serverUpdatedAt;
       } catch (e) {
-        console.log('[poll] error:', e.message);
-      } finally {
-        polling = false;
+        console.log('[sync] error:', e.message);
       }
     };
 
-    poll();
-    const interval = setInterval(poll, POLL_INTERVAL);
+    // ── WebSocket connection ──
+    const wsUrl = API_URL.replace(/^http/, 'ws') + '/ws';
+    let ws = null;
+    let reconnectTimer = null;
 
-    // Immediately poll when tab becomes visible (browsers throttle background tab timers)
+    const connectWs = () => {
+      if (cancelled) return;
+      try {
+        ws = new WebSocket(wsUrl);
+        wsRef.current = ws;
+
+        ws.onopen = () => {
+          console.log('[ws] Connected');
+          ws.send(JSON.stringify({ type: 'subscribe', vertical: activeVertical }));
+        };
+
+        ws.onmessage = (evt) => {
+          try {
+            const msg = JSON.parse(evt.data);
+            if (msg.type === 'update' && msg.vertical === activeVertical) {
+              // Skip updates we triggered ourselves
+              if (msg.senderId === wsIdRef.current) return;
+              fetchAndApply('ws update from another user');
+            }
+          } catch (e) {}
+        };
+
+        ws.onclose = () => {
+          console.log('[ws] Disconnected, reconnecting in 3s');
+          wsRef.current = null;
+          if (!cancelled) reconnectTimer = setTimeout(connectWs, 3000);
+        };
+
+        ws.onerror = () => {
+          // onclose will fire after this
+        };
+      } catch (e) {
+        console.log('[ws] Connection failed:', e.message);
+        if (!cancelled) reconnectTimer = setTimeout(connectWs, 5000);
+      }
+    };
+
+    connectWs();
+
+    // ── Slow fallback poll (in case WS is down) ──
+    const fallbackPoll = async () => {
+      if (cancelled || dragItem.current || savingRef.current) return;
+      try {
+        const _t = Date.now();
+        const pollRes = await fetch(`${API_URL}/api/verticals/${activeVertical}/poll?_t=${_t}`, { cache: 'no-store' }).then(r => r.json());
+        if (pollRes.updatedAt && pollRes.updatedAt !== lastAppliedUpdatedAt.current) {
+          await loadVertical(activeVertical);
+          lastAppliedUpdatedAt.current = pollRes.updatedAt;
+        }
+      } catch (e) {}
+    };
+    const fallbackInterval = setInterval(fallbackPoll, FALLBACK_POLL_INTERVAL);
+
+    // Immediately sync when tab becomes visible
     const onVisibilityChange = () => {
-      if (!document.hidden && !cancelled) poll();
+      if (!document.hidden && !cancelled) {
+        fetchAndApply('tab visible');
+        // Re-subscribe in case WS reconnected to a different vertical
+        if (wsRef.current && wsRef.current.readyState === 1) {
+          wsRef.current.send(JSON.stringify({ type: 'subscribe', vertical: activeVertical }));
+        }
+      }
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
 
-    return () => { cancelled = true; clearInterval(interval); document.removeEventListener('visibilitychange', onVisibilityChange); };
+    // Initial load
+    fetchAndApply('initial');
+
+    return () => {
+      cancelled = true;
+      clearInterval(fallbackInterval);
+      clearTimeout(reconnectTimer);
+      if (ws) ws.close();
+      wsRef.current = null;
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
   }, [activeTab, activeVertical, loadVertical]);
 
   // Save sizeMap when USER changes it (skip if value matches what server sent)

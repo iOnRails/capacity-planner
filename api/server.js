@@ -2,6 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const http = require('http');
+const { WebSocketServer } = require('ws');
 
 // ── Config ──
 const PORT = process.env.PORT || 3000;
@@ -157,7 +159,7 @@ const app = express();
 app.use(cors({
   origin: CORS_ORIGIN === '*' ? true : CORS_ORIGIN.split(','),
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-User-Email', 'X-User-Name'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-User-Email', 'X-User-Name', 'X-WS-ID'],
 }));
 app.use(express.json({ limit: '5mb' }));
 
@@ -301,6 +303,10 @@ function saveStateHandler(req, res) {
   responseState._loadedAt = now;
   delete responseState._fieldTs;
   res.json({ success: true, mergedState: responseState, conflicts: rejected });
+
+  // Broadcast to WebSocket clients so other tabs refresh instantly
+  const senderId = req.headers['x-ws-id'] || '';
+  broadcastUpdate(req.params.key, state.updatedAt, senderId);
 }
 app.post('/api/verticals/:key/state', saveStateHandler);
 app.put('/api/verticals/:key/state', saveStateHandler);
@@ -353,6 +359,10 @@ function saveProjectsHandler(req, res) {
 
     logAudit(req, 'Updated projects', `Saved ${projects.length} projects`);
     res.json({ success: true, projectCount: projects.length });
+
+    // Broadcast to WebSocket clients
+    const senderId = req.headers['x-ws-id'] || '';
+    broadcastUpdate(req.params.key, new Date().toISOString(), senderId);
   } catch (err) {
     console.error('Save projects error:', err);
     res.status(500).json({ error: 'Failed to save projects' });
@@ -378,8 +388,64 @@ app.use((req, res) => {
   res.status(404).json({ error: 'Route not found', method: req.method, url: req.url });
 });
 
+// ── HTTP + WebSocket Server ──
+const server = http.createServer(app);
+const wss = new WebSocketServer({ server, path: '/ws' });
+
+// Track connected clients by vertical
+// Map<string, Set<WebSocket>>
+const verticalClients = new Map();
+
+wss.on('connection', (ws) => {
+  let subscribedVertical = null;
+
+  ws.on('message', (raw) => {
+    try {
+      const msg = JSON.parse(raw);
+      if (msg.type === 'subscribe' && msg.vertical) {
+        // Unsubscribe from previous
+        if (subscribedVertical && verticalClients.has(subscribedVertical)) {
+          verticalClients.get(subscribedVertical).delete(ws);
+        }
+        subscribedVertical = msg.vertical;
+        if (!verticalClients.has(subscribedVertical)) {
+          verticalClients.set(subscribedVertical, new Set());
+        }
+        verticalClients.get(subscribedVertical).add(ws);
+        console.log(`[ws] Client subscribed to ${subscribedVertical} (${verticalClients.get(subscribedVertical).size} clients)`);
+      }
+    } catch (e) {
+      // ignore invalid messages
+    }
+  });
+
+  ws.on('close', () => {
+    if (subscribedVertical && verticalClients.has(subscribedVertical)) {
+      verticalClients.get(subscribedVertical).delete(ws);
+    }
+  });
+
+  // Send a welcome ping so client knows connection is alive
+  ws.send(JSON.stringify({ type: 'connected' }));
+});
+
+// Broadcast to all clients watching a given vertical (except the sender, identified by senderId)
+function broadcastUpdate(vertical, updatedAt, senderId) {
+  const clients = verticalClients.get(vertical);
+  if (!clients || clients.size === 0) return;
+  const msg = JSON.stringify({ type: 'update', vertical, updatedAt, senderId });
+  let sent = 0;
+  for (const ws of clients) {
+    if (ws.readyState === 1) { // WebSocket.OPEN
+      ws.send(msg);
+      sent++;
+    }
+  }
+  if (sent > 0) console.log(`[ws] Broadcast update for ${vertical} to ${sent} clients`);
+}
+
 // ── Start ──
-app.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`Capacity Planner API running on 0.0.0.0:${PORT}`);
   console.log(`CORS origin: ${CORS_ORIGIN}`);
   console.log(`Data dir: ${DATA_DIR}`);
