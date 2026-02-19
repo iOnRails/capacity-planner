@@ -1029,6 +1029,8 @@ function App({ onLogout, user: authUser }) {
   // Load data from API
   // Track server timestamp per vertical for conflict-free merging
   const loadedAtRef = useRef({});
+  // Track the last updatedAt we applied — used by poll to skip redundant fetches
+  const lastAppliedUpdatedAt = useRef(null);
 
   // Track the last sizeMap received from server — used to distinguish user vs server changes
   const serverSizeMapRef = useRef(JSON.stringify(sizeMap));
@@ -1113,6 +1115,8 @@ function App({ onLogout, user: authUser }) {
         const result = await resp.json();
         if (result.mergedState) {
           loadedAtRef.current[key] = result.mergedState._loadedAt || Date.now();
+          // Update lastAppliedUpdatedAt so poll doesn't re-fetch what we just saved
+          if (result.mergedState.updatedAt) lastAppliedUpdatedAt.current = result.mergedState.updatedAt;
           if (result.conflicts && result.conflicts.length > 0) {
             console.log('[merge] Server resolved conflicts on:', result.conflicts.join(', '));
             applyStateFromServer(key, result.mergedState);
@@ -1167,15 +1171,32 @@ function App({ onLogout, user: authUser }) {
     const poll = async () => {
       if (dragItem.current) return;
       if (polling) return;
-      // Skip poll while a save is pending or in-flight — avoids overwriting
-      // local changes with stale server data before the save completes
-      if (pendingSave.current || saveTimer.current || savingRef.current) {
-        console.log('[poll] skip: save active (pending=' + !!pendingSave.current + ' timer=' + !!saveTimer.current + ' saving=' + savingRef.current + ')');
-        return;
-      }
       polling = true;
       try {
+        const _t = Date.now();
+        // Step 1: Lightweight check — did anything change on the server?
+        const pollRes = await fetch(`${API_URL}/api/verticals/${activeVertical}/poll?_t=${_t}`, { cache: 'no-store' }).then(r => r.json());
+        const serverUpdatedAt = pollRes.updatedAt;
+
+        // Nothing changed on server since we last applied — skip
+        if (serverUpdatedAt && serverUpdatedAt === lastAppliedUpdatedAt.current) {
+          return;
+        }
+
+        // Step 2: Server has newer data. If a save is in-flight, defer to next cycle
+        // (the save response will update our state anyway)
+        if (savingRef.current) {
+          console.log('[poll] server has new data but save in-flight, deferring');
+          return;
+        }
+
+        // Step 3: If a debounced save is pending, we still want to fetch and apply
+        // server changes for OTHER fields. But the pending save will send our local
+        // changes shortly. Apply server state — the debounced save has already
+        // captured its state and _loadedAt, so it won't be affected.
+        console.log('[poll] applying update (server updatedAt=' + serverUpdatedAt + ')');
         await loadVertical(activeVertical);
+        lastAppliedUpdatedAt.current = serverUpdatedAt;
       } catch (e) {
         console.log('[poll] error:', e.message);
       } finally {
