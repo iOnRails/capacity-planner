@@ -1082,9 +1082,11 @@ function App({ onLogout, user: authUser }) {
 
   // Auto-save state to API (debounced)
   const saveTimer = useRef(null);
+  const savingRef = useRef(false); // ref mirror of saving state for poll guard
   const saveState = useCallback(async (key, state, capturedLoadedAt) => {
     try {
       setSaving(true);
+      savingRef.current = true;
       // Use capturedLoadedAt if provided (from debouncedSave), otherwise read current
       const loadedAt = capturedLoadedAt !== undefined ? capturedLoadedAt : (loadedAtRef.current[key] || 0);
       const payload = { capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides, trackSubLaneCounts: state.trackSubLaneCounts, timelineLaneAssignments: state.timelineLaneAssignments, trackBlockOrder: state.trackBlockOrder, sizeMap: sizeMapRef.current, buffer: state.buffer, _loadedAt: loadedAt };
@@ -1098,10 +1100,11 @@ function App({ onLogout, user: authUser }) {
       } else {
         const result = await resp.json();
         if (result.mergedState) {
-          loadedAtRef.current[key] = result.mergedState._loadedAt || Date.now();
+          // Always apply merged state from server — keeps client in sync
+          // even when other users changed fields we didn't touch
+          applyStateFromServer(key, result.mergedState);
           if (result.conflicts && result.conflicts.length > 0) {
             console.log('[merge] Server resolved conflicts on:', result.conflicts.join(', '));
-            applyStateFromServer(key, result.mergedState);
           }
         }
       }
@@ -1109,6 +1112,7 @@ function App({ onLogout, user: authUser }) {
       console.error('Failed to save state:', e);
     } finally {
       setSaving(false);
+      savingRef.current = false;
     }
   }, [applyStateFromServer]);
 
@@ -1150,13 +1154,14 @@ function App({ onLogout, user: authUser }) {
     let polling = false;
 
     const poll = async () => {
-      if (dragItem.current) { console.log('[poll] skip: dragging'); return; }
-      if (polling) { console.log('[poll] skip: already in flight'); return; }
+      if (dragItem.current) return;
+      if (polling) return;
+      // Skip poll while a save is pending or in-flight — avoids overwriting
+      // local changes with stale server data before the save completes
+      if (pendingSave.current || saveTimer.current || savingRef.current) return;
       polling = true;
-      console.log('[poll] fetching via loadVertical...');
       try {
         await loadVertical(activeVertical);
-        console.log('[poll] loadVertical complete');
       } catch (e) {
         console.log('[poll] error:', e.message);
       } finally {

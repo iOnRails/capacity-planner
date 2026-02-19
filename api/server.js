@@ -245,9 +245,14 @@ function saveStateHandler(req, res) {
 
     if (clientLoadedAt === 0 || fieldLastModified <= clientLoadedAt) {
       // No conflict — accept client's value
+      // But only bump the field timestamp if the value actually changed
+      // (prevents no-op saves from creating false conflicts for other clients)
+      const valueChanged = JSON.stringify(clientValue) !== JSON.stringify(existing[field]);
       state[field] = clientValue;
-      fieldTs[field] = now;
-      accepted.push(field);
+      if (valueChanged) {
+        fieldTs[field] = now;
+        accepted.push(field);
+      }
     } else {
       // Conflict — another user updated this field after we loaded
       // Keep server's version (already in state via spread)
