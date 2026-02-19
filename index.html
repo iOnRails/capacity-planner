@@ -1089,15 +1089,15 @@ function App({ onLogout, user: authUser }) {
         const result = await resp.json();
         // If server returned merged state (with conflicts resolved), sync local state
         if (result.mergedState) {
-          loadedAtRef.current[key] = result.mergedState._loadedAt || Date.now();
+          const serverTs = result.mergedState._loadedAt || Date.now();
+          loadedAtRef.current[key] = serverTs;
+          // Update poll baseline so we don't re-fetch our own save
+          lastKnownUpdatedAt.current[key] = serverTs;
           if (result.conflicts && result.conflicts.length > 0) {
             console.log('[merge] Server resolved conflicts on:', result.conflicts.join(', '));
             isApplyingPollData.current = true;
             applyStateFromServer(key, result.mergedState);
             setTimeout(() => { isApplyingPollData.current = false; }, 100);
-          } else {
-            // No conflicts — just update our loadedAt
-            loadedAtRef.current[key] = result.mergedState._loadedAt || Date.now();
           }
         }
       }
@@ -1150,40 +1150,38 @@ function App({ onLogout, user: authUser }) {
 
     const poll = async () => {
       // Skip if user is dragging, saving, or we have a pending save
-      if (dragItem.current || pendingSave.current || isPolling.current || savingRef.current) return;
+      if (dragItem.current || pendingSave.current || isPolling.current || savingRef.current || isApplyingPollData.current) return;
       isPolling.current = true;
       try {
         const resp = await fetch(`${API_URL}/api/verticals/${activeVertical}/poll`);
         if (!resp.ok || cancelled) return;
         const data = await resp.json();
 
-        const lastStateUpdate = lastKnownUpdatedAt.current[activeVertical];
+        // Compare using max field timestamp — more reliable than updatedAt string
+        const serverMaxTs = Math.max(0, ...Object.values(data._fieldTs || {}));
+        const lastKnownTs = lastKnownUpdatedAt.current[activeVertical] || 0;
         const lastProjCount = lastKnownProjectCount.current[activeVertical];
-        const stateChanged = data.updatedAt && data.updatedAt !== lastStateUpdate;
+        const stateChanged = serverMaxTs > lastKnownTs;
         const projectsChanged = data.projectCount !== undefined && data.projectCount !== lastProjCount;
 
         if (stateChanged || projectsChanged) {
           if (cancelled) return;
-          console.log(`[poll] Changes detected for ${activeVertical}, syncing...`);
-          // Fetch full state + projects
+          console.log(`[poll] Changes detected for ${activeVertical} (serverTs=${serverMaxTs}, lastTs=${lastKnownTs}), syncing...`);
           const [stateRes, projRes] = await Promise.all([
             fetch(`${API_URL}/api/verticals/${activeVertical}/state`).then(r => r.json()),
             projectsChanged ? fetch(`${API_URL}/api/verticals/${activeVertical}/projects`).then(r => r.json()) : null,
           ]);
           if (cancelled) return;
-          // Guard: prevent poll-triggered state updates from firing save effects
           isApplyingPollData.current = true;
           applyStateFromServer(activeVertical, stateRes);
           if (projRes) {
             setVerticalData(prev => ({ ...prev, [activeVertical]: projRes.projects || [] }));
           }
-          lastKnownUpdatedAt.current[activeVertical] = data.updatedAt;
+          lastKnownUpdatedAt.current[activeVertical] = serverMaxTs;
           lastKnownProjectCount.current[activeVertical] = data.projectCount;
-          // Release guard after React has processed the state updates
           setTimeout(() => { isApplyingPollData.current = false; }, 100);
-        } else if (lastStateUpdate === undefined) {
-          // First poll — just record current values
-          lastKnownUpdatedAt.current[activeVertical] = data.updatedAt;
+        } else if (lastKnownTs === 0) {
+          lastKnownUpdatedAt.current[activeVertical] = serverMaxTs;
           lastKnownProjectCount.current[activeVertical] = data.projectCount;
         }
       } catch (e) {
