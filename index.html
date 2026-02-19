@@ -1052,30 +1052,32 @@ function App({ onLogout, user: authUser }) {
       }
     }
     loadedAtRef.current[key] = stateRes._loadedAt || Date.now();
-    // Snapshot server state for each field (used by saveState to diff)
+
+    // Build final state WITH defaults and migrations applied
+    const newState = {
+      capacity: stateRes.capacity || {...DEFAULT_CAPACITY},
+      tracks: migrateTracks(stateRes.tracks || { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }),
+      trackCapacity: migrateTrackCapacity(stateRes.trackCapacity),
+      splits: stateRes.splits || {},
+      timelineConfig: stateRes.timelineConfig || {...DEFAULT_TIMELINE_CONFIG},
+      milestones: stateRes.milestones || [],
+      timelineOverrides: stateRes.timelineOverrides || {},
+      trackSubLaneCounts: stateRes.trackSubLaneCounts || {},
+      timelineLaneAssignments: stateRes.timelineLaneAssignments || {},
+      trackBlockOrder: stateRes.trackBlockOrder || {},
+      buffer: stateRes.buffer || { backend: 0, frontend: 0, natives: 0, qa: 0 },
+    };
+
+    // Snapshot the FINAL migrated state (not raw server response) so diffs
+    // only detect fields the user actually changed — not migration artifacts
     const snapshot = {};
     for (const f of STATE_FIELD_NAMES) {
-      if (stateRes[f] !== undefined) snapshot[f] = JSON.stringify(stateRes[f]);
+      if (newState[f] !== undefined) snapshot[f] = JSON.stringify(newState[f]);
     }
     if (stateRes.sizeMap !== undefined) snapshot.sizeMap = JSON.stringify(stateRes.sizeMap);
     serverSnapshotRef.current[key] = snapshot;
 
-    setVerticalStates(prev => ({
-      ...prev,
-      [key]: {
-        capacity: stateRes.capacity || {...DEFAULT_CAPACITY},
-        tracks: migrateTracks(stateRes.tracks || { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }),
-        trackCapacity: migrateTrackCapacity(stateRes.trackCapacity),
-        splits: stateRes.splits || {},
-        timelineConfig: stateRes.timelineConfig || {...DEFAULT_TIMELINE_CONFIG},
-        milestones: stateRes.milestones || [],
-        timelineOverrides: stateRes.timelineOverrides || {},
-        trackSubLaneCounts: stateRes.trackSubLaneCounts || {},
-        timelineLaneAssignments: stateRes.timelineLaneAssignments || {},
-        trackBlockOrder: stateRes.trackBlockOrder || {},
-        buffer: stateRes.buffer || { backend: 0, frontend: 0, natives: 0, qa: 0 },
-      }
-    }));
+    setVerticalStates(prev => ({ ...prev, [key]: newState }));
   }, []);
 
   const loadVertical = useCallback(async (key) => {
@@ -1173,13 +1175,27 @@ function App({ onLogout, user: authUser }) {
           loadedAtRef.current[key] = result.mergedState._loadedAt || Date.now();
           // Update lastAppliedUpdatedAt so poll doesn't re-fetch what we just saved
           if (result.mergedState.updatedAt) lastAppliedUpdatedAt.current = result.mergedState.updatedAt;
-          // Always update serverSnapshotRef so subsequent saves diff against
-          // what the server actually has (not a stale poll snapshot)
+          // Always update serverSnapshotRef with MIGRATED values so subsequent
+          // saves diff correctly (matching what local state actually stores)
+          const ms = result.mergedState;
           const snapshot = {};
+          const migratedForSnapshot = {
+            capacity: ms.capacity || {...DEFAULT_CAPACITY},
+            tracks: migrateTracks(ms.tracks || { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }),
+            trackCapacity: migrateTrackCapacity(ms.trackCapacity),
+            splits: ms.splits || {},
+            timelineConfig: ms.timelineConfig || {...DEFAULT_TIMELINE_CONFIG},
+            milestones: ms.milestones || [],
+            timelineOverrides: ms.timelineOverrides || {},
+            trackSubLaneCounts: ms.trackSubLaneCounts || {},
+            timelineLaneAssignments: ms.timelineLaneAssignments || {},
+            trackBlockOrder: ms.trackBlockOrder || {},
+            buffer: ms.buffer || { backend: 0, frontend: 0, natives: 0, qa: 0 },
+          };
           for (const f of STATE_FIELD_NAMES) {
-            if (result.mergedState[f] !== undefined) snapshot[f] = JSON.stringify(result.mergedState[f]);
+            if (migratedForSnapshot[f] !== undefined) snapshot[f] = JSON.stringify(migratedForSnapshot[f]);
           }
-          if (result.mergedState.sizeMap !== undefined) snapshot.sizeMap = JSON.stringify(result.mergedState.sizeMap);
+          if (ms.sizeMap !== undefined) snapshot.sizeMap = JSON.stringify(ms.sizeMap);
           serverSnapshotRef.current[key] = snapshot;
           if (result.conflicts && result.conflicts.length > 0) {
             console.log('[merge] Server resolved conflicts on:', result.conflicts.join(', '));
