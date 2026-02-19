@@ -1170,6 +1170,14 @@ function App({ onLogout, user: authUser }) {
           loadedAtRef.current[key] = result.mergedState._loadedAt || Date.now();
           // Update lastAppliedUpdatedAt so poll doesn't re-fetch what we just saved
           if (result.mergedState.updatedAt) lastAppliedUpdatedAt.current = result.mergedState.updatedAt;
+          // Always update serverSnapshotRef so subsequent saves diff against
+          // what the server actually has (not a stale poll snapshot)
+          const snapshot = {};
+          for (const f of STATE_FIELD_NAMES) {
+            if (result.mergedState[f] !== undefined) snapshot[f] = JSON.stringify(result.mergedState[f]);
+          }
+          if (result.mergedState.sizeMap !== undefined) snapshot.sizeMap = JSON.stringify(result.mergedState.sizeMap);
+          serverSnapshotRef.current[key] = snapshot;
           if (result.conflicts && result.conflicts.length > 0) {
             console.log('[merge] Server resolved conflicts on:', result.conflicts.join(', '));
             applyStateFromServer(key, result.mergedState);

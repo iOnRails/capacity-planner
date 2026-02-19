@@ -258,9 +258,30 @@ function saveStateHandler(req, res) {
         fieldTs[field] = now;
         accepted.push(field);
       }
+    } else if (
+      // Conflict on an object field — do sub-key merge instead of rejecting.
+      // The client already deep-merges on its side, but may have a stale _loadedAt.
+      // For object fields (tracks, trackBlockOrder, timelineOverrides, etc.),
+      // merge at the sub-key level: accept client's changed sub-keys, keep server's for the rest.
+      clientValue && typeof clientValue === 'object' && !Array.isArray(clientValue) &&
+      existing[field] && typeof existing[field] === 'object' && !Array.isArray(existing[field])
+    ) {
+      const merged = { ...existing[field] };
+      const changedSubKeys = [];
+      for (const subKey of Object.keys(clientValue)) {
+        if (JSON.stringify(clientValue[subKey]) !== JSON.stringify(existing[field][subKey])) {
+          merged[subKey] = clientValue[subKey];
+          changedSubKeys.push(subKey);
+        }
+      }
+      if (changedSubKeys.length > 0) {
+        state[field] = merged;
+        fieldTs[field] = now;
+        accepted.push(field + '(merged:' + changedSubKeys.join(',') + ')');
+      }
+      // Don't add to rejected — we handled the conflict via sub-key merge
     } else {
-      // Conflict — another user updated this field after we loaded
-      // Keep server's version (already in state via spread)
+      // Conflict on a non-object field — keep server's version
       rejected.push(field);
     }
   }
