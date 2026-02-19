@@ -1926,7 +1926,7 @@ function App({ onLogout, user: authUser }) {
       overrides[key] = { ...(overrides[key] || {}), ...updates };
       const newState = { ...prev, [activeVertical]: { ...prev[activeVertical], timelineOverrides: overrides } };
       // Save immediately (not debounced) — only fires on mouseup so no rapid-fire risk
-      if (saveTimer.current) clearTimeout(saveTimer.current);
+      if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; pendingSave.current = null; }
       saveState(activeVertical, newState[activeVertical]);
       return newState;
     });
@@ -1937,7 +1937,7 @@ function App({ onLogout, user: authUser }) {
       const overrides = { ...(prev[activeVertical].timelineOverrides || {}) };
       delete overrides[`${trackKey}:${projectId}`];
       const newState = { ...prev, [activeVertical]: { ...prev[activeVertical], timelineOverrides: overrides } };
-      if (saveTimer.current) clearTimeout(saveTimer.current);
+      if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; pendingSave.current = null; }
       saveState(activeVertical, newState[activeVertical]);
       return newState;
     });
@@ -1949,7 +1949,7 @@ function App({ onLogout, user: authUser }) {
       const counts = { ...(prev[activeVertical].trackSubLaneCounts || {}) };
       counts[trackKey] = (counts[trackKey] || 1) + 1;
       const newState = { ...prev, [activeVertical]: { ...prev[activeVertical], trackSubLaneCounts: counts } };
-      if (saveTimer.current) clearTimeout(saveTimer.current);
+      if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; pendingSave.current = null; }
       saveState(activeVertical, newState[activeVertical]);
       return newState;
     });
@@ -1968,7 +1968,7 @@ function App({ onLogout, user: authUser }) {
         }
       }
       const newState = { ...prev, [activeVertical]: { ...prev[activeVertical], trackSubLaneCounts: counts, timelineLaneAssignments: assignments } };
-      if (saveTimer.current) clearTimeout(saveTimer.current);
+      if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; pendingSave.current = null; }
       saveState(activeVertical, newState[activeVertical]);
       return newState;
     });
@@ -1981,7 +1981,7 @@ function App({ onLogout, user: authUser }) {
       if (laneIndex === 0) delete assignments[key];
       else assignments[key] = laneIndex;
       const newState = { ...prev, [activeVertical]: { ...prev[activeVertical], timelineLaneAssignments: assignments } };
-      if (saveTimer.current) clearTimeout(saveTimer.current);
+      if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; pendingSave.current = null; }
       saveState(activeVertical, newState[activeVertical]);
       return newState;
     });
