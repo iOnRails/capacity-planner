@@ -1094,6 +1094,7 @@ function App({ onLogout, user: authUser }) {
       console.error('Failed to load vertical:', key, e);
     }
   }, [applyStateFromServer]);
+  loadVerticalRef.current = loadVertical;
 
   useEffect(() => {
     (async () => {
@@ -1106,6 +1107,8 @@ function App({ onLogout, user: authUser }) {
   // Auto-save state to API (debounced)
   const saveTimer = useRef(null);
   const savingRef = useRef(false); // ref mirror of saving state for poll guard
+  const deferredSyncRef = useRef(null); // tracks deferred sync requests while save is in-flight
+  const loadVerticalRef = useRef(null); // stable ref to avoid circular deps
   // For object fields (tracks, trackBlockOrder, etc.), deep-merge local changes
   // with the LATEST server state so we only overwrite sub-keys the user changed
   const deepMergeField = useCallback((key, fieldName, localValue, capturedSnapshotJson) => {
@@ -1208,6 +1211,13 @@ function App({ onLogout, user: authUser }) {
     } finally {
       setSaving(false);
       savingRef.current = false;
+      // If a sync was deferred while we were saving, run it now
+      if (deferredSyncRef.current) {
+        const reason = deferredSyncRef.current;
+        deferredSyncRef.current = null;
+        console.log('[sync] running deferred sync:', reason);
+        if (loadVerticalRef.current) loadVerticalRef.current(key).catch(e => console.log('[sync] deferred sync error:', e.message));
+      }
     }
   }, [applyStateFromServer, deepMergeField]);
 
@@ -1254,6 +1264,7 @@ function App({ onLogout, user: authUser }) {
       if (dragItem.current) return;
       if (savingRef.current) {
         console.log('[sync] ' + reason + ' but save in-flight, deferring');
+        deferredSyncRef.current = reason;
         return;
       }
       try {
