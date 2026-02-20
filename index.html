@@ -1691,9 +1691,38 @@ function App({ onLogout, user: authUser }) {
     e.preventDefault(); e.currentTarget.classList.remove('drag-over');
     document.querySelectorAll('.drop-indicator').forEach(el => el.remove());
     if (!dragItem.current) return;
+    const draggedId = dragItem.current;
+    const isGhostDrag = String(draggedId).startsWith('ghost:');
     // Ghost blocks can't be moved to another track via track drop
-    if (String(dragItem.current).startsWith('ghost:')) return;
-    moveToTrack(dragItem.current, trackKey);
+    if (isGhostDrag) return;
+
+    // Determine drop position: before first block or after last block
+    const blocks = e.currentTarget.querySelectorAll('.project-block');
+    let insertIdx;
+    if (blocks.length === 0) {
+      insertIdx = 0;
+    } else {
+      const firstRect = blocks[0].getBoundingClientRect();
+      if (e.clientX < firstRect.left + firstRect.width / 2) {
+        insertIdx = 0; // dropped before the first block
+      } else {
+        insertIdx = undefined; // append to end
+      }
+    }
+
+    // Move in tracks array
+    moveToTrack(draggedId, trackKey, insertIdx);
+
+    // Also update trackBlockOrder so visual order persists
+    const combined = getCombinedOrder(trackKey);
+    const dragKey = String(draggedId);
+    const filtered = combined.filter(k => k !== dragKey);
+    if (insertIdx === 0) {
+      filtered.unshift(dragKey); // beginning
+    } else {
+      filtered.push(dragKey); // end
+    }
+    saveBlockOrder(trackKey, filtered);
   };
 
   // Build combined block order for a track (regular + ghosts)
