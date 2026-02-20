@@ -1693,8 +1693,6 @@ function App({ onLogout, user: authUser }) {
     if (!dragItem.current) return;
     const draggedId = dragItem.current;
     const isGhostDrag = String(draggedId).startsWith('ghost:');
-    // Ghost blocks can't be moved to another track via track drop
-    if (isGhostDrag) return;
 
     // Determine drop position: before first block or after last block
     const blocks = e.currentTarget.querySelectorAll('.project-block');
@@ -1710,10 +1708,12 @@ function App({ onLogout, user: authUser }) {
       }
     }
 
-    // Move in tracks array
-    moveToTrack(draggedId, trackKey, insertIdx);
+    // Move in tracks array (only for real projects, not ghosts)
+    if (!isGhostDrag) {
+      moveToTrack(draggedId, trackKey, insertIdx);
+    }
 
-    // Also update trackBlockOrder so visual order persists
+    // Update trackBlockOrder so visual order persists (works for both real and ghost blocks)
     const combined = getCombinedOrder(trackKey);
     const dragKey = String(draggedId);
     const filtered = combined.filter(k => k !== dragKey);
