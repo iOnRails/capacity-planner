@@ -1263,6 +1263,13 @@ function App({ onLogout, user: authUser }) {
     // ── Fetch helper (used by both WS and poll) ──
     const fetchAndApply = async (reason) => {
       if (dragItem.current) return;
+      // Cancel any pending debounced save — the server has newer data
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+        pendingSave.current = null;
+        console.log('[sync] cancelled pending debounced save (server has newer data)');
+      }
       if (savingRef.current) {
         console.log('[sync] ' + reason + ' but save in-flight, deferring');
         deferredSyncRef.current = reason;
