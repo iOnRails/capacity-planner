@@ -1302,12 +1302,39 @@ function App({ onLogout, user: authUser }) {
         ws.onmessage = (evt) => {
           try {
             const msg = JSON.parse(evt.data);
+            // Keepalive — respond to server pings to keep connection alive
+            if (msg.type === 'ping') {
+              if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'pong' }));
+              return;
+            }
             if (msg.type === 'update' && msg.vertical === activeVertical) {
               // Skip updates we triggered ourselves
               if (msg.senderId === wsIdRef.current) return;
-              fetchAndApply('ws update from another user');
+              console.log('[ws] Received full state update from another user');
+              // Cancel any pending debounced save — server has newer data
+              if (saveTimer.current) {
+                clearTimeout(saveTimer.current);
+                saveTimer.current = null;
+                pendingSave.current = null;
+                console.log('[ws] cancelled pending debounced save');
+              }
+              if (savingRef.current) {
+                console.log('[ws] save in-flight, deferring sync');
+                deferredSyncRef.current = 'ws update (deferred)';
+                return;
+              }
+              // Apply state DIRECTLY from the WS message — no HTTP fetch needed!
+              if (msg.state) {
+                applyStateFromServer(activeVertical, msg.state);
+                if (msg.state.updatedAt) lastAppliedUpdatedAt.current = msg.state.updatedAt;
+              }
+              if (msg.projects) {
+                setVerticalData(prev => ({ ...prev, [activeVertical]: msg.projects }));
+              }
             }
-          } catch (e) {}
+          } catch (e) {
+            console.log('[ws] message parse error:', e.message);
+          }
         };
 
         ws.onclose = () => {

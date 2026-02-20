@@ -429,11 +429,29 @@ wss.on('connection', (ws) => {
   ws.send(JSON.stringify({ type: 'connected' }));
 });
 
-// Broadcast to all clients watching a given vertical (except the sender, identified by senderId)
+// Broadcast FULL state + projects to all clients watching a vertical.
+// Sending data inline eliminates the need for clients to HTTP-fetch after
+// receiving a WS notification — this fixes background-tab sync where
+// Chrome may throttle/delay follow-up HTTP requests.
 function broadcastUpdate(vertical, updatedAt, senderId) {
   const clients = verticalClients.get(vertical);
   if (!clients || clients.size === 0) return;
-  const msg = JSON.stringify({ type: 'update', vertical, updatedAt, senderId });
+
+  // Load the actual data to include in the broadcast
+  const state = loadJSON(getStateFile(vertical), {});
+  state._loadedAt = Date.now();
+  delete state._fieldTs; // internal — don't leak to clients
+
+  const projects = loadJSON(getProjectsFile(vertical), []);
+
+  const msg = JSON.stringify({
+    type: 'update',
+    vertical,
+    updatedAt,
+    senderId,
+    state,
+    projects,
+  });
   let sent = 0;
   for (const ws of clients) {
     if (ws.readyState === 1) { // WebSocket.OPEN
@@ -441,8 +459,18 @@ function broadcastUpdate(vertical, updatedAt, senderId) {
       sent++;
     }
   }
-  if (sent > 0) console.log(`[ws] Broadcast update for ${vertical} to ${sent} clients`);
+  if (sent > 0) console.log(`[ws] Broadcast full state for ${vertical} to ${sent} clients (${(msg.length/1024).toFixed(1)}KB)`);
 }
+
+// ── Keepalive ping — prevents Railway/proxy from closing idle WS connections ──
+setInterval(() => {
+  const now = Date.now();
+  wss.clients.forEach(ws => {
+    if (ws.readyState === 1) {
+      ws.send(JSON.stringify({ type: 'ping', t: now }));
+    }
+  });
+}, 25000);
 
 // ── Start ──
 server.listen(PORT, '0.0.0.0', () => {
