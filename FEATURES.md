@@ -212,6 +212,52 @@ The Growth vertical is automatically seeded with 63 sample projects if no data e
 
 **File:** `api/server.js` (seed section, lines 347-423)
 
+### 15. Undo / Redo
+
+Client-side undo/redo system that captures vertical state snapshots before each user-initiated mutation.
+
+- **Undo stack:** Max 50 entries, stored in a `useRef` (no persistence across reloads)
+- **Redo stack:** Cleared whenever a new action is taken
+- **Keyboard shortcuts:** Ctrl+Z (undo), Ctrl+Shift+Z / Ctrl+Y (redo)
+- **UI:** Two buttons (↶ ↷) in the header, disabled when stack is empty
+- **Scope:** All state mutations (capacity, tracks, splits, milestones, timeline, buffer, block order) — project edits are NOT included
+- **Server sync:** Undo/redo saves immediately to the server (not debounced) and skips pushing to the undo stack itself
+
+**File:** `index.html` (undoStackRef, redoStackRef, setVerticalStatesWithUndo, handleUndo, handleRedo)
+
+### 16. Dashboard / Summary View
+
+A dedicated "Dashboard" tab showing capacity analytics and project distribution metrics computed from existing data.
+
+**Dashboard sections:**
+1. **Summary Cards** — Total projects, roadmap count, in-progress count, backlog count
+2. **Capacity Utilization** — Per-discipline (Backend, Frontend, Natives, QA) bar charts showing used vs. available capacity with buffer applied
+3. **Demand vs Supply** — Total demand (all projects) compared to available capacity, highlighting over/under-capacity per discipline
+4. **Per-Track Breakdown** — Table showing each track's used/allocated capacity per discipline with utilization percentage
+5. **Projects by Pillar** — Distribution of projects across strategic pillars (Expansion, Acquisition, Comms, etc.)
+6. **Projects by Impact** — Bar chart showing project count distribution across impact sizes (XS to XXXL)
+7. **Size Map Reference** — Current T-shirt size to story point mapping
+
+All data is computed from existing `useMemo` hooks — no additional API calls needed.
+
+**File:** `index.html` (DashboardView component)
+
+### 17. Scenario Snapshots
+
+Named snapshots that save the full state + projects for a vertical, allowing teams to compare and restore different planning scenarios.
+
+- **Save snapshot:** Captures current state and projects with a name and optional description
+- **List snapshots:** Shows saved snapshots with metadata (name, date, creator, project count) — lightweight (no full state/projects in list response)
+- **Restore snapshot:** Overwrites current state and projects, broadcasts WebSocket update to all connected clients
+- **Delete snapshot:** Removes a snapshot permanently
+- **Audit logging:** All snapshot operations (save, restore, delete) are logged
+
+**Storage:** `snapshots_{vertical}.json` — Array of `{ id, name, description, createdAt, createdBy, state, projects }`
+
+**UI:** "📸 Snapshots" button in header → modal dialog with save form and snapshot list
+
+**Files:** `api/server.js` (snapshot endpoints), `index.html` (snapshot modal and handlers)
+
 ---
 
 ## API Endpoints
@@ -226,6 +272,10 @@ The Growth vertical is automatically seeded with 63 sample projects if no data e
 | GET | `/api/verticals/:key/state` | Get full planner state |
 | POST/PUT | `/api/verticals/:key/state` | Save state (with conflict-free merge) |
 | GET | `/api/verticals/:key/poll` | Lightweight polling (updatedAt only) |
+| GET | `/api/verticals/:key/snapshots` | List snapshots for a vertical |
+| POST | `/api/verticals/:key/snapshots` | Save new snapshot (name, description) |
+| POST | `/api/verticals/:key/snapshots/:id/restore` | Restore a snapshot |
+| DELETE | `/api/verticals/:key/snapshots/:id` | Delete a snapshot |
 | GET | `/api/audit-log` | Query audit log (?user, ?vertical, ?days) |
 | WS | `/ws` | WebSocket for real-time sync |
 
@@ -266,6 +316,7 @@ npm run test:coverage   # Run with coverage report
 - **helpers.test.js** (59 tests) — Unit tests for buildNarratives (all 12 field types), findMovedItem, describeStateChanges, summarizeValue, loadJSON/saveJSON, logAudit
 - **api.test.js** (34 tests) — Integration tests for all endpoints, project validation, track cleanup, state merge with conflict resolution, audit log filtering
 - **websocket.test.js** (11 tests) — WebSocket connection, subscribe/unsubscribe, broadcast on state and project saves, sender exclusion, multi-client sync, disconnection cleanup, invalid message handling
+- **snapshots.test.js** (12 tests) — Snapshot CRUD (save, list, restore, delete), validation, state/project overwrite on restore, audit log integration
 
 ---
 

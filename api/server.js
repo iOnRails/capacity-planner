@@ -652,6 +652,100 @@ function saveProjectsHandler(req, res) {
   }
 }
 
+// ── Snapshot endpoints ──
+function getSnapshotsFile(key) { return `snapshots_${key}.json`; }
+
+// List snapshots for a vertical
+app.get('/api/verticals/:key/snapshots', (req, res) => {
+  const snapshots = loadJSON(getSnapshotsFile(req.params.key), []);
+  // Return metadata only (no full state/projects to keep response light)
+  const meta = snapshots.map(s => ({
+    id: s.id, name: s.name, description: s.description || '',
+    createdAt: s.createdAt, createdBy: s.createdBy,
+    projectCount: (s.projects || []).length,
+  }));
+  res.json({ snapshots: meta });
+});
+
+// Save a new snapshot
+app.post('/api/verticals/:key/snapshots', (req, res) => {
+  try {
+    const { name, description } = req.body;
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ error: 'Snapshot name is required' });
+    }
+    const key = req.params.key;
+    const state = loadJSON(getStateFile(key), {});
+    const projects = loadJSON(getProjectsFile(key), []);
+    const snapshots = loadJSON(getSnapshotsFile(key), []);
+
+    const snapshot = {
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      name: name.trim(),
+      description: (description || '').trim(),
+      createdAt: new Date().toISOString(),
+      createdBy: req.headers['x-user-email'] || 'unknown',
+      state: JSON.parse(JSON.stringify(state)),
+      projects: JSON.parse(JSON.stringify(projects)),
+    };
+
+    snapshots.unshift(snapshot); // newest first
+    saveJSON(getSnapshotsFile(key), snapshots);
+    logAudit(req, 'Saved snapshot', `Snapshot "${snapshot.name}" saved (${projects.length} projects)`);
+
+    res.json({ success: true, snapshot: { id: snapshot.id, name: snapshot.name, createdAt: snapshot.createdAt } });
+  } catch (err) {
+    console.error('Save snapshot error:', err);
+    res.status(500).json({ error: 'Failed to save snapshot' });
+  }
+});
+
+// Restore a snapshot
+app.post('/api/verticals/:key/snapshots/:id/restore', (req, res) => {
+  try {
+    const key = req.params.key;
+    const snapshots = loadJSON(getSnapshotsFile(key), []);
+    const snapshot = snapshots.find(s => s.id === req.params.id);
+    if (!snapshot) {
+      return res.status(404).json({ error: 'Snapshot not found' });
+    }
+
+    // Overwrite current state and projects
+    saveJSON(getStateFile(key), JSON.parse(JSON.stringify(snapshot.state)));
+    saveJSON(getProjectsFile(key), JSON.parse(JSON.stringify(snapshot.projects)));
+
+    logAudit(req, 'Restored snapshot', `Restored snapshot "${snapshot.name}" (${(snapshot.projects || []).length} projects)`);
+
+    // Broadcast update to WebSocket clients
+    const senderId = req.headers['x-ws-id'] || '';
+    broadcastUpdate(key, new Date().toISOString(), senderId);
+
+    res.json({ success: true, state: snapshot.state, projects: snapshot.projects });
+  } catch (err) {
+    console.error('Restore snapshot error:', err);
+    res.status(500).json({ error: 'Failed to restore snapshot' });
+  }
+});
+
+// Delete a snapshot
+app.delete('/api/verticals/:key/snapshots/:id', (req, res) => {
+  try {
+    const key = req.params.key;
+    const snapshots = loadJSON(getSnapshotsFile(key), []);
+    const idx = snapshots.findIndex(s => s.id === req.params.id);
+    if (idx === -1) {
+      return res.status(404).json({ error: 'Snapshot not found' });
+    }
+    const removed = snapshots.splice(idx, 1)[0];
+    saveJSON(getSnapshotsFile(key), snapshots);
+    logAudit(req, 'Deleted snapshot', `Deleted snapshot "${removed.name}"`);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete snapshot error:', err);
+    res.status(500).json({ error: 'Failed to delete snapshot' });
+  }
+});
+
 // ── Audit log endpoint ──
 app.get('/api/audit-log', (req, res) => {
   let log = loadJSON(AUDIT_FILE, []);
@@ -797,4 +891,5 @@ module.exports = {
   AUDIT_MAX_DAYS,
   verticalClients,
   keepaliveInterval,
+  getSnapshotsFile,
 };
