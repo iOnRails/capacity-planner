@@ -35,7 +35,10 @@ const AUDIT_MAX_DAYS = 30;
 // ── Audit Logging ──
 function logAudit(req, action, details) {
   try {
-    if (details === 'No changes detected') return;
+    // details can be a string or { summary, diffs } object
+    const isRich = typeof details === 'object' && details !== null && details.summary;
+    const summary = isRich ? details.summary : details;
+    if (summary === 'No changes detected') return;
     const userEmail = req.headers['x-user-email'] || (req.body && req.body._userEmail) || 'unknown';
     const userName = req.headers['x-user-name'] ? decodeURIComponent(req.headers['x-user-name']) : (req.body && req.body._userName) || 'unknown';
     const vertical = req.params.key || '';
@@ -46,7 +49,8 @@ function logAudit(req, action, details) {
       userName,
       action,
       vertical,
-      details,
+      details: summary,
+      diffs: isRich ? details.diffs : undefined,
       method: req.method,
       endpoint: req.originalUrl || req.url,
     };
@@ -69,8 +73,92 @@ function describeStateChanges(body, existing) {
     if (!existing || existing[f] === undefined) return true;
     return JSON.stringify(body[f]) !== JSON.stringify(existing[f]);
   });
-  if (changed.length === 0) return 'No changes detected';
-  return changed.map(f => friendly[f] || f).join(', ');
+  if (changed.length === 0) return { summary: 'No changes detected', diffs: [] };
+
+  // Build detailed diffs for each changed field
+  const diffs = [];
+  for (const f of changed) {
+    const before = existing ? existing[f] : undefined;
+    const after = body[f];
+    const diff = { field: friendly[f] || f };
+    try {
+      diff.changes = buildFieldDiff(f, before, after);
+    } catch (e) {
+      diff.changes = [{ label: 'value', before: summarizeValue(before), after: summarizeValue(after) }];
+    }
+    diffs.push(diff);
+  }
+  return { summary: changed.map(f => friendly[f] || f).join(', '), diffs };
+}
+
+// Build human-readable sub-diffs for a field
+function buildFieldDiff(field, before, after) {
+  const changes = [];
+  if (field === 'capacity' || field === 'buffer' || field === 'trackCapacity') {
+    // Object with numeric values — show changed keys
+    const allKeys = new Set([...Object.keys(before || {}), ...Object.keys(after || {})]);
+    for (const k of allKeys) {
+      const bVal = before && before[k] !== undefined ? before[k] : undefined;
+      const aVal = after && after[k] !== undefined ? after[k] : undefined;
+      if (JSON.stringify(bVal) !== JSON.stringify(aVal)) {
+        if (typeof bVal === 'object' && typeof aVal === 'object') {
+          // Nested object (e.g., trackCapacity.gateway)
+          const subKeys = new Set([...Object.keys(bVal || {}), ...Object.keys(aVal || {})]);
+          for (const sk of subKeys) {
+            if ((bVal || {})[sk] !== (aVal || {})[sk]) {
+              changes.push({ label: `${k} → ${sk}`, before: (bVal || {})[sk], after: (aVal || {})[sk] });
+            }
+          }
+        } else {
+          changes.push({ label: k, before: bVal, after: aVal });
+        }
+      }
+    }
+  } else if (field === 'tracks') {
+    // Object of arrays — show added/removed items per track
+    const trackNames = { 'core-bonus': 'Core Bonus', 'gateway': 'Gateway', 'seo-aff': 'SEO & Aff' };
+    const allTracks = new Set([...Object.keys(before || {}), ...Object.keys(after || {})]);
+    for (const tk of allTracks) {
+      const bArr = (before || {})[tk] || [];
+      const aArr = (after || {})[tk] || [];
+      const added = aArr.filter(id => !bArr.includes(id));
+      const removed = bArr.filter(id => !aArr.includes(id));
+      if (added.length > 0 || removed.length > 0) {
+        const parts = [];
+        if (added.length) parts.push(`+${added.join(',')}`);
+        if (removed.length) parts.push(`-${removed.join(',')}`);
+        changes.push({ label: trackNames[tk] || tk, before: `[${bArr.join(', ')}]`, after: `[${aArr.join(', ')}]`, hint: parts.join(' ') });
+      }
+    }
+  } else if (field === 'splits') {
+    // Object of objects — show added/removed/changed splits
+    const allIds = new Set([...Object.keys(before || {}), ...Object.keys(after || {})]);
+    for (const pid of allIds) {
+      const bSplit = (before || {})[pid];
+      const aSplit = (after || {})[pid];
+      if (!bSplit && aSplit) changes.push({ label: `project ${pid}`, before: '—', after: summarizeValue(aSplit) });
+      else if (bSplit && !aSplit) changes.push({ label: `project ${pid}`, before: summarizeValue(bSplit), after: '— (removed)' });
+      else if (JSON.stringify(bSplit) !== JSON.stringify(aSplit)) changes.push({ label: `project ${pid}`, before: summarizeValue(bSplit), after: summarizeValue(aSplit) });
+    }
+  } else if (field === 'milestones') {
+    // Array — show added/removed/changed
+    const bArr = before || [];
+    const aArr = after || [];
+    if (aArr.length > bArr.length) changes.push({ label: 'count', before: bArr.length, after: aArr.length, hint: 'added' });
+    else if (aArr.length < bArr.length) changes.push({ label: 'count', before: bArr.length, after: aArr.length, hint: 'removed' });
+    else changes.push({ label: 'modified', before: `${bArr.length} milestones`, after: `${aArr.length} milestones` });
+  } else {
+    // Generic fallback — just show before/after summary
+    changes.push({ label: 'value', before: summarizeValue(before), after: summarizeValue(after) });
+  }
+  return changes.length > 0 ? changes : [{ label: 'value', before: summarizeValue(before), after: summarizeValue(after) }];
+}
+
+function summarizeValue(val) {
+  if (val === undefined || val === null) return '—';
+  if (typeof val !== 'object') return String(val);
+  const json = JSON.stringify(val);
+  return json.length > 80 ? json.substring(0, 77) + '...' : json;
 }
 
 const DEFAULT_CAPACITY = { backend: 40, frontend: 30, natives: 25, qa: 20 };

@@ -51,7 +51,19 @@
   .user-email { color: var(--text2); font-size: 11px; }
   .vertical-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; background: var(--bg3); color: var(--text2); text-transform: capitalize; }
   .action-cell { font-weight: 500; }
-  .details-cell { color: var(--text2); font-size: 12px; max-width: 400px; word-break: break-word; }
+  .details-cell { color: var(--text2); font-size: 12px; max-width: 500px; word-break: break-word; }
+  .details-summary { cursor: pointer; display: flex; align-items: center; gap: 6px; }
+  .details-summary:hover { color: var(--text1); }
+  .details-toggle { font-size: 10px; color: var(--accent); transition: transform 0.15s; display: inline-block; }
+  .details-toggle.open { transform: rotate(90deg); }
+  .diff-table { margin-top: 8px; font-size: 11px; border-collapse: collapse; width: 100%; }
+  .diff-table th { text-align: left; padding: 4px 8px; color: var(--text2); font-weight: 500; font-size: 10px; text-transform: uppercase; border-bottom: 1px solid var(--border); }
+  .diff-table td { padding: 4px 8px; border-bottom: 1px solid rgba(51,54,74,0.5); vertical-align: top; }
+  .diff-field { color: var(--accent); font-weight: 500; white-space: nowrap; }
+  .diff-before { color: var(--red); opacity: 0.85; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+  .diff-after { color: var(--green); max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+  .diff-hint { color: var(--orange); font-size: 10px; font-style: italic; }
+  .diff-section-label { color: var(--text2); font-weight: 600; font-size: 11px; padding-top: 6px; }
 
   /* Loading & empty */
   .loading, .empty { text-align: center; padding: 60px 0; color: var(--text2); font-size: 14px; }
@@ -141,6 +153,38 @@ function AuthGate({ children }) {
   });
 }
 
+function DiffDetails({ diffs }) {
+  if (!diffs || diffs.length === 0) return null;
+  return (
+    <table className="diff-table">
+      <thead><tr><th>Field</th><th>Before</th><th>After</th></tr></thead>
+      <tbody>
+        {diffs.map((diff, di) => (
+          <React.Fragment key={di}>
+            {diff.changes && diff.changes.length > 0 ? (
+              <>
+                <tr><td colSpan={3} className="diff-section-label">{diff.field}</td></tr>
+                {diff.changes.map((c, ci) => (
+                  <tr key={ci}>
+                    <td className="diff-field">{c.label}</td>
+                    <td className="diff-before" title={typeof c.before === 'string' ? c.before : JSON.stringify(c.before)}>{c.before === undefined ? '—' : String(c.before)}</td>
+                    <td className="diff-after" title={typeof c.after === 'string' ? c.after : JSON.stringify(c.after)}>
+                      {c.after === undefined ? '—' : String(c.after)}
+                      {c.hint && <span className="diff-hint"> ({c.hint})</span>}
+                    </td>
+                  </tr>
+                ))}
+              </>
+            ) : (
+              <tr><td className="diff-field">{diff.field}</td><td className="diff-before">—</td><td className="diff-after">changed</td></tr>
+            )}
+          </React.Fragment>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
 function AuditLog({ user, onLogout }) {
   const [entries, setEntries] = useState([]);
   const [total, setTotal] = useState(0);
@@ -148,6 +192,16 @@ function AuditLog({ user, onLogout }) {
   const [filterUser, setFilterUser] = useState('');
   const [filterVertical, setFilterVertical] = useState('');
   const [filterDays, setFilterDays] = useState('30');
+  const [expandedIds, setExpandedIds] = useState(new Set());
+
+  const toggleExpand = (id) => {
+    setExpandedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const fetchLog = useCallback(async () => {
     setLoading(true);
@@ -242,20 +296,36 @@ function AuditLog({ user, onLogout }) {
               </tr>
             </thead>
             <tbody>
-              {entries.map(entry => (
-                <tr key={entry.id}>
-                  <td className="ts" title={new Date(entry.timestamp).toLocaleString()}>{formatTime(entry.timestamp)}</td>
-                  <td>
-                    <div className="user-cell">
-                      <span>{entry.userName}</span>
-                      {entry.userEmail !== 'unknown' && <span className="user-email">({entry.userEmail.split('@')[0]})</span>}
-                    </div>
-                  </td>
-                  <td className="action-cell">{entry.action}</td>
-                  <td>{entry.vertical && <span className="vertical-badge">{entry.vertical}</span>}</td>
-                  <td className="details-cell">{entry.details}</td>
-                </tr>
-              ))}
+              {entries.map(entry => {
+                const hasDiffs = entry.diffs && entry.diffs.length > 0;
+                const isExpanded = expandedIds.has(entry.id);
+                return (
+                  <React.Fragment key={entry.id}>
+                    <tr>
+                      <td className="ts" title={new Date(entry.timestamp).toLocaleString()}>{formatTime(entry.timestamp)}</td>
+                      <td>
+                        <div className="user-cell">
+                          <span>{entry.userName}</span>
+                          {entry.userEmail !== 'unknown' && <span className="user-email">({entry.userEmail.split('@')[0]})</span>}
+                        </div>
+                      </td>
+                      <td className="action-cell">{entry.action}</td>
+                      <td>{entry.vertical && <span className="vertical-badge">{entry.vertical}</span>}</td>
+                      <td className="details-cell">
+                        {hasDiffs ? (
+                          <div className="details-summary" onClick={() => toggleExpand(entry.id)}>
+                            <span className={`details-toggle${isExpanded ? ' open' : ''}`}>▶</span>
+                            <span>{entry.details}</span>
+                          </div>
+                        ) : (
+                          <span>{entry.details}</span>
+                        )}
+                        {hasDiffs && isExpanded && <DiffDetails diffs={entry.diffs} />}
+                      </td>
+                    </tr>
+                  </React.Fragment>
+                );
+              })}
             </tbody>
           </table>
         )}
