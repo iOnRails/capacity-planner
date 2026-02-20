@@ -746,7 +746,7 @@ function broadcastUpdate(vertical, updatedAt, senderId) {
 }
 
 // ── Keepalive ping — prevents Railway/proxy from closing idle WS connections ──
-setInterval(() => {
+const keepaliveInterval = setInterval(() => {
   const now = Date.now();
   wss.clients.forEach(ws => {
     if (ws.readyState === 1) {
@@ -755,20 +755,46 @@ setInterval(() => {
   });
 }, 25000);
 
-// ── Start ──
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`Capacity Planner API running on 0.0.0.0:${PORT}`);
-  console.log(`CORS origin: ${CORS_ORIGIN}`);
-  console.log(`Data dir: ${DATA_DIR}`);
-  // Check data dir is writable
-  try {
-    const testFile = path.join(DATA_DIR, '.write-test');
-    fs.writeFileSync(testFile, 'ok');
-    fs.unlinkSync(testFile);
-    console.log(`Data dir is writable ✓`);
-    const files = fs.readdirSync(DATA_DIR).filter(f => f.endsWith('.json'));
-    console.log(`Existing data files: ${files.length > 0 ? files.join(', ') : '(none)'}`);
-  } catch (e) {
-    console.error(`WARNING: Data dir is NOT writable: ${e.message}`);
-  }
-});
+// ── Start (only when run directly, not when imported for tests) ──
+if (require.main === module) {
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`Capacity Planner API running on 0.0.0.0:${PORT}`);
+    console.log(`CORS origin: ${CORS_ORIGIN}`);
+    console.log(`Data dir: ${DATA_DIR}`);
+    try {
+      const testFile = path.join(DATA_DIR, '.write-test');
+      fs.writeFileSync(testFile, 'ok');
+      fs.unlinkSync(testFile);
+      console.log(`Data dir is writable ✓`);
+      const files = fs.readdirSync(DATA_DIR).filter(f => f.endsWith('.json'));
+      console.log(`Existing data files: ${files.length > 0 ? files.join(', ') : '(none)'}`);
+    } catch (e) {
+      console.error(`WARNING: Data dir is NOT writable: ${e.message}`);
+    }
+  });
+}
+
+// ── Exports for testing ──
+module.exports = {
+  app,
+  server,
+  wss,
+  loadJSON,
+  saveJSON,
+  logAudit,
+  describeStateChanges,
+  buildNarratives,
+  findMovedItem,
+  summarizeValue,
+  broadcastUpdate,
+  getProjectsFile,
+  getStateFile,
+  DATA_DIR,
+  STATE_FIELDS,
+  DEFAULT_CAPACITY,
+  DEFAULT_TRACKS,
+  AUDIT_FILE,
+  AUDIT_MAX_DAYS,
+  verticalClients,
+  keepaliveInterval,
+};
