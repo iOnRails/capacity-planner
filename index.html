@@ -1121,17 +1121,32 @@ function App({ onLogout, user: authUser }) {
     if (!latestServerJson) return localValue;
     const latestServer = JSON.parse(latestServerJson);
     const capturedServer = capturedSnapshotJson ? JSON.parse(capturedSnapshotJson) : latestServer;
-    // Start with latest server data, then overlay only sub-keys that the user changed
-    const merged = { ...latestServer };
+    // Start from USER's version (respects deletions), then incorporate
+    // server-side changes the user didn't touch.
+    const merged = { ...localValue };
     const overlaid = [];
-    for (const subKey of Object.keys(localValue)) {
-      if (JSON.stringify(localValue[subKey]) !== JSON.stringify(capturedServer[subKey])) {
-        merged[subKey] = localValue[subKey];
-        overlaid.push(subKey);
+    const deleted = [];
+    for (const subKey of Object.keys(latestServer)) {
+      if (!(subKey in capturedServer)) {
+        // Key is NEW on the server (added after client loaded) — include it
+        merged[subKey] = latestServer[subKey];
+        overlaid.push('+' + subKey);
+      } else if (subKey in localValue) {
+        // Key exists in both — if user didn't change it, use server's latest
+        if (JSON.stringify(localValue[subKey]) === JSON.stringify(capturedServer[subKey])) {
+          merged[subKey] = latestServer[subKey];
+        }
+        // else: user changed it — keep their version (already in merged)
       }
+      // If key is in latestServer + capturedServer but NOT in localValue:
+      // user DELETED it — don't add it back (respects deletion)
     }
-    if (overlaid.length > 0) {
-      console.log('[deepMerge] ' + fieldName + ': user changed sub-keys=[' + overlaid.join(',') + '], preserved others from server');
+    // Log deletions for debugging
+    for (const subKey of Object.keys(capturedServer)) {
+      if (!(subKey in localValue)) deleted.push(subKey);
+    }
+    if (overlaid.length > 0 || deleted.length > 0) {
+      console.log('[deepMerge] ' + fieldName + ': overlaid=[' + overlaid.join(',') + '] deleted=[' + deleted.join(',') + ']');
     }
     return merged;
   }, []);
