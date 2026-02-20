@@ -66,9 +66,8 @@ function logAudit(req, action, details) {
   }
 }
 
-function describeStateChanges(body, existing) {
+function describeStateChanges(body, existing, vertical) {
   const fields = ['capacity', 'tracks', 'trackCapacity', 'splits', 'timelineConfig', 'milestones', 'timelineOverrides', 'sizeMap', 'trackSubLaneCounts', 'timelineLaneAssignments', 'trackBlockOrder', 'buffer'];
-  const friendly = { capacity: 'capacity allocation', tracks: 'swimlane assignments', trackCapacity: 'track capacity', splits: 'project splits', timelineConfig: 'timeline settings', milestones: 'milestones', timelineOverrides: 'timeline bar positions', sizeMap: 'size map', trackSubLaneCounts: 'sub-lane counts', timelineLaneAssignments: 'timeline lane assignments', trackBlockOrder: 'block order', buffer: 'buffer' };
   const changed = fields.filter(f => {
     if (body[f] === undefined) return false;
     if (!existing || existing[f] === undefined) return true;
@@ -76,83 +75,263 @@ function describeStateChanges(body, existing) {
   });
   if (changed.length === 0) return { summary: 'No changes detected', diffs: [] };
 
-  // Build detailed diffs for each changed field
-  const diffs = [];
+  // Load project names for human-readable descriptions
+  const projectLookup = {};
+  try {
+    const projects = loadJSON(getProjectsFile(vertical), []);
+    for (const p of projects) {
+      projectLookup[String(p.id)] = p.subTask || p.masterEpic || `Project #${p.id}`;
+    }
+  } catch (e) { /* ignore */ }
+
+  const trackNames = { 'core-bonus': 'Core Bonus', 'gateway': 'Gateway', 'seo-aff': 'SEO & Affiliates' };
+  const disciplineNames = { backend: 'Backend', frontend: 'Frontend', natives: 'Natives', qa: 'QA' };
+
+  const resolveProject = (id) => projectLookup[String(id)] || `Project #${id}`;
+  const resolveTrack = (tk) => trackNames[tk] || tk;
+
+  // Build narrative descriptions for each changed field
+  const narratives = [];
   for (const f of changed) {
     const before = existing ? existing[f] : undefined;
     const after = body[f];
-    const diff = { field: friendly[f] || f };
     try {
-      diff.changes = buildFieldDiff(f, before, after);
+      const fieldNarrs = buildNarratives(f, before, after, resolveProject, resolveTrack, disciplineNames);
+      narratives.push(...fieldNarrs);
     } catch (e) {
-      diff.changes = [{ label: 'value', before: summarizeValue(before), after: summarizeValue(after) }];
+      narratives.push({ text: `Updated ${f}`, icon: 'pencil' });
     }
-    diffs.push(diff);
   }
-  return { summary: changed.map(f => friendly[f] || f).join(', '), diffs };
+
+  // Build a short summary from the first 2 narratives
+  const summaryTexts = narratives.slice(0, 2).map(n => n.text);
+  if (narratives.length > 2) summaryTexts.push(`and ${narratives.length - 2} more change${narratives.length - 2 > 1 ? 's' : ''}`);
+  const summary = summaryTexts.join('; ');
+
+  return { summary, diffs: narratives };
 }
 
-// Build human-readable sub-diffs for a field
-function buildFieldDiff(field, before, after) {
-  const changes = [];
-  if (field === 'capacity' || field === 'buffer' || field === 'trackCapacity') {
-    // Object with numeric values — show changed keys
+// Build human-readable narrative descriptions for a field change
+function buildNarratives(field, before, after, resolveProject, resolveTrack, disciplineNames) {
+  const narrs = [];
+
+  if (field === 'capacity' || field === 'buffer') {
+    // Team capacity or buffer changes — e.g. "Changed Backend capacity from 40 to 46 SP"
+    const label = field === 'buffer' ? 'buffer' : 'capacity';
     const allKeys = new Set([...Object.keys(before || {}), ...Object.keys(after || {})]);
     for (const k of allKeys) {
-      const bVal = before && before[k] !== undefined ? before[k] : undefined;
-      const aVal = after && after[k] !== undefined ? after[k] : undefined;
-      if (JSON.stringify(bVal) !== JSON.stringify(aVal)) {
-        if (typeof bVal === 'object' && typeof aVal === 'object') {
-          // Nested object (e.g., trackCapacity.gateway)
-          const subKeys = new Set([...Object.keys(bVal || {}), ...Object.keys(aVal || {})]);
-          for (const sk of subKeys) {
-            if ((bVal || {})[sk] !== (aVal || {})[sk]) {
-              changes.push({ label: `${k} → ${sk}`, before: (bVal || {})[sk], after: (aVal || {})[sk] });
-            }
-          }
-        } else {
-          changes.push({ label: k, before: bVal, after: aVal });
+      const bVal = (before || {})[k];
+      const aVal = (after || {})[k];
+      if (bVal !== aVal) {
+        const name = disciplineNames[k] || k;
+        if (bVal === undefined) narrs.push({ text: `Set ${name} ${label} to ${aVal} SP`, icon: 'plus' });
+        else if (aVal === undefined) narrs.push({ text: `Removed ${name} ${label} (was ${bVal} SP)`, icon: 'minus' });
+        else narrs.push({ text: `Changed ${name} ${label} from ${bVal} to ${aVal} SP`, icon: bVal < aVal ? 'arrow-up' : 'arrow-down' });
+      }
+    }
+  } else if (field === 'trackCapacity') {
+    // Per-track capacity — e.g. "Changed Gateway Backend capacity from 20 to 25 SP"
+    const allTracks = new Set([...Object.keys(before || {}), ...Object.keys(after || {})]);
+    for (const tk of allTracks) {
+      const bObj = (before || {})[tk] || {};
+      const aObj = (after || {})[tk] || {};
+      const allDisc = new Set([...Object.keys(bObj), ...Object.keys(aObj)]);
+      for (const d of allDisc) {
+        if (bObj[d] !== aObj[d]) {
+          const trackName = resolveTrack(tk);
+          const discName = disciplineNames[d] || d;
+          if (bObj[d] === undefined) narrs.push({ text: `Set ${trackName} ${discName} capacity to ${aObj[d]} SP`, icon: 'plus' });
+          else if (aObj[d] === undefined) narrs.push({ text: `Removed ${trackName} ${discName} capacity (was ${bObj[d]} SP)`, icon: 'minus' });
+          else narrs.push({ text: `Changed ${trackName} ${discName} capacity from ${bObj[d]} to ${aObj[d]} SP`, icon: bObj[d] < aObj[d] ? 'arrow-up' : 'arrow-down' });
         }
       }
     }
   } else if (field === 'tracks') {
-    // Object of arrays — show added/removed items per track
-    const trackNames = { 'core-bonus': 'Core Bonus', 'gateway': 'Gateway', 'seo-aff': 'SEO & Aff' };
+    // Swimlane assignments — e.g. "Moved 'Casino In-game Offers Widget' to the Gateway swimlane"
     const allTracks = new Set([...Object.keys(before || {}), ...Object.keys(after || {})]);
     for (const tk of allTracks) {
       const bArr = (before || {})[tk] || [];
       const aArr = (after || {})[tk] || [];
       const added = aArr.filter(id => !bArr.includes(id));
       const removed = bArr.filter(id => !aArr.includes(id));
-      if (added.length > 0 || removed.length > 0) {
-        const parts = [];
-        if (added.length) parts.push(`+${added.join(',')}`);
-        if (removed.length) parts.push(`-${removed.join(',')}`);
-        changes.push({ label: trackNames[tk] || tk, before: `[${bArr.join(', ')}]`, after: `[${aArr.join(', ')}]`, hint: parts.join(' ') });
+      const trackName = resolveTrack(tk);
+      for (const id of added) {
+        narrs.push({ text: `Moved "${resolveProject(id)}" to the ${trackName} swimlane`, icon: 'move' });
+      }
+      for (const id of removed) {
+        // Check if it was moved to another track
+        let movedTo = null;
+        for (const otherTk of allTracks) {
+          if (otherTk !== tk && ((after || {})[otherTk] || []).includes(id) && !((before || {})[otherTk] || []).includes(id)) {
+            movedTo = resolveTrack(otherTk);
+          }
+        }
+        if (!movedTo) {
+          narrs.push({ text: `Removed "${resolveProject(id)}" from the ${trackName} swimlane`, icon: 'minus' });
+        }
+        // If moved to another track, the "added" entry in the other track handles the description
       }
     }
   } else if (field === 'splits') {
-    // Object of objects — show added/removed/changed splits
+    // Project splits — e.g. "Split 'Casino In-game Offers Widget' to Gateway with 4 Backend SP"
     const allIds = new Set([...Object.keys(before || {}), ...Object.keys(after || {})]);
     for (const pid of allIds) {
       const bSplit = (before || {})[pid];
       const aSplit = (after || {})[pid];
-      if (!bSplit && aSplit) changes.push({ label: `project ${pid}`, before: '—', after: summarizeValue(aSplit) });
-      else if (bSplit && !aSplit) changes.push({ label: `project ${pid}`, before: summarizeValue(bSplit), after: '— (removed)' });
-      else if (JSON.stringify(bSplit) !== JSON.stringify(aSplit)) changes.push({ label: `project ${pid}`, before: summarizeValue(bSplit), after: summarizeValue(aSplit) });
+      const projName = resolveProject(pid);
+      if (!bSplit && aSplit) {
+        // New split
+        const parts = [];
+        if (aSplit.targetTrack) parts.push(`to ${resolveTrack(aSplit.targetTrack)}`);
+        const spParts = [];
+        for (const d of ['backend', 'frontend', 'natives', 'qa']) {
+          if (aSplit[d]) spParts.push(`${aSplit[d]} ${disciplineNames[d] || d}`);
+        }
+        if (spParts.length) parts.push(`with ${spParts.join(', ')}`);
+        narrs.push({ text: `Split "${projName}" ${parts.join(' ')}`, icon: 'split' });
+      } else if (bSplit && !aSplit) {
+        narrs.push({ text: `Removed the split for "${projName}"`, icon: 'minus' });
+      } else if (JSON.stringify(bSplit) !== JSON.stringify(aSplit)) {
+        // Changed split details
+        const changes = [];
+        if (bSplit.targetTrack !== aSplit.targetTrack) {
+          changes.push(`moved to ${resolveTrack(aSplit.targetTrack)}`);
+        }
+        for (const d of ['backend', 'frontend', 'natives', 'qa']) {
+          if ((bSplit[d] || 0) !== (aSplit[d] || 0)) {
+            changes.push(`${disciplineNames[d] || d}: ${bSplit[d] || 0} → ${aSplit[d] || 0} SP`);
+          }
+        }
+        if (changes.length > 0) {
+          narrs.push({ text: `Updated split for "${projName}" — ${changes.join(', ')}`, icon: 'pencil' });
+        } else {
+          narrs.push({ text: `Updated split settings for "${projName}"`, icon: 'pencil' });
+        }
+      }
+    }
+  } else if (field === 'trackBlockOrder') {
+    // Block reordering — e.g. "Reordered items in the Gateway swimlane"
+    const allTracks = new Set([...Object.keys(before || {}), ...Object.keys(after || {})]);
+    for (const tk of allTracks) {
+      const bArr = (before || {})[tk] || [];
+      const aArr = (after || {})[tk] || [];
+      if (JSON.stringify(bArr) !== JSON.stringify(aArr)) {
+        const trackName = resolveTrack(tk);
+        const added = aArr.filter(k => !bArr.includes(k));
+        const removed = bArr.filter(k => !aArr.includes(k));
+        if (added.length > 0 && removed.length === 0) {
+          // Items added to the order
+          const names = added.map(k => {
+            const isGhost = k.startsWith('ghost:');
+            const id = isGhost ? k.replace('ghost:', '') : k;
+            return `"${resolveProject(id)}"${isGhost ? ' (split)' : ''}`;
+          });
+          narrs.push({ text: `Added ${names.join(', ')} to ${trackName} ordering`, icon: 'move' });
+        } else if (removed.length > 0 && added.length === 0) {
+          narrs.push({ text: `Removed items from ${trackName} ordering`, icon: 'minus' });
+        } else {
+          // Pure reorder — figure out which item moved
+          const movedItem = findMovedItem(bArr, aArr, resolveProject);
+          if (movedItem) {
+            narrs.push({ text: movedItem, icon: 'move' });
+          } else {
+            narrs.push({ text: `Reordered items in the ${trackName} swimlane`, icon: 'move' });
+          }
+        }
+      }
     }
   } else if (field === 'milestones') {
-    // Array — show added/removed/changed
     const bArr = before || [];
     const aArr = after || [];
-    if (aArr.length > bArr.length) changes.push({ label: 'count', before: bArr.length, after: aArr.length, hint: 'added' });
-    else if (aArr.length < bArr.length) changes.push({ label: 'count', before: bArr.length, after: aArr.length, hint: 'removed' });
-    else changes.push({ label: 'modified', before: `${bArr.length} milestones`, after: `${aArr.length} milestones` });
+    if (aArr.length > bArr.length) {
+      const newOnes = aArr.slice(bArr.length);
+      for (const m of newOnes) {
+        narrs.push({ text: `Added milestone "${m.label || m.name || 'Unnamed'}" at week ${m.week || '?'}`, icon: 'plus' });
+      }
+    } else if (aArr.length < bArr.length) {
+      narrs.push({ text: `Removed ${bArr.length - aArr.length} milestone${bArr.length - aArr.length > 1 ? 's' : ''}`, icon: 'minus' });
+    } else {
+      narrs.push({ text: `Updated milestone settings`, icon: 'pencil' });
+    }
+  } else if (field === 'timelineConfig') {
+    const changes = [];
+    if ((before || {}).totalWeeks !== (after || {}).totalWeeks) {
+      changes.push(`timeline length from ${(before || {}).totalWeeks || '?'} to ${(after || {}).totalWeeks || '?'} weeks`);
+    }
+    if ((before || {}).sprintWeeks !== (after || {}).sprintWeeks) {
+      changes.push(`sprint length from ${(before || {}).sprintWeeks || '?'} to ${(after || {}).sprintWeeks || '?'} weeks`);
+    }
+    if (changes.length > 0) {
+      narrs.push({ text: `Changed ${changes.join(' and ')}`, icon: 'pencil' });
+    } else {
+      narrs.push({ text: `Updated timeline configuration`, icon: 'pencil' });
+    }
+  } else if (field === 'timelineOverrides') {
+    // Bar position changes — "Moved timeline bar for project X to start at week 3"
+    const allIds = new Set([...Object.keys(before || {}), ...Object.keys(after || {})]);
+    let count = 0;
+    for (const pid of allIds) {
+      const bOvr = (before || {})[pid];
+      const aOvr = (after || {})[pid];
+      if (JSON.stringify(bOvr) !== JSON.stringify(aOvr)) {
+        count++;
+        if (count <= 3) {
+          const projName = resolveProject(pid);
+          if (!bOvr && aOvr) {
+            narrs.push({ text: `Positioned "${projName}" on the timeline at week ${aOvr.startWeek || '?'}`, icon: 'move' });
+          } else if (bOvr && !aOvr) {
+            narrs.push({ text: `Reset timeline position for "${projName}"`, icon: 'minus' });
+          } else {
+            const parts = [];
+            if ((bOvr || {}).startWeek !== (aOvr || {}).startWeek) parts.push(`start: week ${(bOvr || {}).startWeek || '?'} → ${(aOvr || {}).startWeek || '?'}`);
+            if ((bOvr || {}).endWeek !== (aOvr || {}).endWeek) parts.push(`end: week ${(bOvr || {}).endWeek || '?'} → ${(aOvr || {}).endWeek || '?'}`);
+            narrs.push({ text: `Moved "${projName}" on the timeline (${parts.join(', ') || 'adjusted position'})`, icon: 'move' });
+          }
+        }
+      }
+    }
+    if (count > 3) {
+      narrs.push({ text: `...and ${count - 3} more timeline position change${count - 3 > 1 ? 's' : ''}`, icon: 'pencil' });
+    }
+  } else if (field === 'sizeMap') {
+    narrs.push({ text: `Updated size estimation settings`, icon: 'pencil' });
+  } else if (field === 'trackSubLaneCounts') {
+    const allTracks = new Set([...Object.keys(before || {}), ...Object.keys(after || {})]);
+    for (const tk of allTracks) {
+      const bVal = (before || {})[tk];
+      const aVal = (after || {})[tk];
+      if (bVal !== aVal) {
+        narrs.push({ text: `Changed ${resolveTrack(tk)} sub-lanes from ${bVal || 1} to ${aVal || 1}`, icon: 'pencil' });
+      }
+    }
+  } else if (field === 'timelineLaneAssignments') {
+    const count = Object.keys(after || {}).length;
+    narrs.push({ text: `Updated timeline lane assignments (${count} project${count !== 1 ? 's' : ''})`, icon: 'pencil' });
   } else {
-    // Generic fallback — just show before/after summary
-    changes.push({ label: 'value', before: summarizeValue(before), after: summarizeValue(after) });
+    narrs.push({ text: `Updated ${field}`, icon: 'pencil' });
   }
-  return changes.length > 0 ? changes : [{ label: 'value', before: summarizeValue(before), after: summarizeValue(after) }];
+
+  return narrs.length > 0 ? narrs : [{ text: `Updated ${field}`, icon: 'pencil' }];
+}
+
+// Try to identify which item was moved in a reorder
+function findMovedItem(bArr, aArr, resolveProject) {
+  if (bArr.length !== aArr.length) return null;
+  // Find the item whose position changed most
+  for (let i = 0; i < aArr.length; i++) {
+    const oldIdx = bArr.indexOf(aArr[i]);
+    if (oldIdx !== i && oldIdx !== -1) {
+      const id = aArr[i];
+      const isGhost = id.startsWith('ghost:');
+      const projId = isGhost ? id.replace('ghost:', '') : id;
+      const projName = resolveProject(projId);
+      const suffix = isGhost ? ' (split)' : '';
+      if (i === 0) return `Moved "${projName}"${suffix} to the beginning of the row`;
+      if (i === aArr.length - 1) return `Moved "${projName}"${suffix} to the end of the row`;
+      return `Moved "${projName}"${suffix} to position ${i + 1}`;
+    }
+  }
+  return null;
 }
 
 function summarizeValue(val) {
@@ -400,7 +579,7 @@ function saveStateHandler(req, res) {
     console.log(`[merge] Vertical ${req.params.key}: accepted=[${accepted}] rejected=[${rejected}] (stale by ${now - clientLoadedAt}ms)`);
   }
 
-  logAudit(req, 'Updated state', describeStateChanges(req.body, existing));
+  logAudit(req, 'Updated state', describeStateChanges(req.body, existing, req.params.key));
 
   // Return merged state so client can sync up
   const responseState = { ...state };

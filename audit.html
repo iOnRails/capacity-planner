@@ -56,14 +56,19 @@
   .details-summary:hover { color: var(--text1); }
   .details-toggle { font-size: 10px; color: var(--accent); transition: transform 0.15s; display: inline-block; }
   .details-toggle.open { transform: rotate(90deg); }
-  .diff-table { margin-top: 8px; font-size: 11px; border-collapse: collapse; width: 100%; }
-  .diff-table th { text-align: left; padding: 4px 8px; color: var(--text2); font-weight: 500; font-size: 10px; text-transform: uppercase; border-bottom: 1px solid var(--border); }
-  .diff-table td { padding: 4px 8px; border-bottom: 1px solid rgba(51,54,74,0.5); vertical-align: top; }
-  .diff-field { color: var(--accent); font-weight: 500; white-space: nowrap; }
-  .diff-before { color: var(--red); opacity: 0.85; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
-  .diff-after { color: var(--green); max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
-  .diff-hint { color: var(--orange); font-size: 10px; font-style: italic; }
-  .diff-section-label { color: var(--text2); font-weight: 600; font-size: 11px; padding-top: 6px; }
+  .narrative-list { margin-top: 8px; list-style: none; padding: 0; }
+  .narrative-item { display: flex; align-items: flex-start; gap: 8px; padding: 5px 0; border-bottom: 1px solid rgba(51,54,74,0.3); font-size: 12px; color: var(--text1); line-height: 1.45; }
+  .narrative-item:last-child { border-bottom: none; }
+  .narrative-icon { flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; margin-top: 1px; }
+  .narrative-icon.move { background: rgba(99,179,237,0.15); color: #63b3ed; }
+  .narrative-icon.plus { background: rgba(72,187,120,0.15); color: #48bb78; }
+  .narrative-icon.minus { background: rgba(245,101,101,0.15); color: #f56565; }
+  .narrative-icon.pencil { background: rgba(237,187,51,0.15); color: #edb933; }
+  .narrative-icon.split { background: rgba(159,122,234,0.15); color: #9f7aea; }
+  .narrative-icon.arrow-up { background: rgba(72,187,120,0.15); color: #48bb78; }
+  .narrative-icon.arrow-down { background: rgba(245,101,101,0.15); color: #f56565; }
+  .narrative-text { flex: 1; }
+  .narrative-text em { font-style: normal; color: var(--accent); font-weight: 500; }
 
   /* Loading & empty */
   .loading, .empty { text-align: center; padding: 60px 0; color: var(--text2); font-size: 14px; }
@@ -153,35 +158,59 @@ function AuthGate({ children }) {
   });
 }
 
+const ICON_MAP = {
+  move: '↔',
+  plus: '+',
+  minus: '−',
+  pencil: '✎',
+  split: '⑂',
+  'arrow-up': '↑',
+  'arrow-down': '↓',
+};
+
 function DiffDetails({ diffs }) {
   if (!diffs || diffs.length === 0) return null;
-  return (
-    <table className="diff-table">
-      <thead><tr><th>Field</th><th>Before</th><th>After</th></tr></thead>
-      <tbody>
-        {diffs.map((diff, di) => (
-          <React.Fragment key={di}>
-            {diff.changes && diff.changes.length > 0 ? (
-              <>
-                <tr><td colSpan={3} className="diff-section-label">{diff.field}</td></tr>
-                {diff.changes.map((c, ci) => (
-                  <tr key={ci}>
-                    <td className="diff-field">{c.label}</td>
-                    <td className="diff-before" title={typeof c.before === 'string' ? c.before : JSON.stringify(c.before)}>{c.before === undefined ? '—' : String(c.before)}</td>
-                    <td className="diff-after" title={typeof c.after === 'string' ? c.after : JSON.stringify(c.after)}>
-                      {c.after === undefined ? '—' : String(c.after)}
-                      {c.hint && <span className="diff-hint"> ({c.hint})</span>}
-                    </td>
-                  </tr>
-                ))}
-              </>
-            ) : (
-              <tr><td className="diff-field">{diff.field}</td><td className="diff-before">—</td><td className="diff-after">changed</td></tr>
-            )}
-          </React.Fragment>
+
+  // New narrative format: diffs is an array of { text, icon }
+  const isNarrative = diffs[0] && typeof diffs[0].text === 'string';
+
+  if (isNarrative) {
+    return (
+      <ul className="narrative-list">
+        {diffs.map((item, i) => (
+          <li key={i} className="narrative-item">
+            <span className={`narrative-icon ${item.icon || 'pencil'}`}>{ICON_MAP[item.icon] || '✎'}</span>
+            <span className="narrative-text">{item.text}</span>
+          </li>
         ))}
-      </tbody>
-    </table>
+      </ul>
+    );
+  }
+
+  // Legacy format fallback: diffs is array of { field, changes: [{ label, before, after }] }
+  return (
+    <ul className="narrative-list">
+      {diffs.map((diff, di) => (
+        <React.Fragment key={di}>
+          {diff.changes && diff.changes.length > 0 ? (
+            diff.changes.map((c, ci) => (
+              <li key={`${di}-${ci}`} className="narrative-item">
+                <span className="narrative-icon pencil">✎</span>
+                <span className="narrative-text">
+                  <strong>{diff.field}</strong> — {c.label}: {c.before === undefined ? '—' : String(c.before)} → {c.after === undefined ? '—' : String(c.after)}
+                  {c.hint && ` (${c.hint})`}
+                </span>
+              </li>
+            ))
+          ) : (
+            <li key={di} className="narrative-item">
+              <span className="narrative-icon pencil">✎</span>
+              <span className="narrative-text"><strong>{diff.field}</strong> — changed</span>
+            </li>
+          )}
+        </React.Fragment>
+      ))}
+    </ul>
   );
 }
 
