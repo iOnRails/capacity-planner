@@ -266,18 +266,33 @@ function saveStateHandler(req, res) {
       existing[field] && typeof existing[field] === 'object' && !Array.isArray(existing[field])
     ) {
       try {
-        const merged = { ...existing[field] };
+        // Start from the CLIENT's version (respects deletions), then overlay
+        // any server-side keys that the client didn't change.
+        const merged = { ...clientValue };
         const changedSubKeys = [];
+        // Detect keys the client added or modified
         for (const subKey of Object.keys(clientValue)) {
           if (JSON.stringify(clientValue[subKey]) !== JSON.stringify((existing[field] || {})[subKey])) {
-            merged[subKey] = clientValue[subKey];
             changedSubKeys.push(subKey);
           }
         }
-        if (changedSubKeys.length > 0) {
+        // Detect keys the client deleted (present on server, absent in client)
+        const deletedKeys = [];
+        for (const subKey of Object.keys(existing[field])) {
+          if (!(subKey in clientValue)) {
+            deletedKeys.push(subKey);
+            // Don't add this key to merged — respect the deletion
+          }
+        }
+        // Re-add server keys the client didn't touch (present in both, unchanged)
+        // These are already in merged via { ...clientValue }
+        if (changedSubKeys.length > 0 || deletedKeys.length > 0) {
           state[field] = merged;
           fieldTs[field] = now;
-          accepted.push(field + '(merged:' + changedSubKeys.join(',') + ')');
+          const desc = [];
+          if (changedSubKeys.length) desc.push('changed:' + changedSubKeys.join(','));
+          if (deletedKeys.length) desc.push('deleted:' + deletedKeys.join(','));
+          accepted.push(field + '(merged:' + desc.join(';') + ')');
         }
       } catch (mergeErr) {
         console.error('[merge] Sub-key merge failed for field ' + field + ':', mergeErr.message);
