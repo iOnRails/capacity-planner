@@ -1044,6 +1044,8 @@ function App({ onLogout, user: authUser }) {
 
   const STATE_FIELD_NAMES = ['capacity', 'tracks', 'trackCapacity', 'splits', 'timelineConfig', 'milestones', 'timelineOverrides', 'trackSubLaneCounts', 'timelineLaneAssignments', 'trackBlockOrder', 'buffer'];
 
+  const loadVerticalRef = useRef(null); // stable ref to avoid circular deps
+
   const applyStateFromServer = useCallback((key, stateRes) => {
     if (stateRes.sizeMap) {
       serverSizeMapRef.current = JSON.stringify(stateRes.sizeMap);
@@ -1108,7 +1110,6 @@ function App({ onLogout, user: authUser }) {
   const saveTimer = useRef(null);
   const savingRef = useRef(false); // ref mirror of saving state for poll guard
   const deferredSyncRef = useRef(null); // tracks deferred sync requests while save is in-flight
-  const loadVerticalRef = useRef(null); // stable ref to avoid circular deps
   // For object fields (tracks, trackBlockOrder, etc.), deep-merge local changes
   // with the LATEST server state so we only overwrite sub-keys the user changed
   const deepMergeField = useCallback((key, fieldName, localValue, capturedSnapshotJson) => {
