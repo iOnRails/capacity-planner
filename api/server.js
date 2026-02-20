@@ -3,6 +3,7 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
+// Capacity Planner API v2 — audit diffs, WS full-state sync, keepalive pings
 const { WebSocketServer } = require('ws');
 
 // ── Config ──
