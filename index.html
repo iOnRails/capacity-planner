@@ -451,7 +451,7 @@
   .tooltip-card {
     background: var(--surface2); border: 1px solid var(--border);
     border-radius: 10px; padding: 14px 16px; width: 320px;
-    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5); opacity: 0.92;
   }
   .tooltip-card .tt-title { font-size: 13px; font-weight: 700; margin-bottom: 8px; }
   .tooltip-card .tt-meta { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 8px; }
@@ -2044,6 +2044,7 @@ function App({ onLogout, user: authUser }) {
   const [sortBy, setSortBy] = useState('impact');
   const [colorBy, setColorBy] = useState('pillar');
   const [backlogView, setBacklogView] = useState('blocks');
+  const [trackPicker, setTrackPicker] = useState(null); // { projectId, x, y }
   const dragItem = useRef(null);
   const dragSource = useRef(null);
 
@@ -2331,7 +2332,7 @@ function App({ onLogout, user: authUser }) {
           </button>
         )}
         <button className="block-move"
-          onClick={(e) => { e.stopPropagation(); lane === 'backlog' ? moveToTrack(p.id, 'core-bonus') : moveToBacklog(p.id); }}
+          onClick={(e) => { e.stopPropagation(); if (lane === 'backlog') { const r = e.currentTarget.getBoundingClientRect(); setTrackPicker({ projectId: p.id, x: r.right + 4, y: r.top }); } else { moveToBacklog(p.id); } }}
           title={lane === 'backlog' ? 'Add to Roadmap' : 'Remove from Roadmap'}>
           {lane === 'backlog' ? '＋' : '✕'}
         </button>
@@ -3551,7 +3552,7 @@ function App({ onLogout, user: authUser }) {
                       <td style={{padding:'6px 8px',textAlign:'center',fontWeight:600,color:'var(--text1)'}}>{sp.total || '—'}</td>
                       <td style={{padding:'6px 8px',textAlign:'center',color:'var(--text2)',fontSize:11}}>{p.targetMarket || '—'}</td>
                       <td style={{padding:'6px 8px',textAlign:'center'}}>
-                        <button className="btn" style={{fontSize:10,padding:'2px 6px'}} onClick={() => moveToTrack(p.id, trackKeys[0])}>+ Roadmap</button>
+                        <button className="btn" style={{fontSize:10,padding:'2px 6px'}} onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setTrackPicker({ projectId: p.id, x: r.right + 4, y: r.top }); }}>+ Roadmap</button>
                       </td>
                     </tr>
                   );
@@ -3565,6 +3566,19 @@ function App({ onLogout, user: authUser }) {
       </div>
 
       {renderTooltip()}
+      {trackPicker && (
+        <React.Fragment>
+          <div style={{position:'fixed',inset:0,zIndex:299}} onClick={() => setTrackPicker(null)} />
+          <div style={{position:'fixed',left:trackPicker.x,top:trackPicker.y,zIndex:300,background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:8,padding:6,boxShadow:'0 8px 24px rgba(0,0,0,0.4)',display:'flex',flexDirection:'column',gap:4,minWidth:120}}>
+            {TRACKS.map(t => (
+              <button key={t.key} className="btn" style={{fontSize:11,padding:'5px 10px',textAlign:'left',background:'transparent',color:'var(--text1)',borderLeft:`3px solid ${t.borderColor}`}}
+                onClick={() => { moveToTrack(trackPicker.projectId, t.key); setTrackPicker(null); }}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </React.Fragment>
+      )}
       </>)}
 
       {showTimeline && (
