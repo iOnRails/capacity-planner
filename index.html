@@ -3551,7 +3551,9 @@ function App({ onLogout, user: authUser }) {
                       <td style={{padding:'6px 8px',textAlign:'center',color:'var(--text2)'}}>{p.qa || '—'}</td>
                       <td style={{padding:'6px 8px',textAlign:'center',fontWeight:600,color:'var(--text1)'}}>{sp.total || '—'}</td>
                       <td style={{padding:'6px 8px',textAlign:'center',color:'var(--text2)',fontSize:11}}>{p.targetMarket || '—'}</td>
-                      <td style={{padding:'6px 8px',textAlign:'center'}}>
+                      <td style={{padding:'6px 8px',textAlign:'center'}}
+                        onMouseEnter={(e) => { e.stopPropagation(); setTooltip(null); }}
+                        onMouseLeave={(e) => e.stopPropagation()}>
                         <button className="btn" style={{fontSize:10,padding:'2px 6px'}} onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setTrackPicker({ projectId: p.id, x: r.right + 4, y: r.top }); }}>+ Roadmap</button>
                       </td>
                     </tr>
