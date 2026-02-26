@@ -34,7 +34,6 @@ const AUDIT_FILE = 'audit_log.json';
 const AUDIT_MAX_DAYS = 30;
 
 // ── Input Sanitization ──
-const KNOWN_PILLARS = new Set(['Expansion', 'Acquisition', 'Core Platform', 'Comms', 'Gamification', 'Core Bonus', '']);
 const KNOWN_KPIS = new Set(['Revenue', 'Efficiency', 'Experience', '']);
 
 function stripHtmlTags(str) {
@@ -58,9 +57,6 @@ function sanitizeProject(project) {
     if (sanitized[field] != null) {
       sanitized[field] = sanitizeString(String(sanitized[field]), limit);
     }
-  }
-  if (sanitized.pillar && !KNOWN_PILLARS.has(sanitized.pillar)) {
-    console.warn(`[sanitize] Unknown pillar "${sanitized.pillar}" for project ${sanitized.id}`);
   }
   if (sanitized.targetKPI && !KNOWN_KPIS.has(sanitized.targetKPI)) {
     console.warn(`[sanitize] Unknown targetKPI "${sanitized.targetKPI}" for project ${sanitized.id}`);

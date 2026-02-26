@@ -888,14 +888,85 @@ describe('getCapColor', () => {
 // getBlockBg
 // ═══════════════════════════════════════════════════════════
 describe('getBlockBg', () => {
-  test('returns gradient for known pillar', () => {
-    const result = CP.getBlockBg('Expansion');
-    expect(result).toContain('#00b894');
+  test('returns gradient using pillarColorMap', () => {
+    const map = { 'MyPillar': '#ff0000' };
+    const result = CP.getBlockBg('MyPillar', map);
+    expect(result).toContain('#ff0000');
     expect(result).toContain('linear-gradient');
   });
 
-  test('returns default gradient for unknown pillar', () => {
-    const result = CP.getBlockBg('Unknown');
-    expect(result).toContain('#6c5ce7');
+  test('falls back to palette first color for unknown pillar', () => {
+    const result = CP.getBlockBg('Unknown', {});
+    expect(result).toContain(CP.PILLAR_PALETTE[0]);
+  });
+
+  test('works without pillarColorMap (backward compat)', () => {
+    const result = CP.getBlockBg('Anything');
+    expect(result).toContain('linear-gradient');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════
+// buildPillarColorMap
+// ═══════════════════════════════════════════════════════════
+describe('buildPillarColorMap', () => {
+  test('returns empty map for empty projects', () => {
+    expect(CP.buildPillarColorMap([])).toEqual({});
+  });
+
+  test('assigns colors alphabetically', () => {
+    const projects = [
+      { pillar: 'Zebra' },
+      { pillar: 'Alpha' },
+      { pillar: 'Middle' },
+    ];
+    const map = CP.buildPillarColorMap(projects);
+    expect(Object.keys(map)).toEqual(['Alpha', 'Middle', 'Zebra']);
+    expect(map['Alpha']).toBe(CP.PILLAR_PALETTE[0]);
+    expect(map['Middle']).toBe(CP.PILLAR_PALETTE[1]);
+    expect(map['Zebra']).toBe(CP.PILLAR_PALETTE[2]);
+  });
+
+  test('deduplicates pillar names', () => {
+    const projects = [
+      { pillar: 'Expansion' },
+      { pillar: 'Expansion' },
+      { pillar: 'Core' },
+    ];
+    const map = CP.buildPillarColorMap(projects);
+    expect(Object.keys(map)).toHaveLength(2);
+  });
+
+  test('skips empty/null pillar values', () => {
+    const projects = [
+      { pillar: '' },
+      { pillar: null },
+      { pillar: 'Real' },
+      {},
+    ];
+    const map = CP.buildPillarColorMap(projects);
+    expect(Object.keys(map)).toEqual(['Real']);
+  });
+
+  test('wraps around palette for many pillars', () => {
+    const projects = [];
+    for (let i = 0; i < 20; i++) {
+      projects.push({ pillar: `Pillar${String(i).padStart(2, '0')}` });
+    }
+    const map = CP.buildPillarColorMap(projects);
+    expect(Object.keys(map)).toHaveLength(20);
+    // Should wrap around the palette
+    const paletteLen = CP.PILLAR_PALETTE.length;
+    expect(map['Pillar00']).toBe(CP.PILLAR_PALETTE[0]);
+    expect(map[`Pillar${String(paletteLen).padStart(2, '0')}`]).toBe(CP.PILLAR_PALETTE[0]);
+  });
+
+  test('stable ordering — same projects produce same map', () => {
+    const projects = [
+      { pillar: 'C' }, { pillar: 'A' }, { pillar: 'B' },
+    ];
+    const map1 = CP.buildPillarColorMap(projects);
+    const map2 = CP.buildPillarColorMap([...projects].reverse());
+    expect(map1).toEqual(map2);
   });
 });

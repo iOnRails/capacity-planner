@@ -128,11 +128,9 @@ describe('sanitizeProject', () => {
     expect(p.subTask).toBeUndefined();
   });
 
-  test('warns on unknown pillar (does not throw)', () => {
-    const spy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    sanitizeProject({ id: 1, pillar: 'Unknown Pillar' });
-    expect(spy).toHaveBeenCalledWith(expect.stringContaining('Unknown pillar'));
-    spy.mockRestore();
+  test('accepts any pillar value (free-form per vertical)', () => {
+    const p = sanitizeProject({ id: 1, pillar: 'Custom Pillar Name' });
+    expect(p.pillar).toBe('Custom Pillar Name');
   });
 
   test('warns on unknown targetKPI (does not throw)', () => {
@@ -142,9 +140,9 @@ describe('sanitizeProject', () => {
     spy.mockRestore();
   });
 
-  test('does not warn on valid pillar and KPI', () => {
+  test('does not warn on valid KPI', () => {
     const spy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    sanitizeProject({ id: 1, pillar: 'Expansion', targetKPI: 'Revenue' });
+    sanitizeProject({ id: 1, pillar: 'Any Pillar', targetKPI: 'Revenue' });
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
   });

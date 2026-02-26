@@ -15,10 +15,20 @@ const DEFAULT_TRACK_CONFIG = [
 const DISCIPLINES = ['backend', 'frontend', 'natives', 'qa'];
 const ZERO_DISC = () => ({ backend: 0, frontend: 0, natives: 0, qa: 0 });
 const IMPACT_ORDER = { XXXL: 7, XXL: 6, XL: 5, L: 4, M: 3, S: 2, XS: 1 };
-const PILLAR_COLORS = {
-  'Expansion': '#00b894', 'Acquisition': '#0984e3', 'Core Platform': '#6c5ce7',
-  'Comms': '#e67e22', 'Gamification': '#e84393', 'Core Bonus': '#fdcb6e',
-};
+const PILLAR_PALETTE = [
+  '#00b894', '#0984e3', '#6c5ce7', '#e67e22', '#e84393', '#fdcb6e',
+  '#e74c3c', '#1abc9c', '#9b59b6', '#2ecc71', '#f39c12', '#3498db',
+  '#d35400', '#8e44ad', '#16a085', '#c0392b',
+];
+
+function buildPillarColorMap(projects) {
+  const names = [...new Set(projects.map(function(p) { return p.pillar; }).filter(Boolean))].sort();
+  var map = {};
+  for (var i = 0; i < names.length; i++) {
+    map[names[i]] = PILLAR_PALETTE[i % PILLAR_PALETTE.length];
+  }
+  return map;
+}
 
 function generateTrackKey(label) {
   return label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
@@ -312,16 +322,16 @@ function getCapColor(pct) {
   return 'var(--red)';
 }
 
-function getBlockBg(pillar) {
-  const c = PILLAR_COLORS[pillar] || '#6c5ce7';
+function getBlockBg(pillar, pillarColorMap) {
+  const c = (pillarColorMap && pillarColorMap[pillar]) || PILLAR_PALETTE[0] || '#6c5ce7';
   return `linear-gradient(135deg, ${c}cc, ${c}88)`;
 }
 
 // ── Return public API ──
 
 return {
-  DEFAULT_SIZE_MAP, TRACK_KEYS, DEFAULT_TRACK_CONFIG, DISCIPLINES, ZERO_DISC, IMPACT_ORDER, PILLAR_COLORS,
-  generateTrackKey,
+  DEFAULT_SIZE_MAP, TRACK_KEYS, DEFAULT_TRACK_CONFIG, DISCIPLINES, ZERO_DISC, IMPACT_ORDER,
+  PILLAR_PALETTE, buildPillarColorMap, generateTrackKey,
   sizeToSprints, computeProjectSprints, computeEffectiveSprints,
   migrateTracks, migrateTrackCapacity,
   removeFromTracks, deepMergeObject,
