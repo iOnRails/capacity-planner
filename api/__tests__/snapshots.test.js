@@ -43,7 +43,7 @@ beforeEach(() => {
   // Write editors.json so test emails pass authorization middleware
   fs.writeFileSync(
     path.join(TEST_DATA_DIR, 'editors.json'),
-    JSON.stringify(['test@novibet.com', 'alice@novibet.com', 'bob@novibet.com'])
+    JSON.stringify([{email:'test@novibet.com',verticals:['all']},{email:'alice@novibet.com',verticals:['all']},{email:'bob@novibet.com',verticals:['all']}])
   );
 });
 

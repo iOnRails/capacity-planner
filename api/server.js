@@ -36,12 +36,32 @@ const EDITORS_FILE = 'editors.json';
 const ACCESS_REQUESTS_FILE = 'access_requests.json';
 const ADMIN_EMAIL = 'kmermigkas@novibet.com';
 
+const VALID_VERTICALS = new Set(['growth', 'sportsbook', 'casino', 'account', 'payments']);
+
+// Normalize editor entry: strings (old format) → {email, verticals: ["all"]}
+function normalizeEditor(entry) {
+  if (typeof entry === 'string') return { email: entry.toLowerCase().trim(), verticals: ['all'] };
+  return { email: (entry.email || '').toLowerCase().trim(), verticals: entry.verticals || ['all'] };
+}
+
+function loadEditors() {
+  return loadJSON(EDITORS_FILE, []).map(normalizeEditor);
+}
+
 function isEditorUser(email) {
   if (!email) return false;
   const e = email.toLowerCase();
   if (e === ADMIN_EMAIL) return true;
-  const editors = loadJSON(EDITORS_FILE, []);
-  return editors.map(x => x.toLowerCase()).includes(e);
+  return loadEditors().some(ed => ed.email === e);
+}
+
+function isEditorForVertical(email, vertical) {
+  if (!email) return false;
+  const e = email.toLowerCase();
+  if (e === ADMIN_EMAIL) return true;
+  const ed = loadEditors().find(ed => ed.email === e);
+  if (!ed) return false;
+  return ed.verticals.includes('all') || ed.verticals.includes(vertical);
 }
 
 // ── Input Sanitization ──
@@ -505,7 +525,13 @@ app.use((req, res, next) => {
   if (['POST', 'PUT', 'DELETE'].includes(req.method)) {
     if (req.path === '/api/test-post' || req.path === '/api/health' || req.path === '/api/editors/request') return next();
     const email = req.headers['x-user-email'] || '';
-    if (!isEditorUser(email)) {
+    // Check per-vertical access for vertical routes
+    const verticalMatch = req.path.match(/^\/api\/verticals\/([^/]+)/);
+    if (verticalMatch) {
+      if (!isEditorForVertical(email, verticalMatch[1])) {
+        return res.status(403).json({ error: 'No editor access for this vertical.' });
+      }
+    } else if (!isEditorUser(email)) {
       return res.status(403).json({ error: 'View-only access. Contact admin for editor permissions.' });
     }
   }
@@ -847,7 +873,7 @@ app.get('/api/audit-log', (req, res) => {
 
 // ── Editors management ──
 app.get('/api/editors', (req, res) => {
-  const editors = loadJSON(EDITORS_FILE, []);
+  const editors = loadEditors();
   const requests = loadJSON(ACCESS_REQUESTS_FILE, []);
   res.json({ editors, admin: ADMIN_EMAIL, requests });
 });
@@ -859,13 +885,19 @@ app.post('/api/editors', (req, res) => {
   }
   const { editors } = req.body;
   if (!Array.isArray(editors)) {
-    return res.status(400).json({ error: 'Editors must be an array of email strings' });
+    return res.status(400).json({ error: 'Editors must be an array' });
   }
-  const cleaned = [...new Set(
-    editors
-      .map(e => String(e).toLowerCase().trim())
-      .filter(e => e.endsWith('@novibet.com') && e !== ADMIN_EMAIL)
-  )];
+  // Deduplicate by email, validate
+  const seen = new Set();
+  const cleaned = [];
+  for (const entry of editors) {
+    const norm = normalizeEditor(entry);
+    if (!norm.email || !norm.email.endsWith('@novibet.com') || norm.email === ADMIN_EMAIL) continue;
+    if (seen.has(norm.email)) continue;
+    seen.add(norm.email);
+    const verticals = (norm.verticals || []).filter(v => v === 'all' || VALID_VERTICALS.has(v));
+    cleaned.push({ email: norm.email, verticals: verticals.length ? verticals : ['all'] });
+  }
   saveJSON(EDITORS_FILE, cleaned);
   logAudit(req, 'Updated editors', `Editor list updated: ${cleaned.length} editors`);
   res.json({ success: true, editors: cleaned });
@@ -1048,4 +1080,8 @@ module.exports = {
   ACCESS_REQUESTS_FILE,
   ADMIN_EMAIL,
   isEditorUser,
+  isEditorForVertical,
+  normalizeEditor,
+  loadEditors,
+  VALID_VERTICALS,
 };

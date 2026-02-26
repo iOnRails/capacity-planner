@@ -33,7 +33,7 @@ beforeEach(() => {
   // Write editors.json so test emails pass authorization middleware
   fs.writeFileSync(
     path.join(TEST_DATA_DIR, 'editors.json'),
-    JSON.stringify(['test@novibet.com', 'tester@novibet.com', 'alice@novibet.com', 'bob@novibet.com'])
+    JSON.stringify([{email:'test@novibet.com',verticals:['all']},{email:'tester@novibet.com',verticals:['all']},{email:'alice@novibet.com',verticals:['all']},{email:'bob@novibet.com',verticals:['all']}])
   );
 });
 
@@ -713,11 +713,13 @@ describe('trackConfig state field', () => {
 // ═══════════════════════════════════════════════
 
 describe('Editor access requests', () => {
-  test('GET /api/editors returns requests array', async () => {
+  test('GET /api/editors returns editor objects with verticals', async () => {
     const res = await request(app).get('/api/editors');
     expect(res.status).toBe(200);
     expect(res.body.requests).toEqual([]);
     expect(res.body.editors).toBeDefined();
+    expect(res.body.editors[0]).toHaveProperty('email');
+    expect(res.body.editors[0]).toHaveProperty('verticals');
     expect(res.body.admin).toBeDefined();
   });
 
@@ -797,5 +799,65 @@ describe('Editor access requests', () => {
       .set('X-User-Email', 'test@novibet.com')
       .send({ email: 'viewer@novibet.com' });
     expect(res.status).toBe(403);
+  });
+});
+
+// ═══════════════════════════════════════════════
+// Per-vertical editor authorization
+// ═══════════════════════════════════════════════
+
+describe('Per-vertical editor access', () => {
+  test('editor with specific verticals can write to allowed vertical', async () => {
+    fs.writeFileSync(
+      path.join(TEST_DATA_DIR, 'editors.json'),
+      JSON.stringify([{email:'partial@novibet.com', verticals:['growth','casino']}])
+    );
+    const res = await request(app)
+      .post('/api/verticals/growth/projects')
+      .set('X-User-Email', 'partial@novibet.com')
+      .send({projects: []});
+    expect(res.status).toBe(200);
+  });
+
+  test('editor with specific verticals is blocked from other verticals', async () => {
+    fs.writeFileSync(
+      path.join(TEST_DATA_DIR, 'editors.json'),
+      JSON.stringify([{email:'partial@novibet.com', verticals:['growth']}])
+    );
+    const res = await request(app)
+      .post('/api/verticals/sportsbook/projects')
+      .set('X-User-Email', 'partial@novibet.com')
+      .send({projects: []});
+    expect(res.status).toBe(403);
+  });
+
+  test('editor with "all" verticals can write anywhere', async () => {
+    fs.writeFileSync(
+      path.join(TEST_DATA_DIR, 'editors.json'),
+      JSON.stringify([{email:'alleditor@novibet.com', verticals:['all']}])
+    );
+    const res = await request(app)
+      .post('/api/verticals/payments/projects')
+      .set('X-User-Email', 'alleditor@novibet.com')
+      .send({projects: []});
+    expect(res.status).toBe(200);
+  });
+
+  test('admin always has access to all verticals', async () => {
+    const res = await request(app)
+      .post('/api/verticals/casino/projects')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
+      .send({projects: []});
+    expect(res.status).toBe(200);
+  });
+
+  test('POST /api/editors saves editor objects with verticals', async () => {
+    const res = await request(app)
+      .post('/api/editors')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
+      .send({ editors: [{email:'new@novibet.com', verticals:['growth','casino']}] });
+    expect(res.status).toBe(200);
+    expect(res.body.editors[0].email).toBe('new@novibet.com');
+    expect(res.body.editors[0].verticals).toEqual(['growth','casino']);
   });
 });

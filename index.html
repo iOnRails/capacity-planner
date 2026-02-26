@@ -1278,12 +1278,17 @@ function App({ onLogout, user: authUser }) {
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem('cp_tab') || 'planner');
   useEffect(() => { localStorage.setItem('cp_tab', activeTab); }, [activeTab]);
-  const [isEditor, setIsEditor] = useState(false);
-  const [editorList, setEditorList] = useState([]);
+  const [editorList, setEditorList] = useState([]); // [{email, verticals}, ...]
   const [showEditorPanel, setShowEditorPanel] = useState(false);
   const [accessRequests, setAccessRequests] = useState([]);
   const [requestSent, setRequestSent] = useState(false);
   const isAdmin = authUser.email === 'kmermigkas@novibet.com';
+  const isEditor = React.useMemo(() => {
+    if (isAdmin) return true;
+    const email = authUser.email.toLowerCase();
+    return editorList.some(e => e.email && e.email.toLowerCase() === email &&
+      (e.verticals.includes('all') || e.verticals.includes(activeVertical)));
+  }, [editorList, activeVertical, isAdmin]);
   const [settingsTab, setSettingsTab] = useState(() => localStorage.getItem('cp_settings_tab') || 'none');
   const toggleSettingsTab = (tab) => {
     const next = settingsTab === tab ? 'none' : tab;
@@ -1311,12 +1316,10 @@ function App({ onLogout, user: authUser }) {
     fetch(`${API_URL}/api/editors`, { headers: getAuthHeaders() })
       .then(r => r.json())
       .then(data => {
-        const editors = data.editors || [];
-        setEditorList(editors);
-        const email = authUser.email.toLowerCase();
-        setIsEditor(email === (data.admin || '').toLowerCase() || editors.map(e => e.toLowerCase()).includes(email));
+        setEditorList(data.editors || []);
         const requests = data.requests || [];
         setAccessRequests(requests);
+        const email = authUser.email.toLowerCase();
         if (requests.some(r => r.email.toLowerCase() === email)) setRequestSent(true);
       })
       .catch(err => console.error('Failed to fetch editors:', err));
@@ -3926,10 +3929,23 @@ function App({ onLogout, user: authUser }) {
       })()}
 
       {/* Snapshot Modal */}
-      {showEditorPanel && (
+      {showEditorPanel && (() => {
+        const allVerticalKeys = VERTICALS.map(v => v.key);
+        const saveEditors = async (editors) => {
+          try {
+            const resp = await fetch(`${API_URL}/api/editors`, {
+              method: 'POST', headers: getAuthHeaders(),
+              body: JSON.stringify({ editors }),
+            });
+            if (!resp.ok) { alert('Failed to save: ' + ((await resp.json()).error || resp.status)); return; }
+            const data = await resp.json();
+            setEditorList(data.editors);
+          } catch (e) { alert('Error: ' + e.message); }
+        };
+        return (
         <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.6)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center'}}
           onClick={() => setShowEditorPanel(false)}>
-          <div style={{background:'var(--surface1)',border:'1px solid var(--border)',borderRadius:12,padding:24,width:460,maxHeight:'80vh',overflow:'auto',boxShadow:'0 8px 32px rgba(0,0,0,0.4)'}}
+          <div style={{background:'var(--surface1)',border:'1px solid var(--border)',borderRadius:12,padding:24,width:520,maxHeight:'80vh',overflow:'auto',boxShadow:'0 8px 32px rgba(0,0,0,0.4)'}}
             onClick={e => e.stopPropagation()}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
               <h3 style={{margin:0,fontSize:16,color:'var(--text1)'}}>Editor Access Management</h3>
@@ -3961,17 +3977,8 @@ function App({ onLogout, user: authUser }) {
                     <div style={{display:'flex',gap:4}}>
                       <button onClick={async () => {
                         try {
-                          const newEditors = [...editorList, r.email];
-                          const resp = await fetch(`${API_URL}/api/editors`, {
-                            method: 'POST', headers: getAuthHeaders(),
-                            body: JSON.stringify({ editors: newEditors }),
-                          });
-                          if (resp.ok) {
-                            const data = await resp.json();
-                            setEditorList(data.editors);
-                            const ta = document.getElementById('editor-emails-textarea');
-                            if (ta) ta.value = data.editors.join('\n');
-                          }
+                          const newEditor = {email: r.email, verticals: allVerticalKeys};
+                          await saveEditors([...editorList, newEditor]);
                           await fetch(`${API_URL}/api/editors/request`, {
                             method: 'DELETE', headers: getAuthHeaders(),
                             body: JSON.stringify({ email: r.email }),
@@ -3998,45 +4005,83 @@ function App({ onLogout, user: authUser }) {
               </div>
             )}
 
-            <p style={{fontSize:12,color:'var(--text2)',marginBottom:12}}>
-              One email per line. Only @novibet.com emails allowed. Admin always has editor access.
-            </p>
-            <textarea
-              id="editor-emails-textarea"
-              defaultValue={editorList.join('\n')}
-              rows={10}
-              placeholder={'user1@novibet.com\nuser2@novibet.com'}
-              style={{width:'100%',padding:'8px 10px',background:'var(--bg)',border:'1px solid var(--border)',borderRadius:6,color:'var(--text1)',fontSize:12,fontFamily:'monospace',resize:'vertical',boxSizing:'border-box'}} />
-            <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:12}}>
-              <button onClick={() => setShowEditorPanel(false)}
-                style={{padding:'6px 16px',background:'var(--surface2)',color:'var(--text2)',border:'1px solid var(--border)',borderRadius:4,fontSize:11,fontWeight:600,cursor:'pointer'}}>
-                Cancel
-              </button>
-              <button onClick={async () => {
-                const raw = document.getElementById('editor-emails-textarea').value;
-                const emails = raw.split('\n').map(e => e.trim().toLowerCase()).filter(e => e && e.endsWith('@novibet.com'));
-                try {
-                  const resp = await fetch(`${API_URL}/api/editors`, {
-                    method: 'POST', headers: getAuthHeaders(),
-                    body: JSON.stringify({ editors: emails }),
-                  });
-                  if (!resp.ok) { alert('Failed to save: ' + ((await resp.json()).error || resp.status)); return; }
-                  const data = await resp.json();
-                  setEditorList(data.editors);
-                  setIsEditor(true);
-                  setShowEditorPanel(false);
-                } catch (e) { alert('Error: ' + e.message); }
-              }}
-                style={{padding:'6px 16px',background:'linear-gradient(135deg, var(--accent), var(--accent2))',color:'#fff',border:'none',borderRadius:4,fontSize:11,fontWeight:600,cursor:'pointer'}}>
-                Save Editors
-              </button>
+            {/* Add editor input */}
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:12,color:'var(--text2)',marginBottom:6}}>Add editor (only @novibet.com)</div>
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                const input = e.target.elements['new-editor-email'];
+                const email = input.value.trim().toLowerCase();
+                if (!email || !email.endsWith('@novibet.com')) { alert('Must be @novibet.com'); return; }
+                if (editorList.some(ed => ed.email === email)) { alert('Already in list'); return; }
+                await saveEditors([...editorList, {email, verticals: allVerticalKeys}]);
+                input.value = '';
+              }} style={{display:'flex',gap:6}}>
+                <input name="new-editor-email" type="email" placeholder="user@novibet.com"
+                  style={{flex:1,padding:'6px 10px',background:'var(--bg)',border:'1px solid var(--border)',borderRadius:6,color:'var(--text1)',fontSize:12}} />
+                <button type="submit"
+                  style={{padding:'6px 14px',background:'linear-gradient(135deg, var(--accent), var(--accent2))',color:'#fff',border:'none',borderRadius:6,fontSize:11,fontWeight:600,cursor:'pointer'}}>
+                  Add
+                </button>
+              </form>
             </div>
+
+            {/* Editor tags with vertical toggles */}
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              {editorList.map(ed => (
+                <div key={ed.email} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',background:'var(--bg)',borderRadius:8,border:'1px solid var(--border)'}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4}}>
+                      <span style={{fontSize:12,color:'var(--text1)',fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ed.email.replace('@novibet.com','')}</span>
+                      <button onClick={() => saveEditors(editorList.filter(x => x.email !== ed.email))}
+                        style={{background:'none',border:'none',color:'var(--red)',fontSize:14,cursor:'pointer',padding:0,lineHeight:1,opacity:0.6}}
+                        title="Remove editor">✕</button>
+                    </div>
+                    <div style={{display:'flex',gap:3,flexWrap:'wrap'}}>
+                      {VERTICALS.map(v => {
+                        const active = ed.verticals.includes('all') || ed.verticals.includes(v.key);
+                        return (
+                          <button key={v.key} onClick={() => {
+                            let newVerticals;
+                            if (ed.verticals.includes('all')) {
+                              // Switching from "all" → deselect this one
+                              newVerticals = allVerticalKeys.filter(k => k !== v.key);
+                            } else if (active) {
+                              newVerticals = ed.verticals.filter(k => k !== v.key);
+                            } else {
+                              newVerticals = [...ed.verticals, v.key];
+                              // If all selected, keep as explicit list (no "all" needed)
+                            }
+                            if (newVerticals.length === 0) newVerticals = [v.key]; // Can't remove all
+                            const updated = editorList.map(x => x.email === ed.email ? {...x, verticals: newVerticals} : x);
+                            saveEditors(updated);
+                          }}
+                            style={{padding:'1px 6px',fontSize:9,borderRadius:3,cursor:'pointer',fontWeight:600,border:'1px solid',
+                              background: active ? `${v.color}22` : 'transparent',
+                              color: active ? v.color : 'var(--text2)',
+                              borderColor: active ? `${v.color}44` : 'var(--border)',
+                              opacity: active ? 1 : 0.4,
+                            }}>
+                            {v.icon} {v.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {editorList.length === 0 && (
+                <div style={{fontSize:11,color:'var(--text2)',textAlign:'center',padding:16}}>No editors added yet</div>
+              )}
+            </div>
+
             <div style={{marginTop:16,fontSize:11,color:'var(--text2)'}}>
-              Currently {editorList.length} editor{editorList.length !== 1 ? 's' : ''} + admin
+              {editorList.length} editor{editorList.length !== 1 ? 's' : ''} + admin
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {showSnapshots && (
         <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.6)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center'}}
