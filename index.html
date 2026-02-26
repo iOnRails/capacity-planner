@@ -746,12 +746,12 @@
     display: flex; flex-direction: column; justify-content: center; align-items: flex-start;
   }
   .tl-track-bars {
-    position: relative; flex: 1; padding: 6px 0; min-height: 72px;
+    position: relative; flex: 1; padding: 4px 0; min-height: 50px;
   }
 
   /* Project bars — tall with room for info */
   .tl-bar {
-    position: absolute; height: 60px; border-radius: 8px;
+    position: absolute; height: 40px; border-radius: 8px;
     display: flex; flex-direction: column; justify-content: center;
     padding: 6px 14px; cursor: grab;
     border: 1px solid rgba(255,255,255,0.15);
@@ -760,6 +760,13 @@
     user-select: none;
   }
   .tl-bar:active { cursor: grabbing; }
+  .tl-bar:hover::after {
+    content: attr(data-name); position: absolute; bottom: calc(100% + 6px); left: 50%;
+    transform: translateX(-50%); background: rgba(0,0,0,0.85); color: #fff;
+    font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 6px;
+    white-space: nowrap; z-index: 100; pointer-events: none;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
   .tl-bar:hover {
     box-shadow: 0 4px 14px rgba(0,0,0,0.35);
     border-color: rgba(255,255,255,0.3); z-index: 5;
@@ -2707,7 +2714,7 @@ function App({ onLogout, user: authUser }) {
         dragRef.current = { projectId: bar.project.id, trackKey: bar.trackKey, startSprints: newStartSp, durationSprints: origDurSp, laneIndex: newLaneIndex };
         if (el) {
           el.style.left = (newStartSp * pxPerSprint) + 'px';
-          el.style.top = (newLaneIndex * 66 + 6) + 'px';
+          el.style.top = (newLaneIndex * 46 + 4) + 'px';
         }
       }
     };
@@ -3695,7 +3702,7 @@ function App({ onLogout, user: authUser }) {
                   {/* Track rows */}
                   {TRACKS.map(track => {
                     const laneCount = trackSubLaneCounts[track.key] || 1;
-                    const trackHeight = Math.max(80, laneCount * 66 + 14);
+                    const trackHeight = Math.max(56, laneCount * 46 + 10);
                     return (
                     <div key={track.key} className="tl-track" style={{minHeight: trackHeight}}>
                       <div className="tl-track-label" style={{background: track.gradient}}>
@@ -3709,7 +3716,7 @@ function App({ onLogout, user: authUser }) {
                       <div className="tl-track-bars" style={{width: timelineData.totalPx - 110, minHeight: trackHeight - 8}}>
                         {/* Sub-lane separator lines */}
                         {Array.from({length: laneCount - 1}, (_, i) => (
-                          <div key={`sep-${i}`} className="tl-sublane-separator" style={{top: (i + 1) * 66}} />
+                          <div key={`sep-${i}`} className="tl-sublane-separator" style={{top: (i + 1) * 46}} />
                         ))}
                         {(timelineData.trackBars[track.key] || []).map((bar, i) => {
                           const d = bar.disciplines || {};
@@ -3720,7 +3727,8 @@ function App({ onLogout, user: authUser }) {
                           return (
                           <div key={bar.ghost ? `g-${bar.project.id}` : bar.project.id}
                             className={`tl-bar ${bar.ghost ? 'ghost' : ''} ${bar.project.inProgress ? 'in-progress' : ''} ${bar.hasOverride ? 'has-override' : ''}`}
-                            style={{left: bar.left, width: bar.width, top: bar.laneIndex * 66 + 6, background: getBlockBg(bar.project.pillar, pillarColorMap)}}
+                            style={{left: bar.left, width: bar.width, top: bar.laneIndex * 46 + 4, background: getBlockBg(bar.project.pillar, pillarColorMap)}}
+                            data-name={bar.project.subTask}
                             onMouseEnter={(e) => handleMouseEnter(e, bar.project)}
                             onMouseLeave={handleMouseLeave}
                             onMouseDown={e => { if (!e.target.classList.contains('tl-bar-handle')) handleBarDragStart(e, bar, 'move'); }}
@@ -3734,15 +3742,6 @@ function App({ onLogout, user: authUser }) {
                               onMouseDown={e => handleBarDragStart(e, bar, 'left')} />
                             <div className="tl-bar-row1">
                               <span className="tl-bar-label">{bar.project.subTask}</span>
-                            </div>
-                            <div className="tl-bar-row2">
-                              {bar.project.nvrd && <span className="tl-bar-jira">{bar.project.nvrd}</span>}
-                              <div className="tl-bar-disciplines">
-                                {dB > 0 && <span>B:{dB}</span>}
-                                {dF > 0 && <span>F:{dF}</span>}
-                                {dN > 0 && <span>N:{dN}</span>}
-                                {dQ > 0 && <span>Q:{dQ}</span>}
-                              </div>
                             </div>
                             <div className="tl-bar-handle right"
                               onMouseDown={e => handleBarDragStart(e, bar, 'right')} />
