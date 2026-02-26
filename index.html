@@ -966,12 +966,13 @@ const VERTICALS = [
 // Set this to your Railway API URL after deploying, e.g. 'https://your-app.railway.app'
 const API_URL = window.API_URL || 'https://capacity-planner-production-1cf7.up.railway.app';
 
-// DEFAULT_SIZE_MAP, PILLAR_COLORS from shared/computations.js (CP.*)
-const DEFAULT_TRACK_CAPACITY = {
-  'core-bonus': { backend: 0, frontend: 0, natives: 0, qa: 0 },
-  'gateway': { backend: 0, frontend: 0, natives: 0, qa: 0 },
-  'seo-aff': { backend: 0, frontend: 0, natives: 0, qa: 0 },
-};
+// DEFAULT_SIZE_MAP, PILLAR_COLORS, DEFAULT_TRACK_CONFIG from shared/computations.js (CP.*)
+function buildDefaultTrackCapacity(trackConfig) {
+  const tc = {};
+  const keys = trackConfig ? trackConfig.map(t => t.key) : CP.TRACK_KEYS;
+  for (const k of keys) tc[k] = { backend: 0, frontend: 0, natives: 0, qa: 0 };
+  return tc;
+}
 const DEFAULT_CAPACITY = { backend: 40, frontend: 30, natives: 25, qa: 20 };
 
 const PILLAR_CLASSES = {
@@ -1284,17 +1285,13 @@ function App({ onLogout, user: authUser }) {
   const [snapshotName, setSnapshotName] = useState('');
   const [snapshotDesc, setSnapshotDesc] = useState('');
 
-  const TRACKS = [
-    { key: 'core-bonus', label: 'Core Bonus', gradient: 'linear-gradient(180deg, #fdcb6ecc, #fdcb6e88)', borderColor: 'rgba(253,203,110,0.4)' },
-    { key: 'gateway', label: 'Gateway', gradient: 'linear-gradient(180deg, #e84393cc, #e8439388)', borderColor: 'rgba(232,67,147,0.4)' },
-    { key: 'seo-aff', label: 'SEO & AFF', gradient: 'linear-gradient(180deg, #00b894cc, #00b89488)', borderColor: 'rgba(0,184,148,0.4)' },
-  ];
-
   // Data loaded from API
   const [verticalData, setVerticalData] = useState({});
   const [verticalStates, setVerticalStates] = useState(() => {
     const state = {};
-    for (const v of VERTICALS) state[v.key] = { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }, trackCapacity: JSON.parse(JSON.stringify(DEFAULT_TRACK_CAPACITY)), splits: {}, timelineConfig: {...DEFAULT_TIMELINE_CONFIG}, milestones: [], timelineOverrides: {}, trackSubLaneCounts: {}, timelineLaneAssignments: {}, trackBlockOrder: {}, buffer: { backend: 0, frontend: 0, natives: 0, qa: 0 } };
+    const defaultTracks = {};
+    for (const t of CP.DEFAULT_TRACK_CONFIG) defaultTracks[t.key] = [];
+    for (const v of VERTICALS) state[v.key] = { capacity: {...DEFAULT_CAPACITY}, tracks: JSON.parse(JSON.stringify(defaultTracks)), trackCapacity: buildDefaultTrackCapacity(), splits: {}, timelineConfig: {...DEFAULT_TIMELINE_CONFIG}, milestones: [], timelineOverrides: {}, trackSubLaneCounts: {}, timelineLaneAssignments: {}, trackBlockOrder: {}, buffer: { backend: 0, frontend: 0, natives: 0, qa: 0 } };
     return state;
   });
 
@@ -1344,7 +1341,7 @@ function App({ onLogout, user: authUser }) {
   // Used by saveState to only send fields that actually changed locally
   const serverSnapshotRef = useRef({});
 
-  const STATE_FIELD_NAMES = ['capacity', 'tracks', 'trackCapacity', 'splits', 'timelineConfig', 'milestones', 'timelineOverrides', 'trackSubLaneCounts', 'timelineLaneAssignments', 'trackBlockOrder', 'buffer'];
+  const STATE_FIELD_NAMES = ['capacity', 'tracks', 'trackCapacity', 'splits', 'timelineConfig', 'milestones', 'timelineOverrides', 'trackSubLaneCounts', 'timelineLaneAssignments', 'trackBlockOrder', 'buffer', 'trackConfig'];
 
   const loadVerticalRef = useRef(null); // stable ref to avoid circular deps
 
@@ -1358,10 +1355,14 @@ function App({ onLogout, user: authUser }) {
     loadedAtRef.current[key] = stateRes._loadedAt || Date.now();
 
     // Build final state WITH defaults and migrations applied
+    const tc = stateRes.trackConfig || undefined;
+    const defaultTracks = {};
+    for (const t of (tc || CP.DEFAULT_TRACK_CONFIG)) defaultTracks[t.key] = [];
     const newState = {
       capacity: stateRes.capacity || {...DEFAULT_CAPACITY},
-      tracks: migrateTracks(stateRes.tracks || { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }),
-      trackCapacity: migrateTrackCapacity(stateRes.trackCapacity),
+      trackConfig: tc,
+      tracks: migrateTracks(stateRes.tracks || defaultTracks, tc),
+      trackCapacity: migrateTrackCapacity(stateRes.trackCapacity, tc),
       splits: stateRes.splits || {},
       timelineConfig: stateRes.timelineConfig || {...DEFAULT_TIMELINE_CONFIG},
       milestones: stateRes.milestones || [],
@@ -1437,7 +1438,7 @@ function App({ onLogout, user: authUser }) {
       // Diff against the snapshot from CHANGE TIME (not current) to correctly identify
       // what the user actually changed, even if polls updated the snapshot since then.
       const snapshot = capturedSnapshot || serverSnapshotRef.current[key] || {};
-      const fullState = { capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides, trackSubLaneCounts: state.trackSubLaneCounts, timelineLaneAssignments: state.timelineLaneAssignments, trackBlockOrder: state.trackBlockOrder, buffer: state.buffer };
+      const fullState = { capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides, trackSubLaneCounts: state.trackSubLaneCounts, timelineLaneAssignments: state.timelineLaneAssignments, trackBlockOrder: state.trackBlockOrder, buffer: state.buffer, trackConfig: state.trackConfig };
       const payload = { _loadedAt: loadedAt };
       const changedFields = [];
       for (const f of STATE_FIELD_NAMES) {
@@ -1475,10 +1476,14 @@ function App({ onLogout, user: authUser }) {
           // saves diff correctly (matching what local state actually stores)
           const ms = result.mergedState;
           const snapshot = {};
+          const msTc = ms.trackConfig || undefined;
+          const msDefaultTracks = {};
+          for (const t of (msTc || CP.DEFAULT_TRACK_CONFIG)) msDefaultTracks[t.key] = [];
           const migratedForSnapshot = {
             capacity: ms.capacity || {...DEFAULT_CAPACITY},
-            tracks: migrateTracks(ms.tracks || { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }),
-            trackCapacity: migrateTrackCapacity(ms.trackCapacity),
+            trackConfig: msTc,
+            tracks: migrateTracks(ms.tracks || msDefaultTracks, msTc),
+            trackCapacity: migrateTrackCapacity(ms.trackCapacity, msTc),
             splits: ms.splits || {},
             timelineConfig: ms.timelineConfig || {...DEFAULT_TIMELINE_CONFIG},
             milestones: ms.milestones || [],
@@ -1845,10 +1850,20 @@ function App({ onLogout, user: authUser }) {
   }, [activeVertical, loadSnapshots]);
 
   const currentData = verticalData[activeVertical] || [];
-  const currentState = verticalStates[activeVertical] || { capacity: {...DEFAULT_CAPACITY}, tracks: { 'core-bonus': [], 'gateway': [], 'seo-aff': [] }, trackCapacity: JSON.parse(JSON.stringify(DEFAULT_TRACK_CAPACITY)), splits: {}, timelineConfig: {...DEFAULT_TIMELINE_CONFIG}, milestones: [], timelineOverrides: {}, trackSubLaneCounts: {}, timelineLaneAssignments: {}, trackBlockOrder: {}, buffer: { backend: 0, frontend: 0, natives: 0, qa: 0 } };
+  const currentState = verticalStates[activeVertical] || { capacity: {...DEFAULT_CAPACITY}, tracks: buildDefaultTrackCapacity(), trackCapacity: buildDefaultTrackCapacity(), splits: {}, timelineConfig: {...DEFAULT_TIMELINE_CONFIG}, milestones: [], timelineOverrides: {}, trackSubLaneCounts: {}, timelineLaneAssignments: {}, trackBlockOrder: {}, buffer: { backend: 0, frontend: 0, natives: 0, qa: 0 } };
+
+  // Dynamic track configuration — derived from state, defaults to 3 legacy tracks
+  const currentTrackConfig = currentState.trackConfig || CP.DEFAULT_TRACK_CONFIG;
+  const TRACKS = useMemo(() => currentTrackConfig.map(t => ({
+    key: t.key, label: t.label,
+    gradient: `linear-gradient(180deg, ${t.color}cc, ${t.color}88)`,
+    borderColor: (() => { const r = parseInt(t.color.slice(1,3),16), g = parseInt(t.color.slice(3,5),16), b = parseInt(t.color.slice(5,7),16); return `rgba(${r},${g},${b},0.4)`; })(),
+  })), [currentTrackConfig]);
+  const trackKeys = useMemo(() => TRACKS.map(t => t.key), [TRACKS]);
+
   const capacity = currentState.capacity;
   const tracks = currentState.tracks;
-  const trackCapacity = currentState.trackCapacity || JSON.parse(JSON.stringify(DEFAULT_TRACK_CAPACITY));
+  const trackCapacity = currentState.trackCapacity || buildDefaultTrackCapacity(currentTrackConfig);
   const splits = currentState.splits || {};
   const timelineConfig = currentState.timelineConfig || {...DEFAULT_TIMELINE_CONFIG};
   const milestones = currentState.milestones || [];
@@ -1891,7 +1906,7 @@ function App({ onLogout, user: authUser }) {
   };
   const updateTrackCapacity = (trackKey, discipline, value) => {
     setVerticalStatesWithUndo(prev => {
-      const prevTC = prev[activeVertical].trackCapacity || JSON.parse(JSON.stringify(DEFAULT_TRACK_CAPACITY));
+      const prevTC = prev[activeVertical].trackCapacity || buildDefaultTrackCapacity(prev[activeVertical].trackConfig);
       const newTC = { ...prevTC, [trackKey]: { ...prevTC[trackKey], [discipline]: value } };
       // Validate: sum across tracks for this discipline can't exceed total capacity
       const sum = Object.values(newTC).reduce((s, tc) => s + (tc[discipline] || 0), 0);
@@ -1904,6 +1919,87 @@ function App({ onLogout, user: authUser }) {
       return newState;
     });
   };
+
+  // ── Track Management (add/remove/rename/recolor) ──
+  const TRACK_COLOR_PALETTE = ['#6c5ce7','#0984e3','#e17055','#a29bfe','#00cec9','#fd79a8','#ffeaa7','#55efc4','#74b9ff','#b2bec3'];
+
+  const addTrack = useCallback(() => {
+    const name = prompt('Track name:');
+    if (!name || !name.trim()) return;
+    const label = name.trim();
+    const key = CP.generateTrackKey(label);
+    if (!key) { alert('Invalid track name.'); return; }
+    const cfg = currentTrackConfig;
+    if (cfg.some(t => t.key === key)) { alert('A track with a similar name already exists.'); return; }
+    const usedColors = new Set(cfg.map(t => t.color));
+    const newColor = TRACK_COLOR_PALETTE.find(c => !usedColors.has(c)) || '#6c5ce7';
+    const newConfig = [...cfg, { key, label, color: newColor }];
+    setVerticalStatesWithUndo(prev => {
+      const vs = prev[activeVertical];
+      const newState = { ...prev, [activeVertical]: {
+        ...vs,
+        trackConfig: newConfig,
+        tracks: { ...vs.tracks, [key]: [] },
+        trackCapacity: { ...vs.trackCapacity, [key]: { backend: 0, frontend: 0, natives: 0, qa: 0 } },
+        trackBlockOrder: { ...vs.trackBlockOrder, [key]: [] },
+      }};
+      debouncedSave(activeVertical, newState[activeVertical]);
+      return newState;
+    });
+  }, [currentTrackConfig, activeVertical, debouncedSave, setVerticalStatesWithUndo]);
+
+  const removeTrack = useCallback((trackIndex) => {
+    const track = currentTrackConfig[trackIndex];
+    if (!track) return;
+    const projectsInTrack = (currentState.tracks[track.key] || []).length;
+    const msg = projectsInTrack > 0
+      ? `Remove track "${track.label}"? ${projectsInTrack} project(s) will move to the backlog.`
+      : `Remove track "${track.label}"?`;
+    if (!confirm(msg)) return;
+    const newConfig = currentTrackConfig.filter((_, i) => i !== trackIndex);
+    setVerticalStatesWithUndo(prev => {
+      const vs = prev[activeVertical];
+      const newTracks = { ...vs.tracks }; delete newTracks[track.key];
+      const newTC = { ...vs.trackCapacity }; delete newTC[track.key];
+      const newTBO = { ...vs.trackBlockOrder }; delete newTBO[track.key];
+      const newSLC = { ...vs.trackSubLaneCounts }; delete newSLC[track.key];
+      // Clean splits targeting removed track
+      const newSplits = {};
+      for (const [pid, ts] of Object.entries(vs.splits || {})) {
+        const cleaned = { ...ts }; delete cleaned[track.key];
+        if (Object.keys(cleaned).length > 0) newSplits[pid] = cleaned;
+      }
+      // Clean timeline data
+      const prefix = track.key + ':';
+      const newTO = {}; for (const [k, v] of Object.entries(vs.timelineOverrides || {})) { if (!k.startsWith(prefix)) newTO[k] = v; }
+      const newTLA = {}; for (const [k, v] of Object.entries(vs.timelineLaneAssignments || {})) { if (!k.startsWith(prefix)) newTLA[k] = v; }
+      const newState = { ...prev, [activeVertical]: {
+        ...vs, trackConfig: newConfig, tracks: newTracks, trackCapacity: newTC,
+        trackBlockOrder: newTBO, trackSubLaneCounts: newSLC, splits: newSplits,
+        timelineOverrides: newTO, timelineLaneAssignments: newTLA,
+      }};
+      debouncedSave(activeVertical, newState[activeVertical]);
+      return newState;
+    });
+  }, [currentTrackConfig, currentState, activeVertical, debouncedSave, setVerticalStatesWithUndo]);
+
+  const updateTrackLabel = useCallback((trackIndex, newLabel) => {
+    const newConfig = currentTrackConfig.map((t, i) => i === trackIndex ? { ...t, label: newLabel } : t);
+    setVerticalStatesWithUndo(prev => {
+      const newState = { ...prev, [activeVertical]: { ...prev[activeVertical], trackConfig: newConfig }};
+      debouncedSave(activeVertical, newState[activeVertical]);
+      return newState;
+    });
+  }, [currentTrackConfig, activeVertical, debouncedSave, setVerticalStatesWithUndo]);
+
+  const updateTrackColor = useCallback((trackIndex, newColor) => {
+    const newConfig = currentTrackConfig.map((t, i) => i === trackIndex ? { ...t, color: newColor } : t);
+    setVerticalStatesWithUndo(prev => {
+      const newState = { ...prev, [activeVertical]: { ...prev[activeVertical], trackConfig: newConfig }};
+      debouncedSave(activeVertical, newState[activeVertical]);
+      return newState;
+    });
+  }, [currentTrackConfig, activeVertical, debouncedSave, setVerticalStatesWithUndo]);
 
   const saveSplit = (projectId, targetTrack, sizings) => {
     setVerticalStatesWithUndo(prev => {
@@ -2290,14 +2386,14 @@ function App({ onLogout, user: authUser }) {
 
   const ghostsByTrack = useMemo(() => {
     try {
-      return CP.computeGhostsByTrack(splits, projectById, tracks);
+      return CP.computeGhostsByTrack(splits, projectById, tracks, trackKeys);
     } catch (err) {
       console.error('ghostsByTrack error:', err, 'splits:', JSON.stringify(splits));
       const result = {};
       for (const t of TRACKS) result[t.key] = [];
       return result;
     }
-  }, [splits, projectById, tracks]);
+  }, [splits, projectById, tracks, trackKeys]);
 
   const FilterDropdown = ({ filterKey, label }) => {
     const values = uniqueValues[filterKey];
@@ -2332,11 +2428,11 @@ function App({ onLogout, user: authUser }) {
     return result;
   }, [tracks, projectById, filterProjects, currentData]);
 
-  const trackUsed = useMemo(() => CP.computeTrackUsed(trackProjects, ghostsByTrack, splits, sizeMap), [trackProjects, ghostsByTrack, splits, sizeMap]);
+  const trackUsed = useMemo(() => CP.computeTrackUsed(trackProjects, ghostsByTrack, splits, sizeMap, trackKeys), [trackProjects, ghostsByTrack, splits, sizeMap, trackKeys]);
 
   const unallocated = useMemo(() => CP.computeUnallocated(capacity, trackCapacity), [capacity, trackCapacity]);
 
-  const trackOverflow = useMemo(() => CP.computeTrackOverflow(trackProjects, trackCapacity, ghostsByTrack, trackBlockOrder, splits, sizeMap), [trackProjects, trackCapacity, ghostsByTrack, trackBlockOrder, splits, sizeMap]);
+  const trackOverflow = useMemo(() => CP.computeTrackOverflow(trackProjects, trackCapacity, ghostsByTrack, trackBlockOrder, splits, sizeMap, trackKeys), [trackProjects, trackCapacity, ghostsByTrack, trackBlockOrder, splits, sizeMap, trackKeys]);
 
   // ── Timeline helpers ──
   const updateTimelineConfig = useCallback((updates) => {
@@ -3127,6 +3223,7 @@ function App({ onLogout, user: authUser }) {
           <button className={`settings-tab ${settingsTab === 'alloc' ? 'active' : ''}`} onClick={() => toggleSettingsTab('alloc')}>📊 Swimlane Allocation</button>
           <button className={`settings-tab ${settingsTab === 'demand' ? 'active' : ''}`} onClick={() => toggleSettingsTab('demand')}>🎯 Demand & Buffer</button>
           <button className={`settings-tab ${settingsTab === 'usage' ? 'active' : ''}`} onClick={() => toggleSettingsTab('usage')}>📈 Capacity Usage</button>
+          <button className={`settings-tab ${settingsTab === 'tracks' ? 'active' : ''}`} onClick={() => toggleSettingsTab('tracks')}>Tracks</button>
         </div>
 
         {settingsTab === 'config' && (
@@ -3235,6 +3332,33 @@ function App({ onLogout, user: authUser }) {
               <div className="cap-total">
                 {renderCapBar('Total Capacity', totalUsed, totalCapacity)}
               </div>
+            </div>
+          </div>
+        )}
+
+        {settingsTab === 'tracks' && (
+          <div className="settings-tab-content">
+            <div style={{maxWidth:600}}>
+              <h3 style={{fontSize:11,textTransform:'uppercase',letterSpacing:1,color:'var(--text2)',marginBottom:8}}>Swimlane Tracks</h3>
+              {currentTrackConfig.map((t, idx) => (
+                <div key={t.key} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderBottom:'1px solid var(--border)'}}>
+                  <div style={{width:20,height:20,borderRadius:4,background:`linear-gradient(135deg, ${t.color}cc, ${t.color}88)`,flexShrink:0}} />
+                  <input type="color" value={t.color}
+                    onChange={e => updateTrackColor(idx, e.target.value)}
+                    style={{width:28,height:28,border:'none',background:'none',cursor:'pointer',padding:0}} />
+                  <input type="text" value={t.label}
+                    onChange={e => updateTrackLabel(idx, e.target.value)}
+                    style={{flex:1,padding:'4px 8px',background:'var(--bg)',border:'1px solid var(--border)',borderRadius:4,color:'var(--text)',fontSize:13}} />
+                  <button onClick={() => removeTrack(idx)}
+                    disabled={currentTrackConfig.length <= 1}
+                    style={{fontSize:10,padding:'4px 8px',background:'var(--red)',color:'white',border:'none',borderRadius:4,cursor:'pointer',opacity:currentTrackConfig.length<=1?0.3:1}}
+                    title="Remove track">Remove</button>
+                </div>
+              ))}
+              <button onClick={addTrack}
+                style={{marginTop:8,padding:'6px 14px',background:'linear-gradient(135deg, var(--accent), var(--accent2))',color:'white',border:'none',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer'}}>
+                + Add Track
+              </button>
             </div>
           </div>
         )}

@@ -130,11 +130,16 @@ function describeStateChanges(body, existing, vertical) {
     }
   } catch (e) { /* ignore */ }
 
-  const trackNames = { 'core-bonus': 'Core Bonus', 'gateway': 'Gateway', 'seo-aff': 'SEO & Affiliates' };
+  const defaultTrackNames = { 'core-bonus': 'Core Bonus', 'gateway': 'Gateway', 'seo-aff': 'SEO & Affiliates' };
+  const trackNameLookup = { ...defaultTrackNames };
+  const trackConfig = (existing && existing.trackConfig) || body.trackConfig;
+  if (Array.isArray(trackConfig)) {
+    for (const t of trackConfig) trackNameLookup[t.key] = t.label;
+  }
   const disciplineNames = { backend: 'Backend', frontend: 'Frontend', natives: 'Natives', qa: 'QA' };
 
   const resolveProject = (id) => projectLookup[String(id)] || `Project #${id}`;
-  const resolveTrack = (tk) => trackNames[tk] || tk;
+  const resolveTrack = (tk) => trackNameLookup[tk] || tk;
 
   // Build narrative descriptions for each changed field
   const narratives = [];
@@ -463,7 +468,12 @@ if (!fs.existsSync(path.join(DATA_DIR, getProjectsFile('growth')))) {
   const inProgressIds = SEED.filter(p => p.inProgress).map(p => p.id);
   saveJSON(getStateFile('growth'), {
     capacity: { ...DEFAULT_CAPACITY },
-    tracks: { 'core-bonus': inProgressIds, 'gateway': [] },
+    tracks: { 'core-bonus': inProgressIds, 'gateway': [], 'seo-aff': [] },
+    trackConfig: [
+      { key: 'core-bonus', label: 'Core Bonus', color: '#fdcb6e' },
+      { key: 'gateway', label: 'Gateway', color: '#e84393' },
+      { key: 'seo-aff', label: 'SEO & AFF', color: '#00b894' },
+    ],
   });
   console.log(`Seeded ${SEED.length} Growth projects`);
 }
@@ -524,7 +534,7 @@ app.get('/api/verticals/:key/poll', (req, res) => {
 });
 
 // ── Merge-safe fields list ──
-const STATE_FIELDS = ['capacity', 'tracks', 'trackCapacity', 'splits', 'timelineConfig', 'milestones', 'timelineOverrides', 'sizeMap', 'trackSubLaneCounts', 'timelineLaneAssignments', 'trackBlockOrder', 'buffer'];
+const STATE_FIELDS = ['capacity', 'tracks', 'trackCapacity', 'splits', 'timelineConfig', 'milestones', 'timelineOverrides', 'sizeMap', 'trackSubLaneCounts', 'timelineLaneAssignments', 'trackBlockOrder', 'buffer', 'trackConfig'];
 
 // ── Get state for a vertical ──
 app.get('/api/verticals/:key/state', (req, res) => {

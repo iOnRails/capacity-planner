@@ -7,6 +7,11 @@ var CP = (function() {
 
 const DEFAULT_SIZE_MAP = { XS: 0.5, S: 1, M: 2, L: 3, XL: 5, XXL: 8, XXXL: 13 };
 const TRACK_KEYS = ['core-bonus', 'gateway', 'seo-aff'];
+const DEFAULT_TRACK_CONFIG = [
+  { key: 'core-bonus', label: 'Core Bonus', color: '#fdcb6e' },
+  { key: 'gateway', label: 'Gateway', color: '#e84393' },
+  { key: 'seo-aff', label: 'SEO & AFF', color: '#00b894' },
+];
 const DISCIPLINES = ['backend', 'frontend', 'natives', 'qa'];
 const ZERO_DISC = () => ({ backend: 0, frontend: 0, natives: 0, qa: 0 });
 const IMPACT_ORDER = { XXXL: 7, XXL: 6, XL: 5, L: 4, M: 3, S: 2, XS: 1 };
@@ -14,6 +19,10 @@ const PILLAR_COLORS = {
   'Expansion': '#00b894', 'Acquisition': '#0984e3', 'Core Platform': '#6c5ce7',
   'Comms': '#e67e22', 'Gamification': '#e84393', 'Core Bonus': '#fdcb6e',
 };
+
+function generateTrackKey(label) {
+  return label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+}
 
 // ── Size & Sprint Conversions ──
 
@@ -54,24 +63,28 @@ function computeEffectiveSprints(project, splits, sizeMap) {
 
 // ── Migration ──
 
-function migrateTracks(tracks) {
+function migrateTracks(tracks, trackConfig) {
   const result = { ...tracks };
+  // Legacy gamification -> gateway rename
   if ('gamification' in result && !('gateway' in result)) {
     result['gateway'] = result['gamification'];
     delete result['gamification'];
   }
-  if (!result['core-bonus']) result['core-bonus'] = [];
-  if (!result['gateway']) result['gateway'] = [];
-  if (!result['seo-aff']) result['seo-aff'] = [];
+  // Ensure all configured track keys exist
+  const keys = trackConfig ? trackConfig.map(function(t) { return t.key; }) : TRACK_KEYS;
+  for (var i = 0; i < keys.length; i++) {
+    if (!result[keys[i]]) result[keys[i]] = [];
+  }
   return result;
 }
 
-function migrateTrackCapacity(tc) {
+function migrateTrackCapacity(tc, trackConfig) {
   const result = tc ? JSON.parse(JSON.stringify(tc)) : {};
   const ZERO = ZERO_DISC();
-  if (!result['core-bonus']) result['core-bonus'] = { ...ZERO };
-  if (!result['gateway']) result['gateway'] = { ...ZERO };
-  if (!result['seo-aff']) result['seo-aff'] = { ...ZERO };
+  const keys = trackConfig ? trackConfig.map(function(t) { return t.key; }) : TRACK_KEYS;
+  for (var i = 0; i < keys.length; i++) {
+    if (!result[keys[i]]) result[keys[i]] = { ...ZERO };
+  }
   return result;
 }
 
@@ -307,7 +320,8 @@ function getBlockBg(pillar) {
 // ── Return public API ──
 
 return {
-  DEFAULT_SIZE_MAP, TRACK_KEYS, DISCIPLINES, ZERO_DISC, IMPACT_ORDER, PILLAR_COLORS,
+  DEFAULT_SIZE_MAP, TRACK_KEYS, DEFAULT_TRACK_CONFIG, DISCIPLINES, ZERO_DISC, IMPACT_ORDER, PILLAR_COLORS,
+  generateTrackKey,
   sizeToSprints, computeProjectSprints, computeEffectiveSprints,
   migrateTracks, migrateTrackCapacity,
   removeFromTracks, deepMergeObject,

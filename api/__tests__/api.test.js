@@ -600,3 +600,69 @@ describe('Project validation edge cases', () => {
     expect(res.status).toBe(200);
   });
 });
+
+// ═══════════════════════════════════════════════
+// trackConfig persistence
+// ═══════════════════════════════════════════════
+
+describe('trackConfig state field', () => {
+  test('persists trackConfig and returns it in state', async () => {
+    const trackConfig = [
+      { key: 'alpha', label: 'Alpha Team', color: '#ff0000' },
+      { key: 'beta', label: 'Beta Team', color: '#00ff00' },
+    ];
+
+    await request(app)
+      .post('/api/verticals/growth/state')
+      .send({ trackConfig, _loadedAt: 0 });
+
+    const res = await request(app).get('/api/verticals/growth/state');
+    expect(res.body.trackConfig).toEqual(trackConfig);
+  });
+
+  test('state without trackConfig still works (backward compat)', async () => {
+    // Save state without trackConfig
+    await request(app)
+      .post('/api/verticals/growth/state')
+      .send({ capacity: { backend: 30 }, _loadedAt: 0 });
+
+    const res = await request(app).get('/api/verticals/growth/state');
+    expect(res.status).toBe(200);
+    expect(res.body.capacity.backend).toBe(30);
+    // trackConfig may be undefined — that's fine for backward compat
+  });
+
+  test('trackConfig participates in conflict resolution', async () => {
+    // Set initial state
+    await request(app)
+      .post('/api/verticals/growth/state')
+      .send({
+        trackConfig: [{ key: 'a', label: 'A', color: '#111' }],
+        _loadedAt: 0,
+      });
+
+    // Client loads state
+    const loadRes = await request(app).get('/api/verticals/growth/state');
+    const loadedAt = loadRes.body._loadedAt;
+
+    // Another client updates trackConfig
+    await request(app)
+      .post('/api/verticals/growth/state')
+      .send({
+        trackConfig: [{ key: 'a', label: 'A Updated', color: '#222' }],
+        _loadedAt: loadedAt,
+      });
+
+    // First client tries to update with stale _loadedAt — array field → rejected
+    const res = await request(app)
+      .post('/api/verticals/growth/state')
+      .send({
+        trackConfig: [{ key: 'b', label: 'B', color: '#333' }],
+        _loadedAt: loadedAt,
+      });
+
+    expect(res.body.conflicts).toContain('trackConfig');
+    // Server's version should win
+    expect(res.body.mergedState.trackConfig[0].label).toBe('A Updated');
+  });
+});

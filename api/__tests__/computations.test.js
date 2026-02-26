@@ -203,6 +203,123 @@ describe('migrateTrackCapacity', () => {
 });
 
 // ═══════════════════════════════════════════════════════════
+// generateTrackKey
+// ═══════════════════════════════════════════════════════════
+describe('generateTrackKey', () => {
+  test('converts label to slug', () => {
+    expect(CP.generateTrackKey('Core Bonus')).toBe('core-bonus');
+    expect(CP.generateTrackKey('SEO & AFF')).toBe('seo-aff');
+    expect(CP.generateTrackKey('My New Track')).toBe('my-new-track');
+  });
+
+  test('handles special characters', () => {
+    expect(CP.generateTrackKey('Track #1!')).toBe('track-1');
+  });
+
+  test('trims leading/trailing hyphens', () => {
+    expect(CP.generateTrackKey('---Test---')).toBe('test');
+  });
+
+  test('handles single word', () => {
+    expect(CP.generateTrackKey('Gateway')).toBe('gateway');
+  });
+
+  test('collapses multiple separators', () => {
+    expect(CP.generateTrackKey('A   &   B')).toBe('a-b');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════
+// DEFAULT_TRACK_CONFIG
+// ═══════════════════════════════════════════════════════════
+describe('DEFAULT_TRACK_CONFIG', () => {
+  test('has 3 default tracks', () => {
+    expect(CP.DEFAULT_TRACK_CONFIG).toHaveLength(3);
+    expect(CP.DEFAULT_TRACK_CONFIG.map(t => t.key)).toEqual(['core-bonus', 'gateway', 'seo-aff']);
+  });
+
+  test('each track has key, label, and color', () => {
+    for (const t of CP.DEFAULT_TRACK_CONFIG) {
+      expect(t).toHaveProperty('key');
+      expect(t).toHaveProperty('label');
+      expect(t).toHaveProperty('color');
+      expect(t.color).toMatch(/^#[0-9a-f]{6}$/);
+    }
+  });
+});
+
+// ═══════════════════════════════════════════════════════════
+// migrateTracks with custom trackConfig
+// ═══════════════════════════════════════════════════════════
+describe('migrateTracks with custom trackConfig', () => {
+  test('ensures only configured track keys exist', () => {
+    const config = [
+      { key: 'alpha', label: 'Alpha', color: '#ff0000' },
+      { key: 'beta', label: 'Beta', color: '#00ff00' },
+    ];
+    const result = CP.migrateTracks({}, config);
+    expect(result.alpha).toEqual([]);
+    expect(result.beta).toEqual([]);
+    expect(result['core-bonus']).toBeUndefined();
+    expect(result['gateway']).toBeUndefined();
+    expect(result['seo-aff']).toBeUndefined();
+  });
+
+  test('preserves existing data for configured keys', () => {
+    const config = [{ key: 'team-a', label: 'Team A', color: '#ff0000' }];
+    const result = CP.migrateTracks({ 'team-a': [1, 2] }, config);
+    expect(result['team-a']).toEqual([1, 2]);
+  });
+
+  test('still applies gamification migration', () => {
+    const config = [
+      { key: 'gateway', label: 'Gateway', color: '#e84393' },
+    ];
+    const result = CP.migrateTracks({ gamification: [5] }, config);
+    expect(result.gateway).toEqual([5]);
+    expect(result.gamification).toBeUndefined();
+  });
+
+  test('falls back to TRACK_KEYS when trackConfig is undefined', () => {
+    const result = CP.migrateTracks({}, undefined);
+    expect(result['core-bonus']).toEqual([]);
+    expect(result['gateway']).toEqual([]);
+    expect(result['seo-aff']).toEqual([]);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════
+// migrateTrackCapacity with custom trackConfig
+// ═══════════════════════════════════════════════════════════
+describe('migrateTrackCapacity with custom trackConfig', () => {
+  const ZERO = { backend: 0, frontend: 0, natives: 0, qa: 0 };
+
+  test('ensures only configured track keys exist', () => {
+    const config = [
+      { key: 'alpha', label: 'Alpha', color: '#ff0000' },
+      { key: 'beta', label: 'Beta', color: '#00ff00' },
+    ];
+    const result = CP.migrateTrackCapacity({}, config);
+    expect(result.alpha).toEqual(ZERO);
+    expect(result.beta).toEqual(ZERO);
+    expect(result['core-bonus']).toBeUndefined();
+  });
+
+  test('preserves existing capacity for configured keys', () => {
+    const config = [{ key: 'team-a', label: 'Team A', color: '#ff0000' }];
+    const result = CP.migrateTrackCapacity({ 'team-a': { backend: 10, frontend: 5, natives: 0, qa: 3 } }, config);
+    expect(result['team-a']).toEqual({ backend: 10, frontend: 5, natives: 0, qa: 3 });
+  });
+
+  test('falls back to TRACK_KEYS when trackConfig is undefined', () => {
+    const result = CP.migrateTrackCapacity({}, undefined);
+    expect(result['core-bonus']).toEqual(ZERO);
+    expect(result['gateway']).toEqual(ZERO);
+    expect(result['seo-aff']).toEqual(ZERO);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════
 // removeFromTracks
 // ═══════════════════════════════════════════════════════════
 describe('removeFromTracks', () => {
