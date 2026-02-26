@@ -901,13 +901,8 @@
   }
   .q-block:hover {
     border-color: rgba(255,255,255,0.25);
-    box-shadow: 0 6px 20px rgba(0,0,0,0.5);
-    z-index: 10;
-    min-width: fit-content;
-    overflow: visible;
-  }
-  .q-block:hover .block-title {
-    white-space: nowrap; display: block; -webkit-line-clamp: unset;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+    z-index: 5;
   }
   .q-block.in-progress { box-shadow: inset 0 0 0 2px var(--green); }
   .q-block .block-content {
@@ -2867,6 +2862,7 @@ function App({ onLogout, user: authUser }) {
       blocks.push({
         project, totalSprints, startQi, endQi, leftPct, widthPct,
         globalLeft, globalRight,
+        startDate: new Date(projStartMs), endDate: new Date(projEndMs),
         startsBeforeWindow: projStartMs < windowStart,
         endsAfterWindow: projEndMs > windowEnd,
       });
@@ -3496,7 +3492,8 @@ function App({ onLogout, user: authUser }) {
             ))}
             {/* Project blocks — each spans its quarter range as a single element */}
             {quarterlyData.blocks.map((block) => {
-              const {project: p, startQi, endQi, leftPct, widthPct, lane, startsBeforeWindow, endsAfterWindow} = block;
+              const {project: p, startQi, endQi, leftPct, widthPct, lane, startDate, endDate, startsBeforeWindow, endsAfterWindow} = block;
+              const fmtDate = d => d.toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'});
               const cls = ['q-block', p.inProgress ? 'in-progress' : '',
                 endsAfterWindow ? 'continues-right' : '',
                 startsBeforeWindow ? 'continues-left' : ''].filter(Boolean).join(' ');
@@ -3505,7 +3502,7 @@ function App({ onLogout, user: authUser }) {
                   style={{gridColumn: `${startQi + 1} / ${endQi + 2}`, gridRow: lane + 2}}>
                   <div className={cls}
                     style={{left: `calc(${leftPct}% + 3px)`, width: `calc(${widthPct}% - 6px)`, background: CP.getBlockBg(p.pillar, pillarColorMap)}}
-                    onMouseEnter={(e) => setQTip({text: p.subTask, x: e.clientX, y: e.clientY})}
+                    onMouseEnter={(e) => setQTip({text: p.subTask, start: fmtDate(startDate), end: fmtDate(endDate), x: e.clientX, y: e.clientY})}
                     onMouseMove={(e) => setQTip(t => t ? {...t, x: e.clientX, y: e.clientY} : t)}
                     onMouseLeave={() => setQTip(null)}>
                     <div className="block-content">
@@ -3519,7 +3516,10 @@ function App({ onLogout, user: authUser }) {
               <div style={{gridColumn:'1/5',gridRow:2,textAlign:'center',padding:'48px',color:'var(--text2)',fontSize:12}}>No roadmap projects in the current 4 quarters</div>
             )}
           </div>
-          {qTip && <div className="q-tip" style={{left: qTip.x + 12, top: qTip.y - 32}}>{qTip.text}</div>}
+          {qTip && <div className="q-tip" style={{left: qTip.x + 12, top: qTip.y - 40}}>
+            <div>{qTip.text}</div>
+            <div style={{fontSize:10,fontWeight:400,color:'var(--text2)',marginTop:3}}>{qTip.start} → {qTip.end}</div>
+          </div>}
         </div>
       ) : activeTab === 'projects' ? (
         projectsTableJSX
