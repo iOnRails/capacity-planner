@@ -111,6 +111,11 @@ beforeEach(() => {
   fs.readdirSync(TEST_DATA_DIR).forEach(f => {
     if (f.endsWith('.json')) fs.unlinkSync(path.join(TEST_DATA_DIR, f));
   });
+  // Write editors.json so test emails pass authorization middleware
+  fs.writeFileSync(
+    path.join(TEST_DATA_DIR, 'editors.json'),
+    JSON.stringify(['test@novibet.com'])
+  );
 });
 
 // ═══════════════════════════════════════════════
@@ -219,6 +224,7 @@ describe('WebSocket broadcast on state save', () => {
     });
 
     await httpRequest('post', '/api/verticals/growth/state')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ capacity: { backend: 60 }, _loadedAt: 0 });
 
     await new Promise(r => setTimeout(r, 500));
@@ -244,6 +250,7 @@ describe('WebSocket broadcast on project save', () => {
     const updatePromise = waitForMessage(ws, m => m.type === 'update');
 
     await httpRequest('post', '/api/verticals/growth/projects')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ projects: [{ id: 1, subTask: 'Test' }] });
 
     const msg = await updatePromise;
@@ -269,6 +276,7 @@ describe('Sender exclusion via X-WS-ID', () => {
 
     await httpRequest('post', '/api/verticals/growth/state')
       .set('X-WS-ID', 'my-tab-123')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ capacity: { backend: 70 }, _loadedAt: 0 });
 
     const msg = await updatePromise;
@@ -296,6 +304,7 @@ describe('Multiple clients on same vertical', () => {
     const p2 = waitForMessage(ws2, m => m.type === 'update');
 
     await httpRequest('post', '/api/verticals/growth/state')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ capacity: { backend: 80 }, _loadedAt: 0 });
 
     const [msg1, msg2] = await Promise.all([p1, p2]);

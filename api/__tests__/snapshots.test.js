@@ -40,6 +40,11 @@ beforeEach(() => {
   fs.readdirSync(TEST_DATA_DIR).forEach(f => {
     if (f.endsWith('.json')) fs.unlinkSync(path.join(TEST_DATA_DIR, f));
   });
+  // Write editors.json so test emails pass authorization middleware
+  fs.writeFileSync(
+    path.join(TEST_DATA_DIR, 'editors.json'),
+    JSON.stringify(['test@novibet.com', 'alice@novibet.com', 'bob@novibet.com'])
+  );
 });
 
 // ═══════════════════════════════════════════════
@@ -56,8 +61,10 @@ describe('GET /api/verticals/:key/snapshots', () => {
   test('returns saved snapshots with metadata only', async () => {
     // First save state and projects
     await request(app).post('/api/verticals/growth/state')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ capacity: { backend: 30 }, _loadedAt: 0 });
     await request(app).post('/api/verticals/growth/projects')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ projects: [{ id: 1, subTask: 'Test Project' }] });
 
     // Save a snapshot
@@ -87,8 +94,10 @@ describe('POST /api/verticals/:key/snapshots', () => {
   test('saves snapshot with current state and projects', async () => {
     // Set up state and projects
     await request(app).post('/api/verticals/growth/state')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ capacity: { backend: 50, frontend: 40 }, _loadedAt: 0 });
     await request(app).post('/api/verticals/growth/projects')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ projects: [{ id: 1, subTask: 'A' }, { id: 2, subTask: 'B' }] });
 
     const res = await request(app).post('/api/verticals/growth/snapshots')
@@ -111,6 +120,7 @@ describe('POST /api/verticals/:key/snapshots', () => {
 
   test('rejects snapshot without name', async () => {
     const res = await request(app).post('/api/verticals/growth/snapshots')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ description: 'No name' });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/name/i);
@@ -118,14 +128,17 @@ describe('POST /api/verticals/:key/snapshots', () => {
 
   test('rejects snapshot with empty name', async () => {
     const res = await request(app).post('/api/verticals/growth/snapshots')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ name: '   ' });
     expect(res.status).toBe(400);
   });
 
   test('newest snapshot is first in list', async () => {
     await request(app).post('/api/verticals/growth/snapshots')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ name: 'First' });
     await request(app).post('/api/verticals/growth/snapshots')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ name: 'Second' });
 
     const snapshots = loadJSON(getSnapshotsFile('growth'), []);
@@ -142,19 +155,24 @@ describe('POST /api/verticals/:key/snapshots/:id/restore', () => {
   test('restores snapshot state and projects', async () => {
     // Save initial state
     await request(app).post('/api/verticals/growth/state')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ capacity: { backend: 100 }, _loadedAt: 0 });
     await request(app).post('/api/verticals/growth/projects')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ projects: [{ id: 1, subTask: 'Original' }] });
 
     // Save snapshot
     const saveRes = await request(app).post('/api/verticals/growth/snapshots')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ name: 'Before Changes' });
     const snapshotId = saveRes.body.snapshot.id;
 
     // Make changes
     await request(app).post('/api/verticals/growth/state')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ capacity: { backend: 200 }, _loadedAt: 0 });
     await request(app).post('/api/verticals/growth/projects')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ projects: [{ id: 1, subTask: 'Changed' }, { id: 2, subTask: 'New' }] });
 
     // Verify changed state
@@ -180,21 +198,26 @@ describe('POST /api/verticals/:key/snapshots/:id/restore', () => {
 
   test('returns 404 for non-existent snapshot', async () => {
     const res = await request(app)
-      .post('/api/verticals/growth/snapshots/nonexistent/restore');
+      .post('/api/verticals/growth/snapshots/nonexistent/restore')
+      .set('X-User-Email', 'kmermigkas@novibet.com');
     expect(res.status).toBe(404);
   });
 
   test('returns full state and projects in response', async () => {
     await request(app).post('/api/verticals/growth/state')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ capacity: { backend: 75 }, _loadedAt: 0 });
     await request(app).post('/api/verticals/growth/projects')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ projects: [{ id: 1, subTask: 'Test' }] });
 
     const saveRes = await request(app).post('/api/verticals/growth/snapshots')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ name: 'Check Response' });
 
     const restoreRes = await request(app)
-      .post(`/api/verticals/growth/snapshots/${saveRes.body.snapshot.id}/restore`);
+      .post(`/api/verticals/growth/snapshots/${saveRes.body.snapshot.id}/restore`)
+      .set('X-User-Email', 'kmermigkas@novibet.com');
     expect(restoreRes.body.state).toBeDefined();
     expect(restoreRes.body.projects).toBeDefined();
     expect(restoreRes.body.state.capacity.backend).toBe(75);
@@ -210,13 +233,16 @@ describe('DELETE /api/verticals/:key/snapshots/:id', () => {
   test('deletes a snapshot', async () => {
     // Save two snapshots
     const res1 = await request(app).post('/api/verticals/growth/snapshots')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ name: 'Keep' });
     const res2 = await request(app).post('/api/verticals/growth/snapshots')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ name: 'Delete Me' });
 
     // Delete the second one
     const delRes = await request(app)
-      .delete(`/api/verticals/growth/snapshots/${res2.body.snapshot.id}`);
+      .delete(`/api/verticals/growth/snapshots/${res2.body.snapshot.id}`)
+      .set('X-User-Email', 'kmermigkas@novibet.com');
     expect(delRes.status).toBe(200);
     expect(delRes.body.success).toBe(true);
 
@@ -228,7 +254,8 @@ describe('DELETE /api/verticals/:key/snapshots/:id', () => {
 
   test('returns 404 for non-existent snapshot', async () => {
     const res = await request(app)
-      .delete('/api/verticals/growth/snapshots/nonexistent');
+      .delete('/api/verticals/growth/snapshots/nonexistent')
+      .set('X-User-Email', 'kmermigkas@novibet.com');
     expect(res.status).toBe(404);
   });
 });

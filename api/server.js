@@ -32,6 +32,16 @@ function getProjectsFile(key) { return `projects_${key}.json`; }
 function getStateFile(key) { return `state_${key}.json`; }
 const AUDIT_FILE = 'audit_log.json';
 const AUDIT_MAX_DAYS = 30;
+const EDITORS_FILE = 'editors.json';
+const ADMIN_EMAIL = 'kmermigkas@novibet.com';
+
+function isEditorUser(email) {
+  if (!email) return false;
+  const e = email.toLowerCase();
+  if (e === ADMIN_EMAIL) return true;
+  const editors = loadJSON(EDITORS_FILE, []);
+  return editors.map(x => x.toLowerCase()).includes(e);
+}
 
 // ── Input Sanitization ──
 const KNOWN_KPIS = new Set(['Revenue', 'Efficiency', 'Experience', '']);
@@ -489,6 +499,18 @@ app.use((req, res, next) => {
   next();
 });
 
+// ── Authorization: reject writes from non-editors ──
+app.use((req, res, next) => {
+  if (['POST', 'PUT', 'DELETE'].includes(req.method)) {
+    if (req.path === '/api/test-post' || req.path === '/api/health') return next();
+    const email = req.headers['x-user-email'] || '';
+    if (!isEditorUser(email)) {
+      return res.status(403).json({ error: 'View-only access. Contact admin for editor permissions.' });
+    }
+  }
+  next();
+});
+
 // ── Debug: test POST endpoint ──
 app.post('/api/test-post', (req, res) => {
   res.json({ ok: true, method: req.method, path: req.path, bodyKeys: Object.keys(req.body || {}) });
@@ -822,6 +844,31 @@ app.get('/api/audit-log', (req, res) => {
   res.json({ entries: log.slice(0, 500), total: log.length });
 });
 
+// ── Editors management ──
+app.get('/api/editors', (req, res) => {
+  const editors = loadJSON(EDITORS_FILE, []);
+  res.json({ editors, admin: ADMIN_EMAIL });
+});
+
+app.post('/api/editors', (req, res) => {
+  const email = (req.headers['x-user-email'] || '').toLowerCase();
+  if (email !== ADMIN_EMAIL) {
+    return res.status(403).json({ error: 'Only admin can manage editors' });
+  }
+  const { editors } = req.body;
+  if (!Array.isArray(editors)) {
+    return res.status(400).json({ error: 'Editors must be an array of email strings' });
+  }
+  const cleaned = [...new Set(
+    editors
+      .map(e => String(e).toLowerCase().trim())
+      .filter(e => e.endsWith('@novibet.com') && e !== ADMIN_EMAIL)
+  )];
+  saveJSON(EDITORS_FILE, cleaned);
+  logAudit(req, 'Updated editors', `Editor list updated: ${cleaned.length} editors`);
+  res.json({ success: true, editors: cleaned });
+});
+
 // ── Catch-all 404 (debug) ──
 app.use((req, res) => {
   console.log(`!! 404: ${req.method} ${req.url}`);
@@ -959,4 +1006,7 @@ module.exports = {
   sanitizeString,
   sanitizeProject,
   sanitizeMilestones,
+  EDITORS_FILE,
+  ADMIN_EMAIL,
+  isEditorUser,
 };

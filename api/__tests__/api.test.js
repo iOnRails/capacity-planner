@@ -30,6 +30,11 @@ beforeEach(() => {
   fs.readdirSync(TEST_DATA_DIR).forEach(f => {
     if (f.endsWith('.json')) fs.unlinkSync(path.join(TEST_DATA_DIR, f));
   });
+  // Write editors.json so test emails pass authorization middleware
+  fs.writeFileSync(
+    path.join(TEST_DATA_DIR, 'editors.json'),
+    JSON.stringify(['test@novibet.com', 'tester@novibet.com', 'alice@novibet.com', 'bob@novibet.com'])
+  );
 });
 
 afterAll(() => {
@@ -150,6 +155,7 @@ describe('POST /api/verticals/:key/projects', () => {
   test('rejects non-array projects', async () => {
     const res = await request(app)
       .post('/api/verticals/growth/projects')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ projects: 'not an array' });
     expect(res.status).toBe(400);
     expect(res.body.error).toContain('array');
@@ -158,6 +164,7 @@ describe('POST /api/verticals/:key/projects', () => {
   test('rejects project without id', async () => {
     const res = await request(app)
       .post('/api/verticals/growth/projects')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ projects: [{ subTask: 'No ID' }] });
     expect(res.status).toBe(400);
     expect(res.body.error).toContain('missing required field');
@@ -166,6 +173,7 @@ describe('POST /api/verticals/:key/projects', () => {
   test('rejects invalid size values', async () => {
     const res = await request(app)
       .post('/api/verticals/growth/projects')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ projects: [{ id: 1, backend: 'INVALID' }] });
     expect(res.status).toBe(400);
     expect(res.body.error).toContain('invalid');
@@ -176,6 +184,7 @@ describe('POST /api/verticals/:key/projects', () => {
     for (const size of validSizes) {
       const res = await request(app)
         .post('/api/verticals/growth/projects')
+        .set('X-User-Email', 'kmermigkas@novibet.com')
         .send({ projects: [{ id: 1, backend: size }] });
       expect(res.status).toBe(200);
     }
@@ -184,6 +193,7 @@ describe('POST /api/verticals/:key/projects', () => {
   test('rejects invalid impact values', async () => {
     const res = await request(app)
       .post('/api/verticals/growth/projects')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ projects: [{ id: 1, impact: 'HUGE' }] });
     expect(res.status).toBe(400);
     expect(res.body.error).toContain('invalid impact');
@@ -192,6 +202,7 @@ describe('POST /api/verticals/:key/projects', () => {
   test('PUT works as alias for POST', async () => {
     const res = await request(app)
       .put('/api/verticals/growth/projects')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ projects: [{ id: 1, subTask: 'Via PUT' }] });
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -214,6 +225,7 @@ describe('Track cleanup on project save', () => {
     // Save projects with only IDs 1 and 2 (removes 3 and 4)
     await request(app)
       .post('/api/verticals/growth/projects')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ projects: [{ id: 1 }, { id: 2 }] });
 
     const savedState = JSON.parse(fs.readFileSync(path.join(TEST_DATA_DIR, 'state_growth.json'), 'utf8'));
@@ -261,6 +273,7 @@ describe('POST /api/verticals/:key/state', () => {
   test('rejects request with no state fields', async () => {
     const res = await request(app)
       .post('/api/verticals/growth/state')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ _loadedAt: 123 });
     expect(res.status).toBe(400);
     expect(res.body.error).toContain('No state fields');
@@ -270,6 +283,7 @@ describe('POST /api/verticals/:key/state', () => {
     // Save initial state
     await request(app)
       .post('/api/verticals/growth/state')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ capacity: { backend: 40 }, tracks: { 'core-bonus': [1] }, _loadedAt: 0 });
 
     // Get the state to have a valid _loadedAt
@@ -279,6 +293,7 @@ describe('POST /api/verticals/:key/state', () => {
     // Update only capacity
     const res = await request(app)
       .post('/api/verticals/growth/state')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ capacity: { backend: 50 }, _loadedAt: loadedAt });
 
     expect(res.body.success).toBe(true);
@@ -290,6 +305,7 @@ describe('POST /api/verticals/:key/state', () => {
   test('PUT works as alias for POST', async () => {
     const res = await request(app)
       .put('/api/verticals/growth/state')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ capacity: { backend: 60 }, _loadedAt: 0 });
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -305,6 +321,7 @@ describe('State merge conflict resolution', () => {
     // Client A saves
     await request(app)
       .post('/api/verticals/growth/state')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ capacity: { backend: 40 }, _loadedAt: 0 });
 
     // Client B loads
@@ -314,6 +331,7 @@ describe('State merge conflict resolution', () => {
     // Client B saves with fresh _loadedAt — no conflict
     const res = await request(app)
       .post('/api/verticals/growth/state')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ capacity: { backend: 50 }, _loadedAt: loadedAt });
 
     expect(res.body.conflicts).toEqual([]);
@@ -327,12 +345,14 @@ describe('State merge conflict resolution', () => {
     // Step 2: Client A saves milestones — this sets fieldTs.milestones = now
     await request(app)
       .post('/api/verticals/growth/state')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ milestones: [{ label: 'M1 by A', week: 2 }], _loadedAt: 0 });
 
     // Step 3: Client B tries to save milestones with a stale _loadedAt
     // Since fieldTs.milestones (set in step 2) > staleLoadedAt, this should conflict
     const res = await request(app)
       .post('/api/verticals/growth/state')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ milestones: [{ label: 'M1 Stale by B', week: 3 }], _loadedAt: staleLoadedAt });
 
     // Milestones is an array — cannot do sub-key merge, so it's rejected
@@ -345,6 +365,7 @@ describe('State merge conflict resolution', () => {
     // Initial state with multiple disciplines
     await request(app)
       .post('/api/verticals/growth/state')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ capacity: { backend: 40, frontend: 30, qa: 20 }, _loadedAt: 0 });
 
     // Client A loads
@@ -353,11 +374,13 @@ describe('State merge conflict resolution', () => {
     // Client A changes backend
     await request(app)
       .post('/api/verticals/growth/state')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ capacity: { backend: 50, frontend: 30, qa: 20 }, _loadedAt: loadRes.body._loadedAt });
 
     // Client B (stale) sends change to frontend only, deleting qa
     const res = await request(app)
       .post('/api/verticals/growth/state')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ capacity: { backend: 40, frontend: 35 }, _loadedAt: loadRes.body._loadedAt - 100000 });
 
     // Should be merged, not rejected — capacity is an object
@@ -370,6 +393,7 @@ describe('State merge conflict resolution', () => {
     // Save initial
     await request(app)
       .post('/api/verticals/growth/state')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ capacity: { backend: 40 }, _loadedAt: 0 });
 
     const loadRes = await request(app).get('/api/verticals/growth/state');
@@ -378,11 +402,13 @@ describe('State merge conflict resolution', () => {
     // Re-save same value — fieldTs should NOT be bumped
     await request(app)
       .post('/api/verticals/growth/state')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ capacity: { backend: 40 }, _loadedAt: loadedAt });
 
     // Another client with same loadedAt should not see conflict
     const res = await request(app)
       .post('/api/verticals/growth/state')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ capacity: { backend: 45 }, _loadedAt: loadedAt });
 
     expect(res.body.conflicts).toEqual([]);
@@ -399,6 +425,7 @@ describe('GET /api/verticals/:key/poll', () => {
     // Save some state first
     await request(app)
       .post('/api/verticals/growth/state')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ capacity: { backend: 40 }, _loadedAt: 0 });
 
     const res = await request(app).get('/api/verticals/growth/poll');
@@ -522,6 +549,7 @@ describe('State merge — mixed accept/reject', () => {
     // Set initial state
     await request(app)
       .post('/api/verticals/growth/state')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ capacity: { backend: 10 }, milestones: [{ id: 1, name: 'M1' }], _loadedAt: 0 });
 
     // Client loads state
@@ -531,11 +559,13 @@ describe('State merge — mixed accept/reject', () => {
     // Another client updates milestones (makes milestones stale for first client)
     await request(app)
       .post('/api/verticals/growth/state')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ milestones: [{ id: 1, name: 'M1 Updated' }], _loadedAt: loadedAt });
 
     // First client sends BOTH capacity (fresh-ish, object field → merge) and milestones (stale, array → reject)
     const res = await request(app)
       .post('/api/verticals/growth/state')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ capacity: { backend: 20 }, milestones: [{ id: 2, name: 'M2' }], _loadedAt: loadedAt });
 
     // Milestones should be rejected (array, stale)
@@ -551,11 +581,13 @@ describe('State merge — _loadedAt: 0 force overwrite', () => {
     // Set initial state and let fieldTs be set
     await request(app)
       .post('/api/verticals/growth/state')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ capacity: { backend: 10 }, milestones: [{ id: 1, name: 'M1' }], _loadedAt: 0 });
 
     // Save again with _loadedAt: 0 — should always accept
     const res = await request(app)
       .post('/api/verticals/growth/state')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ capacity: { backend: 99 }, milestones: [{ id: 2, name: 'Overwrite' }], _loadedAt: 0 });
 
     expect(res.body.conflicts).toEqual([]);
@@ -569,11 +601,13 @@ describe('Project save — track cleanup', () => {
     // Set up tracks with project IDs
     await request(app)
       .post('/api/verticals/growth/state')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ tracks: { 'core-bonus': [1, 2, 3], 'gateway': [4], 'seo-aff': [] }, _loadedAt: 0 });
 
     // Save projects WITHOUT id 2 (simulating deletion)
     await request(app)
       .post('/api/verticals/growth/projects')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ projects: [{ id: 1 }, { id: 3 }, { id: 4 }] });
 
     // Verify tracks no longer contain deleted project
@@ -588,6 +622,7 @@ describe('Project validation edge cases', () => {
   test('rejects projects with duplicate IDs gracefully', async () => {
     const res = await request(app)
       .post('/api/verticals/growth/projects')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ projects: [{ id: 1, backend: 'S' }, { id: 1, backend: 'M' }] });
     // Should accept (server doesn't validate uniqueness) but not crash
     expect(res.status).toBe(200);
@@ -596,6 +631,7 @@ describe('Project validation edge cases', () => {
   test('accepts project with all empty size fields', async () => {
     const res = await request(app)
       .post('/api/verticals/growth/projects')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ projects: [{ id: 1, backend: '', frontend: '', natives: '', qa: '', impact: '' }] });
     expect(res.status).toBe(200);
   });
@@ -614,6 +650,7 @@ describe('trackConfig state field', () => {
 
     await request(app)
       .post('/api/verticals/growth/state')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ trackConfig, _loadedAt: 0 });
 
     const res = await request(app).get('/api/verticals/growth/state');
@@ -624,6 +661,7 @@ describe('trackConfig state field', () => {
     // Save state without trackConfig
     await request(app)
       .post('/api/verticals/growth/state')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ capacity: { backend: 30 }, _loadedAt: 0 });
 
     const res = await request(app).get('/api/verticals/growth/state');
@@ -636,6 +674,7 @@ describe('trackConfig state field', () => {
     // Set initial state
     await request(app)
       .post('/api/verticals/growth/state')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({
         trackConfig: [{ key: 'a', label: 'A', color: '#111' }],
         _loadedAt: 0,
@@ -648,6 +687,7 @@ describe('trackConfig state field', () => {
     // Another client updates trackConfig
     await request(app)
       .post('/api/verticals/growth/state')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({
         trackConfig: [{ key: 'a', label: 'A Updated', color: '#222' }],
         _loadedAt: loadedAt,
@@ -656,6 +696,7 @@ describe('trackConfig state field', () => {
     // First client tries to update with stale _loadedAt — array field → rejected
     const res = await request(app)
       .post('/api/verticals/growth/state')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({
         trackConfig: [{ key: 'b', label: 'B', color: '#333' }],
         _loadedAt: loadedAt,

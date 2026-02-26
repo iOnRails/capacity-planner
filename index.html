@@ -1278,6 +1278,10 @@ function App({ onLogout, user: authUser }) {
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem('cp_tab') || 'planner');
   useEffect(() => { localStorage.setItem('cp_tab', activeTab); }, [activeTab]);
+  const [isEditor, setIsEditor] = useState(false);
+  const [editorList, setEditorList] = useState([]);
+  const [showEditorPanel, setShowEditorPanel] = useState(false);
+  const isAdmin = authUser.email === 'kmermigkas@novibet.com';
   const [settingsTab, setSettingsTab] = useState(() => localStorage.getItem('cp_settings_tab') || 'none');
   const toggleSettingsTab = (tab) => {
     const next = settingsTab === tab ? 'none' : tab;
@@ -1299,6 +1303,19 @@ function App({ onLogout, user: authUser }) {
   const [snapshotLoading, setSnapshotLoading] = useState(false);
   const [snapshotName, setSnapshotName] = useState('');
   const [snapshotDesc, setSnapshotDesc] = useState('');
+
+  // Fetch editor status on mount
+  useEffect(() => {
+    fetch(`${API_URL}/api/editors`, { headers: getAuthHeaders() })
+      .then(r => r.json())
+      .then(data => {
+        const editors = data.editors || [];
+        setEditorList(editors);
+        const email = authUser.email.toLowerCase();
+        setIsEditor(email === (data.admin || '').toLowerCase() || editors.map(e => e.toLowerCase()).includes(email));
+      })
+      .catch(err => console.error('Failed to fetch editors:', err));
+  }, []);
 
   // Data loaded from API
   const [verticalData, setVerticalData] = useState({});
@@ -1479,7 +1496,11 @@ function App({ onLogout, user: authUser }) {
         headers: getAuthHeaders(),
         body: JSON.stringify(payload),
       });
-      if (!resp.ok) {
+      if (resp.status === 403) {
+        console.warn('[save] Access denied: view-only user');
+        setSaveStatus({ type: 'error', msg: 'View-only: changes not saved' });
+        return;
+      } else if (!resp.ok) {
         console.error('[save] server error:', resp.status, await resp.text());
       } else {
         const result = await resp.json();
@@ -1585,6 +1606,7 @@ function App({ onLogout, user: authUser }) {
   // Keyboard shortcuts for undo/redo
   useEffect(() => {
     const onKeyDown = (e) => {
+      if (!isEditor) return;
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
         handleUndo();
@@ -2333,13 +2355,13 @@ function App({ onLogout, user: authUser }) {
     return (
       <div key={p.id}
         className={`project-block ${p.inProgress ? 'in-progress' : ''} ${isOverflow ? 'overflow-block' : ''}`}
-        style={{ width: w, height: BLOCK_HEIGHT, background: getBlockBg(p.pillar, pillarColorMap) }}
-        draggable
-        onDragStart={(e) => handleDragStart(e, p.id, lane)}
-        onDragEnd={handleDragEnd}
+        style={{ width: w, height: BLOCK_HEIGHT, background: getBlockBg(p.pillar, pillarColorMap), cursor: isEditor ? 'grab' : 'default' }}
+        draggable={isEditor}
+        onDragStart={isEditor ? (e) => handleDragStart(e, p.id, lane) : undefined}
+        onDragEnd={isEditor ? handleDragEnd : undefined}
         onMouseEnter={(e) => handleMouseEnter(e, p)}
         onMouseLeave={handleMouseLeave}
-        {...(isTrack ? {
+        {...(isTrack && isEditor ? {
           onDragOver: (e) => handleDragOverBlock(e, trackKey, p.id),
           onDrop: (e) => handleDropOnBlock(e, trackKey, p.id, blockIndex),
         } : {})}
@@ -2357,18 +2379,18 @@ function App({ onLogout, user: authUser }) {
             <span className="block-sprints">{hasSplits && isTrack ? `${eff.total}/${s.total}sp` : `${s.total}sp`}</span>
           </div>
         </div>
-        {isTrack && (
+        {isTrack && isEditor && (
           <button className="block-split"
             onClick={(e) => { e.stopPropagation(); setSplitModal({ projectId: p.id, projectName: p.subTask, homeTrack: trackKey }); }}
             title="Split to another swimlane">
             ⑂
           </button>
         )}
-        <button className="block-move"
+        {isEditor && <button className="block-move"
           onClick={(e) => { e.stopPropagation(); if (lane === 'backlog') { const r = e.currentTarget.getBoundingClientRect(); setTrackPicker({ projectId: p.id, x: r.left - 140, y: r.bottom + 4 }); } else { moveToBacklog(p.id); } }}
           title={lane === 'backlog' ? 'Add to Roadmap' : 'Remove from Roadmap'}>
           {lane === 'backlog' ? '＋' : '✕'}
-        </button>
+        </button>}
       </div>
     );
   };
@@ -2384,12 +2406,12 @@ function App({ onLogout, user: authUser }) {
     return (
       <div key={`ghost-${p.id}`}
         className={`project-block ghost-block ${isOverflow ? 'overflow-block' : ''}`}
-        style={{ width: w, height: BLOCK_HEIGHT, background: getBlockBg(p.pillar, pillarColorMap) }}
-        draggable
-        onDragStart={(e) => { dragItem.current = `ghost:${p.id}`; dragSource.current = 'roadmap'; e.dataTransfer.effectAllowed = 'move'; setTimeout(() => e.target.classList.add('dragging'), 0); }}
-        onDragEnd={handleDragEnd}
-        onDragOver={(e) => handleDragOverBlock(e, trackKey, `ghost:${p.id}`)}
-        onDrop={(e) => handleDropOnBlock(e, trackKey, `ghost:${p.id}`, blockIndex)}
+        style={{ width: w, height: BLOCK_HEIGHT, background: getBlockBg(p.pillar, pillarColorMap), cursor: isEditor ? 'grab' : 'default' }}
+        draggable={isEditor}
+        onDragStart={isEditor ? (e) => { dragItem.current = `ghost:${p.id}`; dragSource.current = 'roadmap'; e.dataTransfer.effectAllowed = 'move'; setTimeout(() => e.target.classList.add('dragging'), 0); } : undefined}
+        onDragEnd={isEditor ? handleDragEnd : undefined}
+        onDragOver={isEditor ? (e) => handleDragOverBlock(e, trackKey, `ghost:${p.id}`) : undefined}
+        onDrop={isEditor ? (e) => handleDropOnBlock(e, trackKey, `ghost:${p.id}`, blockIndex) : undefined}
         onMouseEnter={(e) => handleMouseEnter(e, p)}
         onMouseLeave={handleMouseLeave}
       >
@@ -2980,8 +3002,9 @@ function App({ onLogout, user: authUser }) {
   const dropdownFields = { impact: VALID_IMPACTS, backend: VALID_SIZES, frontend: VALID_SIZES, natives: VALID_SIZES, qa: VALID_SIZES };
 
   const renderEditableCell = (p, field) => {
-    const isEditing = editingCell?.id === p.id && editingCell?.field === field;
     const value = p[field] || '';
+    if (!isEditor) return <div className="cell-view" style={{cursor:'default'}}>{value || '—'}</div>;
+    const isEditing = editingCell?.id === p.id && editingCell?.field === field;
 
     if (isEditing) {
       if (dropdownFields[field]) {
@@ -3030,11 +3053,11 @@ function App({ onLogout, user: authUser }) {
   const projectsTableJSX = (
     <div className="projects-container">
       <div className="projects-toolbar">
-        <button className="btn btn-primary" onClick={addProject}>+ Add Project</button>
-        <button className="btn btn-primary" onClick={() => fileInputRef.current?.click()}
-          style={{background:'var(--blue)'}}>Import Excel</button>
-        <input type="file" ref={fileInputRef} accept=".xlsx,.xls,.csv"
-          style={{display:'none'}} onChange={handleExcelImport} />
+        {isEditor && <button className="btn btn-primary" onClick={addProject}>+ Add Project</button>}
+        {isEditor && <button className="btn btn-primary" onClick={() => fileInputRef.current?.click()}
+          style={{background:'var(--blue)'}}>Import Excel</button>}
+        {isEditor && <input type="file" ref={fileInputRef} accept=".xlsx,.xls,.csv"
+          style={{display:'none'}} onChange={handleExcelImport} />}
         <span className="project-count-badge">{currentData.length} projects</span>
         {selectedIds.size > 0 && (
           <button className="btn-sm" onClick={() => setSelectedIds(new Set())} style={{marginLeft:4}}>
@@ -3050,7 +3073,7 @@ function App({ onLogout, user: authUser }) {
         )}
       </div>
 
-      {selectedIds.size > 0 && (
+      {selectedIds.size > 0 && isEditor && (
         <div className="bulk-bar">
           <span className="bulk-count">{selectedIds.size} selected</span>
           <div className="bulk-sep" />
@@ -3085,31 +3108,31 @@ function App({ onLogout, user: authUser }) {
       <table className="projects-table">
         <thead>
           <tr>
-            <th className="check-col">
+            {isEditor && <th className="check-col">
               <input type="checkbox" className="row-checkbox"
                 checked={currentData.length > 0 && selectedIds.size === currentData.length}
                 onChange={toggleSelectAll} />
-            </th>
+            </th>}
             <th style={{width:'3%'}}>#</th>
             {TABLE_COLS.map(c => <th key={c.key} style={{width:c.width}}>{c.label}</th>)}
-            <th style={{width:'5%'}}></th>
+            {isEditor && <th style={{width:'5%'}}></th>}
           </tr>
         </thead>
         <tbody>
           {currentData.map((p, i) => (
             <tr key={p.id} className={`${editingCell?.id === p.id ? 'editing-row' : ''} ${selectedIds.has(p.id) ? 'editing-row' : ''}`}>
-              <td className="check-col">
+              {isEditor && <td className="check-col">
                 <input type="checkbox" className="row-checkbox"
                   checked={selectedIds.has(p.id)}
                   onChange={() => toggleSelect(p.id)} />
-              </td>
+              </td>}
               <td style={{color:'var(--text2)', fontSize:10}}>{i+1}</td>
               {TABLE_COLS.map(c => <td key={c.key}>{renderEditableCell(p, c.key)}</td>)}
-              <td>
+              {isEditor && <td>
                 <button className="btn-icon danger" onClick={() => deleteProject(p.id)} title="Delete project">
                   ×
                 </button>
-              </td>
+              </td>}
             </tr>
           ))}
         </tbody>
@@ -3200,7 +3223,8 @@ function App({ onLogout, user: authUser }) {
               <button onClick={() => { setShowSnapshots(true); loadSnapshots(); }}
                 style={{fontSize:10,color:'var(--text2)',background:'none',border:'1px solid var(--border)',borderRadius:4,padding:'2px 6px',cursor:'pointer'}}
                 title="Scenario Snapshots">📸 Snapshots</button>
-              {authUser.email === 'kmermigkas@novibet.com' && <a href="/audit.html" target="_blank" rel="noopener" style={{fontSize:10,color:'var(--text2)',textDecoration:'none',border:'1px solid var(--border)',borderRadius:4,padding:'2px 6px'}} title="View activity log">📋 Log</a>}
+              {isAdmin && <button onClick={() => setShowEditorPanel(true)} style={{fontSize:10,color:'var(--text2)',background:'none',border:'1px solid var(--border)',borderRadius:4,padding:'2px 6px',cursor:'pointer'}} title="Manage editor access">👥 Editors</button>}
+              {isAdmin && <a href="/audit.html" target="_blank" rel="noopener" style={{fontSize:10,color:'var(--text2)',textDecoration:'none',border:'1px solid var(--border)',borderRadius:4,padding:'2px 6px'}} title="View activity log">📋 Log</a>}
               {authUser.picture && <img src={authUser.picture} style={{width:24,height:24,borderRadius:'50%'}} referrerPolicy="no-referrer" />}
               <span style={{fontSize:11,color:'var(--text2)'}}>{authUser.name?.split(' ')[0]}</span>
               <button onClick={onLogout} style={{fontSize:10,color:'var(--text2)',background:'none',border:'1px solid var(--border)',borderRadius:4,padding:'2px 6px',cursor:'pointer'}}>Logout</button>
@@ -3208,6 +3232,13 @@ function App({ onLogout, user: authUser }) {
           )}
         </div>
       </div>
+
+      {!isEditor && (
+        <div style={{padding:'6px 28px',background:'rgba(9,132,227,0.1)',borderBottom:'1px solid rgba(9,132,227,0.2)',fontSize:11,color:'var(--blue)',fontWeight:600,display:'flex',alignItems:'center',gap:8}}>
+          <span>View-only mode</span>
+          <span style={{color:'var(--text2)',fontWeight:400}}>Contact admin for editor access</span>
+        </div>
+      )}
 
       {loading ? (
         <div className="empty-vertical">
@@ -3249,7 +3280,7 @@ function App({ onLogout, user: authUser }) {
           <button className={`settings-tab ${settingsTab === 'alloc' ? 'active' : ''}`} onClick={() => toggleSettingsTab('alloc')}>📊 Swimlane Allocation</button>
           <button className={`settings-tab ${settingsTab === 'demand' ? 'active' : ''}`} onClick={() => toggleSettingsTab('demand')}>🎯 Demand & Buffer</button>
           <button className={`settings-tab ${settingsTab === 'usage' ? 'active' : ''}`} onClick={() => toggleSettingsTab('usage')}>📈 Capacity Usage</button>
-          <button className={`settings-tab ${settingsTab === 'tracks' ? 'active' : ''}`} onClick={() => toggleSettingsTab('tracks')}>Tracks</button>
+          {isEditor && <button className={`settings-tab ${settingsTab === 'tracks' ? 'active' : ''}`} onClick={() => toggleSettingsTab('tracks')}>Tracks</button>}
         </div>
 
         {settingsTab === 'config' && (
@@ -3261,7 +3292,7 @@ function App({ onLogout, user: authUser }) {
                   {['backend','frontend','natives','qa'].map(k => (
                     <div key={k} className="config-field">
                       <label>{k.charAt(0).toUpperCase() + k.slice(1)}</label>
-                      <input type="number" min="0" value={capacity[k]}
+                      <input type="number" min="0" value={capacity[k]} disabled={!isEditor}
                         onChange={e => setCapacity(prev => ({...prev, [k]: parseInt(e.target.value)||0}))} />
                     </div>
                   ))}
@@ -3273,7 +3304,7 @@ function App({ onLogout, user: authUser }) {
                   {Object.entries(sizeMap).map(([size, val]) => (
                     <div key={size} className="size-chip">
                       <span>{size}</span>
-                      <input type="number" min="0" step="0.5" value={val}
+                      <input type="number" min="0" step="0.5" value={val} disabled={!isEditor}
                         onChange={e => setSizeMap(prev => ({...prev, [size]: parseFloat(e.target.value)||0}))} />
                     </div>
                   ))}
@@ -3304,7 +3335,7 @@ function App({ onLogout, user: authUser }) {
                         return (
                           <div key={d}>
                             <input type="number" min="0" className={`track-alloc-input${used[d] > tc[d] && tc[d] > 0 ? ' over-cap' : ''}`}
-                              value={tc[d]} onChange={e => updateTrackCapacity(t.key, d, parseInt(e.target.value)||0)} />
+                              value={tc[d]} disabled={!isEditor} onChange={e => updateTrackCapacity(t.key, d, parseInt(e.target.value)||0)} />
                             {tc[d] > 0 && <div className="track-cap-bar"><div className="track-cap-fill" style={{width:`${Math.min(pct,100)}%`, background: color}} /></div>}
                           </div>
                         );
@@ -3335,9 +3366,9 @@ function App({ onLogout, user: authUser }) {
                   <div className="demand-card-title">{k.charAt(0).toUpperCase() + k.slice(1)} Total Demand</div>
                   <div className="demand-card-value">{totalDemand[k]} <span style={{fontSize:11,color:'var(--muted)',fontWeight:400}}>sprints</span></div>
                   <div className="demand-buffer-row">
-                    <button className="demand-buffer-btn" onClick={() => updateBuffer(k, -5)}>−</button>
+                    <button className="demand-buffer-btn" disabled={!isEditor} onClick={() => updateBuffer(k, -5)}>−</button>
                     <span className="demand-buffer-pct">{buffer[k] >= 0 ? '+' : ''}{buffer[k]}%</span>
-                    <button className="demand-buffer-btn" onClick={() => updateBuffer(k, 5)}>+</button>
+                    <button className="demand-buffer-btn" disabled={!isEditor} onClick={() => updateBuffer(k, 5)}>+</button>
                   </div>
                   {buffer[k] !== 0 && (
                     <div className="demand-card-buffered">With buffer: {bufferedDemand[k]} sprints</div>
@@ -3447,9 +3478,9 @@ function App({ onLogout, user: authUser }) {
                     {track.label}
                   </div>
                   <div className="track-flow"
-                    onDragOver={handleDragOver} onDragEnter={handleDragEnter}
-                    onDragLeave={handleDragLeave}
-                    onDrop={(e) => handleDropOnTrack(e, track.key)}
+                    onDragOver={isEditor ? handleDragOver : undefined} onDragEnter={isEditor ? handleDragEnter : undefined}
+                    onDragLeave={isEditor ? handleDragLeave : undefined}
+                    onDrop={isEditor ? (e) => handleDropOnTrack(e, track.key) : undefined}
                     style={{borderColor: track.borderColor}}>
                     {(trackProjects[track.key] || []).length === 0 && (ghostsByTrack[track.key] || []).length === 0 && <div className="track-empty">Drag projects here</div>}
                     {(() => {
@@ -3533,8 +3564,8 @@ function App({ onLogout, user: authUser }) {
           </div>
           {backlogView === 'blocks' ? (
           <div className="flow-container"
-            onDragOver={handleDragOver} onDragEnter={handleDragEnter}
-            onDragLeave={handleDragLeave} onDrop={handleDropOnBacklog}>
+            onDragOver={isEditor ? handleDragOver : undefined} onDragEnter={isEditor ? handleDragEnter : undefined}
+            onDragLeave={isEditor ? handleDragLeave : undefined} onDrop={isEditor ? handleDropOnBacklog : undefined}>
             {backlogProjects.length === 0 && <div className="empty-flow">All projects are in the roadmap</div>}
             {backlogProjects.map(p => renderBlock(p, 'backlog'))}
           </div>
@@ -3569,7 +3600,7 @@ function App({ onLogout, user: authUser }) {
                       <td style={{padding:'6px 8px',textAlign:'center',fontWeight:600,color:'var(--text1)'}}>{sp.total || '—'}</td>
                       <td style={{padding:'6px 8px',textAlign:'center',color:'var(--text2)',fontSize:11}}>{p.targetMarket || '—'}</td>
                       <td style={{padding:'6px 8px',textAlign:'center'}}>
-                        <button className="btn" style={{fontSize:10,padding:'2px 6px'}} onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setTrackPicker({ projectId: p.id, x: r.left - 140, y: r.bottom + 4 }); }}>+ Roadmap</button>
+                        {isEditor && <button className="btn" style={{fontSize:10,padding:'2px 6px'}} onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setTrackPicker({ projectId: p.id, x: r.left - 140, y: r.bottom + 4 }); }}>+ Roadmap</button>}
                       </td>
                     </tr>
                   );
@@ -3611,12 +3642,12 @@ function App({ onLogout, user: authUser }) {
               <div className="tl-controls">
                 <div className="tl-ctrl-group">
                   <label>Start:</label>
-                  <input type="date" value={timelineConfig.sprintStartDate}
+                  <input type="date" value={timelineConfig.sprintStartDate} disabled={!isEditor}
                     onChange={e => updateTimelineConfig({ sprintStartDate: e.target.value })} />
                 </div>
                 <div className="tl-ctrl-group">
                   <label>Sprint:</label>
-                  <select value={timelineConfig.sprintDurationWeeks}
+                  <select value={timelineConfig.sprintDurationWeeks} disabled={!isEditor}
                     onChange={e => updateTimelineConfig({ sprintDurationWeeks: parseInt(e.target.value) })}>
                     <option value={1}>1 wk</option>
                     <option value={2}>2 wk</option>
@@ -3626,7 +3657,7 @@ function App({ onLogout, user: authUser }) {
                 </div>
                 <div className="tl-ctrl-group">
                   <label>Scale:</label>
-                  <select value={timelineConfig.timeScale}
+                  <select value={timelineConfig.timeScale} disabled={!isEditor}
                     onChange={e => updateTimelineConfig({ timeScale: e.target.value })}>
                     <option value="weeks">Weeks</option>
                     <option value="months">Months</option>
@@ -3648,13 +3679,13 @@ function App({ onLogout, user: authUser }) {
                   {tlSidebarOpen ? (<>
                     <span>Milestones</span>
                     <div style={{display:'flex',gap:4,alignItems:'center'}}>
-                      <button className="tl-btn" onClick={() => {
+                      {isEditor && <button className="tl-btn" onClick={() => {
                         const name = prompt('Milestone name:');
                         if (name) {
                           const date = prompt('Date (YYYY-MM-DD):', new Date().toISOString().split('T')[0]);
                           if (date) addMilestone(name, date);
                         }
-                      }}>+ Add</button>
+                      }}>+ Add</button>}
                       <button className="tl-btn" onClick={() => setTlSidebarOpen(false)} title="Collapse sidebar" style={{fontSize:14,padding:'2px 4px'}}>«</button>
                     </div>
                   </>) : (
@@ -3671,7 +3702,7 @@ function App({ onLogout, user: authUser }) {
                         <div className="tl-ms-name">{m.name}</div>
                         <div className="tl-ms-date">{m.date}</div>
                       </div>
-                      <div className="tl-ms-actions">
+                      {isEditor && <div className="tl-ms-actions">
                         <button className="tl-ms-btn" onClick={() => {
                           const name = prompt('Milestone name:', m.name);
                           if (name !== null) updateMilestone(m.id, { name });
@@ -3683,7 +3714,7 @@ function App({ onLogout, user: authUser }) {
                         <button className="tl-ms-btn del" onClick={() => {
                           if (confirm('Remove this milestone?')) removeMilestone(m.id);
                         }}>✕</button>
-                      </div>
+                      </div>}
                     </div>
                   ))}
                 </div>
@@ -3717,8 +3748,8 @@ function App({ onLogout, user: authUser }) {
                       <div className="tl-track-label" style={{background: track.gradient}}>
                         <span>{track.label}</span>
                         <div className="sub-lane-controls">
-                          <button className="sub-lane-btn" onClick={() => addSubLane(track.key)} title="Add parallel lane">+</button>
-                          {laneCount > 1 && <button className="sub-lane-btn" onClick={() => removeSubLane(track.key)} title="Remove last lane">−</button>}
+                          {isEditor && <button className="sub-lane-btn" onClick={() => addSubLane(track.key)} title="Add parallel lane">+</button>}
+                          {isEditor && laneCount > 1 && <button className="sub-lane-btn" onClick={() => removeSubLane(track.key)} title="Remove last lane">−</button>}
                           {laneCount > 1 && <span style={{fontSize:'9px',color:'rgba(255,255,255,0.6)'}}>{laneCount}</span>}
                         </div>
                       </div>
@@ -3736,18 +3767,18 @@ function App({ onLogout, user: authUser }) {
                           return (
                           <div key={bar.ghost ? `g-${bar.project.id}` : bar.project.id}
                             className={`tl-bar ${bar.ghost ? 'ghost' : ''} ${bar.project.inProgress ? 'in-progress' : ''} ${bar.hasOverride ? 'has-override' : ''}`}
-                            style={{left: bar.left, width: bar.width, top: bar.laneIndex * 46 + 4, background: getBlockBg(bar.project.pillar, pillarColorMap)}}
+                            style={{left: bar.left, width: bar.width, top: bar.laneIndex * 46 + 4, background: getBlockBg(bar.project.pillar, pillarColorMap), cursor: isEditor ? 'grab' : 'default'}}
                             data-name={bar.project.subTask}
                             onMouseEnter={(e) => handleMouseEnter(e, bar.project)}
                             onMouseLeave={handleMouseLeave}
-                            onMouseDown={e => { if (!e.target.classList.contains('tl-bar-handle')) handleBarDragStart(e, bar, 'move'); }}>
-                            <div className="tl-bar-handle left"
-                              onMouseDown={e => handleBarDragStart(e, bar, 'left')} />
+                            onMouseDown={isEditor ? e => { if (!e.target.classList.contains('tl-bar-handle')) handleBarDragStart(e, bar, 'move'); } : undefined}>
+                            {isEditor && <div className="tl-bar-handle left"
+                              onMouseDown={e => handleBarDragStart(e, bar, 'left')} />}
                             <div className="tl-bar-row1">
                               <span className="tl-bar-label">{bar.project.subTask}</span>
                             </div>
-                            <div className="tl-bar-handle right"
-                              onMouseDown={e => handleBarDragStart(e, bar, 'right')} />
+                            {isEditor && <div className="tl-bar-handle right"
+                              onMouseDown={e => handleBarDragStart(e, bar, 'right')} />}
                           </div>
                           );
                         })}
@@ -3871,6 +3902,56 @@ function App({ onLogout, user: authUser }) {
       })()}
 
       {/* Snapshot Modal */}
+      {showEditorPanel && (
+        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.6)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center'}}
+          onClick={() => setShowEditorPanel(false)}>
+          <div style={{background:'var(--surface1)',border:'1px solid var(--border)',borderRadius:12,padding:24,width:460,maxHeight:'80vh',overflow:'auto',boxShadow:'0 8px 32px rgba(0,0,0,0.4)'}}
+            onClick={e => e.stopPropagation()}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+              <h3 style={{margin:0,fontSize:16,color:'var(--text1)'}}>👥 Editor Access Management</h3>
+              <button onClick={() => setShowEditorPanel(false)}
+                style={{background:'none',border:'none',color:'var(--text2)',fontSize:18,cursor:'pointer'}}>✕</button>
+            </div>
+            <p style={{fontSize:12,color:'var(--text2)',marginBottom:12}}>
+              One email per line. Only @novibet.com emails allowed. Admin always has editor access.
+            </p>
+            <textarea
+              id="editor-emails-textarea"
+              defaultValue={editorList.join('\n')}
+              rows={10}
+              placeholder={'user1@novibet.com\nuser2@novibet.com'}
+              style={{width:'100%',padding:'8px 10px',background:'var(--bg)',border:'1px solid var(--border)',borderRadius:6,color:'var(--text1)',fontSize:12,fontFamily:'monospace',resize:'vertical',boxSizing:'border-box'}} />
+            <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:12}}>
+              <button onClick={() => setShowEditorPanel(false)}
+                style={{padding:'6px 16px',background:'var(--surface2)',color:'var(--text2)',border:'1px solid var(--border)',borderRadius:4,fontSize:11,fontWeight:600,cursor:'pointer'}}>
+                Cancel
+              </button>
+              <button onClick={async () => {
+                const raw = document.getElementById('editor-emails-textarea').value;
+                const emails = raw.split('\n').map(e => e.trim().toLowerCase()).filter(e => e && e.endsWith('@novibet.com'));
+                try {
+                  const resp = await fetch(`${API_URL}/api/editors`, {
+                    method: 'POST', headers: getAuthHeaders(),
+                    body: JSON.stringify({ editors: emails }),
+                  });
+                  if (!resp.ok) { alert('Failed to save: ' + ((await resp.json()).error || resp.status)); return; }
+                  const data = await resp.json();
+                  setEditorList(data.editors);
+                  setIsEditor(true);
+                  setShowEditorPanel(false);
+                } catch (e) { alert('Error: ' + e.message); }
+              }}
+                style={{padding:'6px 16px',background:'linear-gradient(135deg, var(--accent), var(--accent2))',color:'#fff',border:'none',borderRadius:4,fontSize:11,fontWeight:600,cursor:'pointer'}}>
+                Save Editors
+              </button>
+            </div>
+            <div style={{marginTop:16,fontSize:11,color:'var(--text2)'}}>
+              Currently {editorList.length} editor{editorList.length !== 1 ? 's' : ''} + admin
+            </div>
+          </div>
+        </div>
+      )}
+
       {showSnapshots && (
         <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.6)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center'}}
           onClick={() => setShowSnapshots(false)}>
@@ -3883,6 +3964,7 @@ function App({ onLogout, user: authUser }) {
             </div>
 
             {/* Save New Snapshot */}
+            {isEditor && (
             <div style={{background:'var(--surface2)',borderRadius:8,padding:12,marginBottom:16}}>
               <div style={{fontSize:11,fontWeight:600,color:'var(--text2)',marginBottom:8,textTransform:'uppercase'}}>Save Current State</div>
               <input value={snapshotName} onChange={e => setSnapshotName(e.target.value)}
@@ -3896,6 +3978,7 @@ function App({ onLogout, user: authUser }) {
                 {snapshotLoading ? 'Saving...' : 'Save Snapshot'}
               </button>
             </div>
+            )}
 
             {/* Snapshot List */}
             <div style={{fontSize:11,fontWeight:600,color:'var(--text2)',marginBottom:8,textTransform:'uppercase'}}>
@@ -3918,7 +4001,7 @@ function App({ onLogout, user: authUser }) {
                           {' · '}{s.projectCount} projects · by {s.createdBy?.split('@')[0]}
                         </div>
                       </div>
-                      <div style={{display:'flex',gap:6}}>
+                      {isEditor && <div style={{display:'flex',gap:6}}>
                         <button onClick={() => restoreSnapshot(s.id, s.name)}
                           style={{padding:'4px 10px',background:'#0984e3',color:'#fff',border:'none',borderRadius:4,fontSize:10,fontWeight:600,cursor:'pointer'}}>
                           Restore
@@ -3927,7 +4010,7 @@ function App({ onLogout, user: authUser }) {
                           style={{padding:'4px 10px',background:'none',color:'#e74c3c',border:'1px solid #e74c3c',borderRadius:4,fontSize:10,fontWeight:600,cursor:'pointer'}}>
                           Delete
                         </button>
-                      </div>
+                      </div>}
                     </div>
                   </div>
                 ))}

@@ -21,6 +21,11 @@ beforeEach(() => {
   fs.readdirSync(TEST_DATA_DIR).forEach(f => {
     if (f.endsWith('.json')) fs.unlinkSync(path.join(TEST_DATA_DIR, f));
   });
+  // Write editors.json so test emails pass authorization middleware
+  fs.writeFileSync(
+    path.join(TEST_DATA_DIR, 'editors.json'),
+    JSON.stringify(['kmermigkas@novibet.com'])
+  );
 });
 
 afterAll(() => {
@@ -190,6 +195,7 @@ describe('POST /api/verticals/:key/projects — sanitization', () => {
   test('strips HTML tags from project string fields', async () => {
     const res = await request(app)
       .post('/api/verticals/growth/projects')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({
         projects: [
           { id: 1, subTask: '<script>alert(1)</script>My Task', nvrd: '<b>PGR-1</b>', backend: 'S' },
@@ -205,6 +211,7 @@ describe('POST /api/verticals/:key/projects — sanitization', () => {
   test('trims whitespace from project fields', async () => {
     const res = await request(app)
       .post('/api/verticals/growth/projects')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({
         projects: [
           { id: 1, subTask: '  Trimmed Task  ', masterEpic: '  Epic  ' },
@@ -220,6 +227,7 @@ describe('POST /api/verticals/:key/projects — sanitization', () => {
   test('truncates overly long strings', async () => {
     const res = await request(app)
       .post('/api/verticals/growth/projects')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({
         projects: [
           { id: 1, nvrd: 'x'.repeat(200) },
@@ -238,6 +246,7 @@ describe('POST /api/verticals/:key/state — milestone sanitization', () => {
   test('sanitizes milestone names when saved via state', async () => {
     const res = await request(app)
       .post('/api/verticals/growth/state')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({
         _loadedAt: 0,
         milestones: [
@@ -257,6 +266,7 @@ describe('POST /api/verticals/:key/snapshots — sanitization', () => {
   test('sanitizes snapshot name', async () => {
     const res = await request(app)
       .post('/api/verticals/growth/snapshots')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
       .send({ name: '  <b>My Snapshot</b>  ' });
     expect(res.status).toBe(200);
 
