@@ -3488,7 +3488,7 @@ function App({ onLogout, user: authUser }) {
               return (
                 <div key={p.id} className="q-cell"
                   style={{gridColumn: `${startQi + 1} / ${endQi + 2}`, gridRow: lane + 2}}>
-                  <div className={cls} title={p.subTask}
+                  <div className={cls}
                     style={{left: `calc(${leftPct}% + 3px)`, width: `calc(${widthPct}% - 6px)`, background: CP.getBlockBg(p.pillar, pillarColorMap)}}
                     onMouseEnter={(e) => handleMouseEnter(e, p)}
                     onMouseLeave={handleMouseLeave}>
@@ -3503,6 +3503,7 @@ function App({ onLogout, user: authUser }) {
               <div style={{gridColumn:'1/5',gridRow:2,textAlign:'center',padding:'48px',color:'var(--text2)',fontSize:12}}>No roadmap projects in the current 4 quarters</div>
             )}
           </div>
+          {renderTooltip()}
         </div>
       ) : activeTab === 'projects' ? (
         projectsTableJSX
