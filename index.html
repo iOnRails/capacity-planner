@@ -2043,6 +2043,7 @@ function App({ onLogout, user: authUser }) {
   const [openFilter, setOpenFilter] = useState(null);
   const [sortBy, setSortBy] = useState('impact');
   const [colorBy, setColorBy] = useState('pillar');
+  const [backlogView, setBacklogView] = useState('blocks');
   const dragItem = useRef(null);
   const dragSource = useRef(null);
 
@@ -3498,14 +3499,68 @@ function App({ onLogout, user: authUser }) {
               <span className="badge backlog-badge">{backlogProjects.length}</span>
             </h2>
             <div style={{display:'flex',gap:6}}>
+              <button className="btn" style={{fontSize:11,padding:'4px 10px',background: backlogView === 'blocks' ? 'var(--accent1)' : 'var(--surface2)'}} onClick={() => setBacklogView('blocks')}>Blocks</button>
+              <button className="btn" style={{fontSize:11,padding:'4px 10px',background: backlogView === 'table' ? 'var(--accent1)' : 'var(--surface2)'}} onClick={() => setBacklogView('table')}>List</button>
             </div>
           </div>
+          {backlogView === 'blocks' ? (
           <div className="flow-container"
             onDragOver={handleDragOver} onDragEnter={handleDragEnter}
             onDragLeave={handleDragLeave} onDrop={handleDropOnBacklog}>
             {backlogProjects.length === 0 && <div className="empty-flow">All projects are in the roadmap</div>}
             {backlogProjects.map(p => renderBlock(p, 'backlog'))}
           </div>
+          ) : (
+          <div style={{overflowX:'auto'}}>
+            {backlogProjects.length === 0 ? <div className="empty-flow">All projects are in the roadmap</div> : (
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+              <thead>
+                <tr style={{borderBottom:'1px solid var(--border)',textAlign:'left'}}>
+                  <th style={{padding:'6px 8px',color:'var(--text2)',fontWeight:600,width:'30%'}}>Name</th>
+                  <th style={{padding:'6px 8px',color:'var(--text2)',fontWeight:600,width:'14%'}}>Epic</th>
+                  <th style={{padding:'6px 8px',color:'var(--text2)',fontWeight:600,width:'10%'}}>Pillar</th>
+                  <th style={{padding:'6px 8px',color:'var(--text2)',fontWeight:600,width:'7%',textAlign:'center'}}>Impact</th>
+                  <th style={{padding:'6px 8px',color:'var(--text2)',fontWeight:600,width:'5%',textAlign:'center'}}>BE</th>
+                  <th style={{padding:'6px 8px',color:'var(--text2)',fontWeight:600,width:'5%',textAlign:'center'}}>FE</th>
+                  <th style={{padding:'6px 8px',color:'var(--text2)',fontWeight:600,width:'5%',textAlign:'center'}}>Nat</th>
+                  <th style={{padding:'6px 8px',color:'var(--text2)',fontWeight:600,width:'5%',textAlign:'center'}}>QA</th>
+                  <th style={{padding:'6px 8px',color:'var(--text2)',fontWeight:600,width:'7%',textAlign:'center'}}>Sprints</th>
+                  <th style={{padding:'6px 8px',color:'var(--text2)',fontWeight:600,width:'8%',textAlign:'center'}}>Market</th>
+                  <th style={{padding:'6px 8px',width:'4%'}}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {backlogProjects.map(p => {
+                  const sp = CP.computeProjectSprints(p, sizeMap);
+                  const pColor = pillarColorMap[p.pillar];
+                  return (
+                    <tr key={p.id} style={{borderBottom:'1px solid var(--border)',cursor:'pointer'}}
+                      onMouseEnter={(e) => setTooltip({ project: p, x: e.clientX, y: e.clientY })}
+                      onMouseLeave={() => setTooltip(null)}
+                      draggable onDragStart={() => { dragItem.current = p.id; dragSource.current = 'backlog'; }}>
+                      <td style={{padding:'6px 8px',color:'var(--text1)'}}>{p.subTask || '—'}</td>
+                      <td style={{padding:'6px 8px',color:'var(--text2)',fontSize:11}}>{p.masterEpic || '—'}</td>
+                      <td style={{padding:'6px 8px'}}>
+                        {p.pillar && <span className="pill pill-pillar" style={{background: pColor || '#6c5ce7', color: isLightColor(pColor || '#6c5ce7') ? '#333' : 'white'}}>{p.pillar}</span>}
+                      </td>
+                      <td style={{padding:'6px 8px',textAlign:'center'}}><span className={`pill pill-impact impact-${p.impact}`}>{p.impact || '—'}</span></td>
+                      <td style={{padding:'6px 8px',textAlign:'center',color:'var(--text2)'}}>{p.backend || '—'}</td>
+                      <td style={{padding:'6px 8px',textAlign:'center',color:'var(--text2)'}}>{p.frontend || '—'}</td>
+                      <td style={{padding:'6px 8px',textAlign:'center',color:'var(--text2)'}}>{p.natives || '—'}</td>
+                      <td style={{padding:'6px 8px',textAlign:'center',color:'var(--text2)'}}>{p.qa || '—'}</td>
+                      <td style={{padding:'6px 8px',textAlign:'center',fontWeight:600,color:'var(--text1)'}}>{sp.total || '—'}</td>
+                      <td style={{padding:'6px 8px',textAlign:'center',color:'var(--text2)',fontSize:11}}>{p.targetMarket || '—'}</td>
+                      <td style={{padding:'6px 8px',textAlign:'center'}}>
+                        <button className="btn" style={{fontSize:10,padding:'2px 6px'}} onClick={() => moveToTrack(p.id, trackKeys[0])}>+ Roadmap</button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            )}
+          </div>
+          )}
         </div>
       </div>
 
