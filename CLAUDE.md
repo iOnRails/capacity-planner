@@ -13,12 +13,13 @@ A web-based capacity planning tool for managing engineering team workload across
 ## Architecture
 
 ```
-index.html          (3400+ lines) — Single-file React 18 app via CDN + Babel
+index.html          (4000+ lines) — Single-file React 18 app via CDN + Babel
 audit.html          — Standalone audit log viewer
 vercel.json         — SPA routing config
 api/
-  server.js         (460+ lines) — Express.js API with WebSocket support
-  package.json      — Dependencies: express, cors, ws
+  server.js         (895 lines) — Express.js API with WebSocket support
+  package.json      — Dependencies: express, cors, ws; devDeps: jest, supertest
+  __tests__/        — Test suite (119 tests across 4 files)
 ```
 
 **CDN Dependencies** (loaded in index.html):
@@ -122,6 +123,14 @@ Valid KPIs: Revenue, Efficiency, Experience
 | POST/PUT | `/api/verticals/:key/state` | Save changed fields with conflict resolution |
 | GET | `/api/verticals/:key/poll` | Lightweight check: returns `updatedAt` only |
 
+### Snapshots
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/verticals/:key/snapshots` | List snapshot metadata for a vertical |
+| POST | `/api/verticals/:key/snapshots` | Save named snapshot (state + projects) |
+| POST | `/api/verticals/:key/snapshots/:id/restore` | Restore a snapshot |
+| DELETE | `/api/verticals/:key/snapshots/:id` | Delete a snapshot |
+
 ### Other
 | Method | Path | Description |
 |--------|------|-------------|
@@ -132,8 +141,10 @@ Valid KPIs: Revenue, Efficiency, Experience
 ### WebSocket
 - Path: `/ws`
 - Client sends: `{ "type": "subscribe", "vertical": "growth" }`
-- Server broadcasts on save: `{ "type": "update", "vertical": "growth", "updatedAt": "...", "senderId": "abc123" }`
+- Server broadcasts full state on save: `{ "type": "update", "vertical": "growth", "updatedAt": "...", "senderId": "abc123", "state": {...}, "projects": [...] }`
+- Inline state avoids clients needing an HTTP fetch after WS notification (fixes background-tab throttling)
 - Each client has unique `wsIdRef` sent as `X-WS-ID` header to skip own broadcasts
+- **Keepalive pings**: Server sends `{ "type": "ping" }` every 25s to prevent proxy idle timeouts; clients respond with `pong`
 
 ---
 
@@ -203,6 +214,31 @@ The `serverSnapshotRef` stores **migrated/defaulted** values (matching what Reac
 - **Sorting**: Impact (desc), Effort (desc), Name, Epic, Pillar
 - **Add/Delete**: Individual project management
 
+### Undo/Redo
+- **History stack**: `useRef`-based undo/redo stacks (max 50 entries)
+- **Keyboard shortcuts**: `Ctrl+Z` (undo), `Ctrl+Shift+Z` / `Ctrl+Y` (redo)
+- **Header buttons**: Undo/Redo buttons with disabled state when stack is empty
+- **Skip capture**: `skipUndoRef` prevents capturing state during undo/redo operations
+- **Auto-save**: Undo/redo triggers a debounced save to persist the restored state
+- Wraps `setVerticalStates` via `setVerticalStatesWithUndo` to capture state before every mutation
+
+### Dashboard View
+- **Summary cards**: Total Projects, In Roadmap, In Progress, In Backlog counts
+- **Capacity Utilization**: Per-discipline bars showing used vs available sprints
+- **Demand vs Supply**: Side-by-side comparison with buffered values
+- **Per-Track Breakdown**: Table with allocated/used/remaining per track per discipline
+- **Projects by Pillar**: Horizontal bar chart
+- **Projects by Impact Size**: Bar chart (XS through XXXL)
+- **Size Map Reference**: Grid showing current T-shirt size → sprint mappings
+- Accessible via "Dashboard" tab in the header
+
+### Scenario Snapshots
+- **Save**: Capture current state + projects as a named snapshot with optional description
+- **Restore**: Load a previously saved snapshot, overwriting current state and projects
+- **Delete**: Remove snapshots no longer needed
+- **Modal UI**: Accessible via "Snapshots" button in the header
+- Stored server-side as `snapshots_{vertical}.json`
+
 ### Auth
 - Google Sign-In with @novibet.com domain restriction
 - JWT decode (no server-side verification)
@@ -210,7 +246,10 @@ The `serverSnapshotRef` stores **migrated/defaulted** values (matching what Reac
 - Audit log link visible only for specific admin email
 
 ### Real-time Sync
-- **WebSocket**: Instant push notifications when any client saves
+- **WebSocket**: Full-state broadcast — server sends state + projects inline with WS messages
+- **Keepalive pings**: Server pings every 25s, client responds with pong (prevents proxy idle disconnect)
+- **Deferred sync**: If a WS/poll notification arrives during an in-flight save, sync runs after save completes
+- **Cancel pending save**: When server has newer data, pending local debounced saves are cancelled
 - **Fallback poll**: 30-second interval lightweight poll endpoint
 - **Visibility change**: Immediate sync when tab becomes visible
 - **Debounced saves**: 800ms debounce, captures state at change time
@@ -239,7 +278,7 @@ The entire frontend is in `index.html` — no build system, no bundler. React an
 ### Data Persistence
 - JSON files on Railway's persistent volume (`DATA_DIR=/data`)
 - No database — reads/writes are synchronous `fs.readFileSync`/`fs.writeFileSync`
-- File naming: `projects_{vertical}.json`, `state_{vertical}.json`, `audit_log.json`
+- File naming: `projects_{vertical}.json`, `state_{vertical}.json`, `snapshots_{vertical}.json`, `audit_log.json`
 
 ### Migration Functions
 - `migrateTracks()`: Renames legacy 'gamification' → 'gateway', ensures all 3 track keys exist
@@ -265,8 +304,20 @@ The entire frontend is in `index.html` — no build system, no bundler. React an
 
 All state and project changes are logged to `audit_log.json` with:
 - User email and name (from Google auth headers)
-- Action description with friendly field names
+- **Rich narrative descriptions**: Human-readable diffs with project name resolution (e.g., "Moved [Marketplace] CY Expansion to Core Bonus", "Changed Backend capacity from 40 to 46 SP")
+- **Structured diffs**: `{ summary, diffs[] }` format — summary has first 2 narratives + "and N more", diffs array has all individual change narratives
+- Helper functions: `buildNarratives()` (per-field narrative generation), `findMovedItem()` (detects reorders in arrays), `summarizeValue()` (truncates long objects)
 - Vertical, method, endpoint
 - Auto-pruned after 30 days
 - Queryable via `GET /api/audit-log?user=&vertical=&days=`
 - Standalone viewer at `audit.html`
+
+## Testing
+
+- **119 tests** across 4 test files in `api/__tests__/`
+- `helpers.test.js` — loadJSON, saveJSON, buildNarratives, findMovedItem, summarizeValue, describeStateChanges, logAudit
+- `api.test.js` — All REST endpoints, validation, conflict resolution
+- `websocket.test.js` — WS subscribe, broadcast, sender exclusion, multi-client, disconnect
+- `snapshots.test.js` — Snapshot CRUD, restore, audit logging
+- Run: `npm test` (or `npm run test:unit`, `test:integration`, `test:ws`, `test:snapshots`)
+- `require.main === module` guard on server allows test imports without starting the listener
