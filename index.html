@@ -3732,13 +3732,7 @@ function App({ onLogout, user: authUser }) {
                             data-name={bar.project.subTask}
                             onMouseEnter={(e) => handleMouseEnter(e, bar.project)}
                             onMouseLeave={handleMouseLeave}
-                            onMouseDown={e => { if (!e.target.classList.contains('tl-bar-handle')) handleBarDragStart(e, bar, 'move'); }}
-                            onDoubleClick={() => {
-                              if (bar.hasOverride && confirm('Reset this bar to auto-layout?')) {
-                                clearTimelineOverride(bar.project.id, bar.trackKey);
-                              }
-                            }}
-                            title={`${bar.project.subTask}${bar.hasOverride ? ' (double-click to reset)' : ''}${bar.ghost ? ' (split from ' + (TRACKS.find(t=>t.key===bar.homeTrack)?.label||'') + ')' : ''}`}>
+                            onMouseDown={e => { if (!e.target.classList.contains('tl-bar-handle')) handleBarDragStart(e, bar, 'move'); }}>
                             <div className="tl-bar-handle left"
                               onMouseDown={e => handleBarDragStart(e, bar, 'left')} />
                             <div className="tl-bar-row1">
