@@ -883,9 +883,11 @@
   }
   .q-cell {
     position: relative;
+    pointer-events: none;
   }
   .q-block {
     position: absolute; top: 2px; bottom: 2px; border-radius: 6px; overflow: hidden;
+    pointer-events: auto;
     display: flex; flex-direction: column;
     border: 1px solid transparent; transition: all 0.15s;
     cursor: default;
