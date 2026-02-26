@@ -1620,7 +1620,7 @@ function App({ onLogout, user: authUser }) {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [handleUndo, handleRedo]);
+  }, [handleUndo, handleRedo, isEditor]);
 
   // Flush pending saves before page unload
   useEffect(() => {
