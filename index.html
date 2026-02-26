@@ -1066,7 +1066,7 @@ const MIN_WIDTH = 100;
 const MAX_WIDTH = 360;
 const PX_PER_SPRINT_WEEK = 50;
 const DEFAULT_TIMELINE_CONFIG = {
-  sprintStartDate: new Date().toISOString().split('T')[0],
+  sprintStartDate: `${new Date().getFullYear()}-01-01`,
   sprintDurationWeeks: 2,
   timeScale: 'months',
 };
@@ -2729,9 +2729,13 @@ function App({ onLogout, user: authUser }) {
 
     const totalWeeks = (maxPx / PX_PER_SPRINT_WEEK) * (scale === 'months' ? 1/0.7 : scale === 'quarters' ? 1/0.35 : 1);
 
-    // Generate ruler marks
+    // Generate ruler marks — ensure at least 15 months (current year + 3 months next year)
     const marks = [];
-    const totalPx = maxPx + 200; // extra padding
+    const minEndDate = new Date(startDate.getFullYear() + 1, 2, 31); // Mar 31 next year
+    const minDays = (minEndDate - startDate) / 86400000;
+    const minSprints = minDays / 7 / sprintWeeks;
+    const minPx = minSprints * pxPerSprint;
+    const totalPx = Math.max(maxPx + 200, minPx);
     if (scale === 'weeks') {
       const weekPx = PX_PER_SPRINT_WEEK;
       const numWeeks = Math.ceil(totalPx / weekPx);
