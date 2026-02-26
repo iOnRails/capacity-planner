@@ -901,8 +901,13 @@
   }
   .q-block:hover {
     border-color: rgba(255,255,255,0.25);
-    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
-    z-index: 5;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+    z-index: 10;
+    min-width: fit-content;
+    overflow: visible;
+  }
+  .q-block:hover .block-title {
+    white-space: nowrap; display: block; -webkit-line-clamp: unset;
   }
   .q-block.in-progress { box-shadow: inset 0 0 0 2px var(--green); }
   .q-block .block-content {
