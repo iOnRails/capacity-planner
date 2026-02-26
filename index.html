@@ -3178,14 +3178,6 @@ function App({ onLogout, user: authUser }) {
           {' '}{activeV.label} <span>Capacity Planner</span> <span style={{fontSize:9,color:'var(--text2)',opacity:0.5}}>v3.0</span>
         </h1>
         <div className="header-right">
-          <div style={{display:'flex',gap:2,marginRight:8}}>
-            <button onClick={handleUndo} disabled={undoLen === 0}
-              title="Undo (Ctrl+Z)"
-              style={{fontSize:14,background:'none',border:'1px solid var(--border)',borderRadius:4,padding:'2px 8px',cursor:undoLen?'pointer':'default',color:undoLen?'var(--text1)':'var(--text2)',opacity:undoLen?1:0.4}}>↶</button>
-            <button onClick={handleRedo} disabled={redoLen === 0}
-              title="Redo (Ctrl+Shift+Z)"
-              style={{fontSize:14,background:'none',border:'1px solid var(--border)',borderRadius:4,padding:'2px 8px',cursor:redoLen?'pointer':'default',color:redoLen?'var(--text1)':'var(--text2)',opacity:redoLen?1:0.4}}>↷</button>
-          </div>
           <div className="tab-switcher">
             <button className={`tab-btn ${activeTab === 'planner' ? 'active' : ''}`}
               onClick={() => setActiveTab('planner')}>Planner</button>
@@ -3195,7 +3187,6 @@ function App({ onLogout, user: authUser }) {
               onClick={() => setActiveTab('dashboard')}>Dashboard</button>
           </div>
           <div className="vertical-selector">
-            <label>Vertical</label>
             <select className="vertical-select" value={activeVertical}
               onChange={e => handleVerticalChange(e.target.value)}>
               {VERTICALS.map(v => (
@@ -3204,11 +3195,6 @@ function App({ onLogout, user: authUser }) {
             </select>
           </div>
           {saving && <span style={{fontSize:11, color:'var(--accent2)'}}>Saving...</span>}
-          {currentData.length > 0 && activeTab === 'planner' && (
-            <span style={{fontSize:12, color:'var(--text2)'}}>
-              {roadmapIds.size} in roadmap · {currentData.length - roadmapIds.size} in backlog
-            </span>
-          )}
           {authUser && (
             <div style={{display:'flex',alignItems:'center',gap:6,marginLeft:8}}>
               <button onClick={() => { setShowSnapshots(true); loadSnapshots(); }}
