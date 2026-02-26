@@ -464,6 +464,7 @@
     font-weight: 600; white-space: nowrap;
   }
   .pill-pillar { opacity: 0.9; }
+  .backlog-row:hover { background: rgba(162,155,254,0.08); }
   .pill-market { background: rgba(255,255,255,0.08); color: var(--text2); }
   .pill-kpi { background: rgba(9,132,227,0.15); color: var(--blue); }
   .pill-impact { font-weight: 700; }
@@ -2332,7 +2333,7 @@ function App({ onLogout, user: authUser }) {
           </button>
         )}
         <button className="block-move"
-          onClick={(e) => { e.stopPropagation(); if (lane === 'backlog') { const r = e.currentTarget.getBoundingClientRect(); setTrackPicker({ projectId: p.id, x: r.right + 4, y: r.top }); } else { moveToBacklog(p.id); } }}
+          onClick={(e) => { e.stopPropagation(); if (lane === 'backlog') { const r = e.currentTarget.getBoundingClientRect(); setTrackPicker({ projectId: p.id, x: r.left - 140, y: r.bottom + 4 }); } else { moveToBacklog(p.id); } }}
           title={lane === 'backlog' ? 'Add to Roadmap' : 'Remove from Roadmap'}>
           {lane === 'backlog' ? '＋' : '✕'}
         </button>
@@ -3516,18 +3517,10 @@ function App({ onLogout, user: authUser }) {
             {backlogProjects.length === 0 ? <div className="empty-flow">All projects are in the roadmap</div> : (
             <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
               <thead>
-                <tr style={{borderBottom:'1px solid var(--border)',textAlign:'left'}}>
-                  <th style={{padding:'6px 8px',color:'var(--text2)',fontWeight:600,width:'30%'}}>Name</th>
-                  <th style={{padding:'6px 8px',color:'var(--text2)',fontWeight:600,width:'14%'}}>Epic</th>
-                  <th style={{padding:'6px 8px',color:'var(--text2)',fontWeight:600,width:'10%'}}>Pillar</th>
-                  <th style={{padding:'6px 8px',color:'var(--text2)',fontWeight:600,width:'7%',textAlign:'center'}}>Impact</th>
-                  <th style={{padding:'6px 8px',color:'var(--text2)',fontWeight:600,width:'5%',textAlign:'center'}}>BE</th>
-                  <th style={{padding:'6px 8px',color:'var(--text2)',fontWeight:600,width:'5%',textAlign:'center'}}>FE</th>
-                  <th style={{padding:'6px 8px',color:'var(--text2)',fontWeight:600,width:'5%',textAlign:'center'}}>Nat</th>
-                  <th style={{padding:'6px 8px',color:'var(--text2)',fontWeight:600,width:'5%',textAlign:'center'}}>QA</th>
-                  <th style={{padding:'6px 8px',color:'var(--text2)',fontWeight:600,width:'7%',textAlign:'center'}}>Sprints</th>
-                  <th style={{padding:'6px 8px',color:'var(--text2)',fontWeight:600,width:'8%',textAlign:'center'}}>Market</th>
-                  <th style={{padding:'6px 8px',width:'4%'}}></th>
+                <tr style={{textAlign:'left'}}>
+                  {[['30%','Name'],['14%','Epic'],['10%','Pillar'],['7%','Impact','center'],['5%','BE','center'],['5%','FE','center'],['5%','Nat','center'],['5%','QA','center'],['7%','Sprints','center'],['8%','Market','center'],['4%','']].map(([w,label,align],i) => (
+                    <th key={i} style={{padding:'6px 8px',color:'var(--text2)',fontWeight:600,width:w,textAlign:align||'left',position:'sticky',top:0,background:'var(--surface1)',borderBottom:'2px solid var(--border)',zIndex:2}}>{label}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -3535,9 +3528,7 @@ function App({ onLogout, user: authUser }) {
                   const sp = CP.computeProjectSprints(p, sizeMap);
                   const pColor = pillarColorMap[p.pillar];
                   return (
-                    <tr key={p.id} style={{borderBottom:'1px solid var(--border)',cursor:'pointer'}}
-                      onMouseEnter={(e) => setTooltip({ p, x: e.clientX, y: e.clientY })}
-                      onMouseLeave={() => setTooltip(null)}
+                    <tr key={p.id} className="backlog-row" style={{borderBottom:'1px solid var(--border)',cursor:'pointer'}}
                       draggable onDragStart={() => { dragItem.current = p.id; dragSource.current = 'backlog'; }}>
                       <td style={{padding:'6px 8px',color:'var(--text1)'}}>{p.subTask || '—'}</td>
                       <td style={{padding:'6px 8px',color:'var(--text2)',fontSize:11}}>{p.masterEpic || '—'}</td>
@@ -3551,10 +3542,8 @@ function App({ onLogout, user: authUser }) {
                       <td style={{padding:'6px 8px',textAlign:'center',color:'var(--text2)'}}>{p.qa || '—'}</td>
                       <td style={{padding:'6px 8px',textAlign:'center',fontWeight:600,color:'var(--text1)'}}>{sp.total || '—'}</td>
                       <td style={{padding:'6px 8px',textAlign:'center',color:'var(--text2)',fontSize:11}}>{p.targetMarket || '—'}</td>
-                      <td style={{padding:'6px 8px',textAlign:'center'}}
-                        onMouseEnter={(e) => { e.stopPropagation(); setTooltip(null); }}
-                        onMouseLeave={(e) => e.stopPropagation()}>
-                        <button className="btn" style={{fontSize:10,padding:'2px 6px'}} onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setTrackPicker({ projectId: p.id, x: r.right + 4, y: r.top }); }}>+ Roadmap</button>
+                      <td style={{padding:'6px 8px',textAlign:'center'}}>
+                        <button className="btn" style={{fontSize:10,padding:'2px 6px'}} onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setTrackPicker({ projectId: p.id, x: r.left - 140, y: r.bottom + 4 }); }}>+ Roadmap</button>
                       </td>
                     </tr>
                   );
@@ -3568,10 +3557,14 @@ function App({ onLogout, user: authUser }) {
       </div>
 
       {renderTooltip()}
-      {trackPicker && (
+      {trackPicker && (() => {
+        const pickerW = 140, pickerH = TRACKS.length * 34 + 12;
+        const px = Math.min(trackPicker.x, window.innerWidth - pickerW - 8);
+        const py = Math.min(trackPicker.y, window.innerHeight - pickerH - 8);
+        return (
         <React.Fragment>
           <div style={{position:'fixed',inset:0,zIndex:299}} onClick={() => setTrackPicker(null)} />
-          <div style={{position:'fixed',left:trackPicker.x,top:trackPicker.y,zIndex:300,background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:8,padding:6,boxShadow:'0 8px 24px rgba(0,0,0,0.4)',display:'flex',flexDirection:'column',gap:4,minWidth:120}}>
+          <div style={{position:'fixed',left:px,top:py,zIndex:300,background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:8,padding:6,boxShadow:'0 8px 24px rgba(0,0,0,0.4)',display:'flex',flexDirection:'column',gap:4,minWidth:120}}>
             {TRACKS.map(t => (
               <button key={t.key} className="btn" style={{fontSize:11,padding:'5px 10px',textAlign:'left',background:'transparent',color:'var(--text1)',borderLeft:`3px solid ${t.borderColor}`}}
                 onClick={() => { moveToTrack(trackPicker.projectId, t.key); setTrackPicker(null); }}>
@@ -3580,7 +3573,8 @@ function App({ onLogout, user: authUser }) {
             ))}
           </div>
         </React.Fragment>
-      )}
+        );
+      })()}
       </>)}
 
       {showTimeline && (
