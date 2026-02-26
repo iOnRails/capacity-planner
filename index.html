@@ -867,7 +867,7 @@
     display: flex; justify-content: flex-end; margin-bottom: 8px; gap: 6px;
   }
   .quarterly-container {
-    display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;
+    display: grid; grid-template-columns: repeat(4, 1fr); row-gap: 2px;
     flex: 1; min-height: 0; overflow-y: auto; align-content: start;
   }
   .quarter-header {
@@ -880,8 +880,11 @@
     font-size: 10px; font-weight: 600; color: var(--text2);
     background: var(--surface2); padding: 2px 8px; border-radius: 10px;
   }
+  .q-cell {
+    position: relative;
+  }
   .q-block {
-    position: relative; border-radius: 6px; overflow: hidden;
+    position: absolute; top: 0; bottom: 0; border-radius: 6px; overflow: hidden;
     display: flex; flex-direction: column;
     border: 1px solid transparent; transition: all 0.15s;
     cursor: default; min-height: 36px;
@@ -2836,12 +2839,19 @@ function App({ onLogout, user: authUser }) {
         const startsBeforeQ = projStart < q.start;
         const endsAfterQ = projEnd > q.end;
 
+        // Gantt-style: compute left% and width% within the quarter
+        const qDays = Math.max(1, (q.end.getTime() - q.start.getTime()) / 86400000);
+        const leftPct = Math.max(0, (overlapStart - q.start.getTime()) / 86400000 / qDays * 100);
+        const widthPct = Math.min(100 - leftPct, overlapDays / qDays * 100);
+
         q.projects.push({
           project,
           totalSprints,
           fraction,
           continuesLeft: startsBeforeQ,
           continuesRight: endsAfterQ,
+          leftPct,
+          widthPct,
         });
       }
     }
@@ -3471,7 +3481,7 @@ function App({ onLogout, user: authUser }) {
           <div className="quarterly-container">
             {/* Column headers */}
             {quarterlyData.quarters.map((q, qi) => (
-              <div key={qi} className="quarter-header" style={{gridColumn: qi + 1, gridRow: 1}}>
+              <div key={qi} className="quarter-header" style={{gridColumn: qi + 1, gridRow: 1, ...(qi > 0 ? {borderLeft: '1px solid var(--border)'} : {})}}>
                 <span>{q.label}</span>
                 <span className="q-count">{q.projects.length}</span>
               </div>
@@ -3480,21 +3490,25 @@ function App({ onLogout, user: authUser }) {
             {quarterlyData.rows.map((row, ri) => {
               const weight = Math.max(...row.cells.filter(Boolean).map(c => c.fraction * c.totalSprints));
               const heightPct = Math.max(3, (weight / quarterlyData.totalWeight) * 100);
+              const qBorder = qi => qi > 0 ? {borderLeft: '1px solid var(--border)'} : {};
               return row.cells.map((cell, qi) => {
                 if (!cell) return (
-                  <div key={`${row.id}-${qi}`} style={{gridColumn: qi + 1, gridRow: ri + 2, height: `calc(${heightPct}vh - 4px)`}} />
+                  <div key={`${row.id}-${qi}`} style={{gridColumn: qi + 1, gridRow: ri + 2, height: `calc(${heightPct}vh - 4px)`, ...qBorder(qi)}} />
                 );
-                const {continuesLeft, continuesRight, project: p} = cell;
+                const {continuesLeft, continuesRight, project: p, leftPct, widthPct} = cell;
                 const cls = ['q-block', p.inProgress ? 'in-progress' : '', continuesRight ? 'continues-right' : '', continuesLeft ? 'continues-left' : ''].filter(Boolean).join(' ');
                 return (
-                  <div key={`${row.id}-${qi}`} className={cls}
-                    style={{gridColumn: qi + 1, gridRow: ri + 2, height: `calc(${heightPct}vh - 4px)`, background: CP.getBlockBg(p.pillar, pillarColorMap)}}
-                    onMouseEnter={(e) => handleMouseEnter(e, p)}
-                    onMouseLeave={handleMouseLeave}>
-                    {continuesLeft && <span className="q-arrow left">&larr;</span>}
-                    {continuesRight && <span className="q-arrow right">&rarr;</span>}
-                    <div className="block-content">
-                      <div className="block-title">{p.subTask}</div>
+                  <div key={`${row.id}-${qi}`} className="q-cell"
+                    style={{gridColumn: qi + 1, gridRow: ri + 2, height: `calc(${heightPct}vh - 4px)`, ...qBorder(qi)}}>
+                    <div className={cls}
+                      style={{left: `${leftPct}%`, width: `${widthPct}%`, background: CP.getBlockBg(p.pillar, pillarColorMap)}}
+                      onMouseEnter={(e) => handleMouseEnter(e, p)}
+                      onMouseLeave={handleMouseLeave}>
+                      {continuesLeft && <span className="q-arrow left">&larr;</span>}
+                      {continuesRight && <span className="q-arrow right">&rarr;</span>}
+                      <div className="block-content">
+                        <div className="block-title">{p.subTask}</div>
+                      </div>
                     </div>
                   </div>
                 );
