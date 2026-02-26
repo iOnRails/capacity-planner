@@ -647,6 +647,9 @@
     box-shadow: 0 24px 80px rgba(0,0,0,0.7);
     animation: tl-slide-up 0.3s ease-out;
   }
+  .timeline-modal:fullscreen {
+    width: 100vw; height: 100vh; border-radius: 0; border: none;
+  }
 
   /* Header */
   .tl-header {
@@ -3615,6 +3618,11 @@ function App({ onLogout, user: authUser }) {
                   </select>
                 </div>
               </div>
+              <button className="tl-btn" onClick={() => {
+                const el = document.querySelector('.timeline-modal');
+                if (document.fullscreenElement) document.exitFullscreen();
+                else if (el) el.requestFullscreen();
+              }} title="Toggle fullscreen" style={{fontSize:16,padding:'2px 6px'}}>⛶</button>
               <button className="tl-close" onClick={() => setShowTimeline(false)} title="Close">✕</button>
             </div>
             <div className="tl-body">
