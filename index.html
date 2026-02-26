@@ -2794,23 +2794,29 @@ function App({ onLogout, user: authUser }) {
     const qStart = quarters[0].start;
     const qEnd = quarters[3].end;
 
-    // Collect all bars from all tracks (core projects only, skip ghosts)
-    const allBars = [];
-    const seen = new Set();
+    // Collect all bars and merge core + ghost per project (earliest start, latest end)
+    const projectSpans = new Map(); // projectId -> {project, minStartSprints, maxEndSprints}
     if (timelineData && timelineData.trackBars) {
       for (const bars of Object.values(timelineData.trackBars)) {
         for (const bar of bars) {
-          if (bar.isGhost || seen.has(bar.project.id)) continue;
-          seen.add(bar.project.id);
-          allBars.push(bar);
+          const pid = bar.project.id;
+          const endSp = bar.startSprints + bar.sprints;
+          if (!projectSpans.has(pid)) {
+            projectSpans.set(pid, { project: bar.project, minStart: bar.startSprints, maxEnd: endSp });
+          } else {
+            const span = projectSpans.get(pid);
+            span.minStart = Math.min(span.minStart, bar.startSprints);
+            span.maxEnd = Math.max(span.maxEnd, endSp);
+          }
         }
       }
     }
 
-    // Map each bar to calendar dates and assign to quarters
-    for (const bar of allBars) {
-      const projStartDays = bar.startSprints * sprintWeeks * 7;
-      const projEndDays = (bar.startSprints + bar.sprints) * sprintWeeks * 7;
+    // Map each project span to calendar dates and assign to quarters
+    for (const {project, minStart, maxEnd} of projectSpans.values()) {
+      const totalSprints = maxEnd - minStart;
+      const projStartDays = minStart * sprintWeeks * 7;
+      const projEndDays = maxEnd * sprintWeeks * 7;
       const projStart = new Date(sprintStartDate.getTime() + projStartDays * 86400000);
       const projEnd = new Date(sprintStartDate.getTime() + projEndDays * 86400000);
       const totalDays = Math.max(1, (projEnd - projStart) / 86400000);
@@ -2831,8 +2837,8 @@ function App({ onLogout, user: authUser }) {
         const endsAfterQ = projEnd > q.end;
 
         q.projects.push({
-          project: bar.project,
-          totalSprints: bar.sprints,
+          project,
+          totalSprints,
           fraction,
           continuesLeft: startsBeforeQ,
           continuesRight: endsAfterQ,
