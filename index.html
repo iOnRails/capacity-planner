@@ -867,8 +867,8 @@
     display: flex; justify-content: flex-end; margin-bottom: 8px; gap: 6px;
   }
   .quarterly-container {
-    display: grid; grid-template-columns: repeat(4, 1fr); row-gap: 3px;
-    grid-auto-rows: 36px; grid-template-rows: auto;
+    display: grid; grid-template-columns: repeat(4, 1fr); row-gap: 6px;
+    grid-auto-rows: 72px; grid-template-rows: auto;
     flex: 1; min-height: 0; overflow-y: auto; align-content: start;
   }
   .quarter-header {
@@ -885,7 +885,7 @@
     position: relative;
   }
   .q-block {
-    position: absolute; top: 1px; bottom: 1px; border-radius: 6px; overflow: hidden;
+    position: absolute; top: 2px; bottom: 2px; border-radius: 6px; overflow: hidden;
     display: flex; flex-direction: column;
     border: 1px solid transparent; transition: all 0.15s;
     cursor: default;
@@ -901,7 +901,8 @@
   }
   .q-block .block-title {
     font-size: 10px; font-weight: 600; color: white; line-height: 1.3;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    overflow: hidden; text-overflow: ellipsis;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
   }
   .q-block.continues-right {
     border-right: 3px dashed rgba(255,255,255,0.4);
