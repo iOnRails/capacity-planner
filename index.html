@@ -2766,18 +2766,25 @@ function App({ onLogout, user: authUser }) {
         if (!rows.length) { alert('No data found in Excel file.'); return; }
 
         const colMap = {
-          'nvrd': 'nvrd', 'master epic': 'masterEpic', 'masterepic': 'masterEpic',
-          'sub task': 'subTask', 'subtask': 'subTask', 'pillar': 'pillar',
-          'target market': 'targetMarket', 'targetmarket': 'targetMarket',
-          'target kpi': 'targetKPI', 'targetkpi': 'targetKPI',
-          'impact': 'impact', 'backend': 'backend', 'frontend': 'frontend',
-          'natives': 'natives', 'native': 'natives', 'qa': 'qa',
-          'in progress': 'inProgress', 'inprogress': 'inProgress',
+          'nvrd': 'nvrd',
+          'masterepic': 'masterEpic', 'epic': 'masterEpic',
+          'subtask': 'subTask', 'task': 'subTask', 'name': 'subTask',
+          'pillar': 'pillar',
+          'targetmarket': 'targetMarket', 'market': 'targetMarket',
+          'targetkpi': 'targetKPI', 'kpi': 'targetKPI',
+          'impact': 'impact',
+          'backend': 'backend', 'be': 'backend',
+          'frontend': 'frontend', 'fe': 'frontend',
+          'natives': 'natives', 'native': 'natives', 'mobile': 'natives',
+          'qa': 'qa', 'quality': 'qa',
+          'inprogress': 'inProgress', 'progress': 'inProgress', 'status': 'inProgress',
         };
+
+        const normalize = (s) => s.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
 
         const headerMap = {};
         Object.keys(rows[0]).forEach(h => {
-          const key = h.trim().toLowerCase();
+          const key = normalize(h);
           if (colMap[key]) headerMap[h] = colMap[key];
         });
 
