@@ -680,6 +680,10 @@
   .tl-sidebar {
     width: 220px; background: var(--surface); border-right: 1px solid var(--border);
     display: flex; flex-direction: column; overflow-y: auto; flex-shrink: 0;
+    transition: width 0.2s ease;
+  }
+  .tl-sidebar.collapsed {
+    width: 36px; overflow: hidden;
   }
   .tl-sidebar-header {
     padding: 12px 14px; font-size: 13px; font-weight: 700; color: var(--text);
@@ -1276,6 +1280,7 @@ function App({ onLogout, user: authUser }) {
   // buffer is now stored inside verticalStates and persisted to the server
   const [splitModal, setSplitModal] = useState(null); // { projectId, projectName, existing: {...} }
   const [showTimeline, setShowTimeline] = useState(false);
+  const [tlSidebarOpen, setTlSidebarOpen] = useState(true);
   const [showSnapshots, setShowSnapshots] = useState(false);
   const [snapshots, setSnapshots] = useState([]);
   const [snapshotLoading, setSnapshotLoading] = useState(false);
@@ -3614,17 +3619,25 @@ function App({ onLogout, user: authUser }) {
             </div>
             <div className="tl-body">
               {/* Milestones sidebar */}
-              <div className="tl-sidebar">
-                <div className="tl-sidebar-header">
-                  <span>Milestones</span>
-                  <button className="tl-btn" onClick={() => {
-                    const name = prompt('Milestone name:');
-                    if (name) {
-                      const date = prompt('Date (YYYY-MM-DD):', new Date().toISOString().split('T')[0]);
-                      if (date) addMilestone(name, date);
-                    }
-                  }}>+ Add</button>
+              <div className={`tl-sidebar${tlSidebarOpen ? '' : ' collapsed'}`}>
+                <div className="tl-sidebar-header" style={tlSidebarOpen ? {} : {padding:'8px 0',justifyContent:'center'}}>
+                  {tlSidebarOpen ? (<>
+                    <span>Milestones</span>
+                    <div style={{display:'flex',gap:4,alignItems:'center'}}>
+                      <button className="tl-btn" onClick={() => {
+                        const name = prompt('Milestone name:');
+                        if (name) {
+                          const date = prompt('Date (YYYY-MM-DD):', new Date().toISOString().split('T')[0]);
+                          if (date) addMilestone(name, date);
+                        }
+                      }}>+ Add</button>
+                      <button className="tl-btn" onClick={() => setTlSidebarOpen(false)} title="Collapse sidebar" style={{fontSize:14,padding:'2px 4px'}}>«</button>
+                    </div>
+                  </>) : (
+                    <button className="tl-btn" onClick={() => setTlSidebarOpen(true)} title="Expand milestones" style={{fontSize:14,padding:'2px 4px'}}>»</button>
+                  )}
                 </div>
+                {tlSidebarOpen && (
                 <div className="tl-sidebar-content">
                   {milestones.length === 0 && <div className="tl-ms-empty">No milestones yet. Click "+ Add" to create one.</div>}
                   {milestones.map(m => (
@@ -3650,6 +3663,7 @@ function App({ onLogout, user: authUser }) {
                     </div>
                   ))}
                 </div>
+                )}
               </div>
               {/* Timeline grid */}
               <div className="tl-grid-wrapper">
