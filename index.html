@@ -2429,11 +2429,11 @@ function App({ onLogout, user: authUser }) {
           </div>
         </div>
         <div className="ghost-origin">↗ {homeLabel}</div>
-        <button className="block-move"
+        {isEditor && <button className="block-move"
           onClick={(e) => { e.stopPropagation(); removeSplit(p.id, trackKey); }}
           title="Remove split">
           ✕
-        </button>
+        </button>}
       </div>
     );
   };
