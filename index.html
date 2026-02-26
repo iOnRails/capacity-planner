@@ -2246,7 +2246,7 @@ function App({ onLogout, user: authUser }) {
 
   const handleMouseEnter = (e, p) => {
     const rect = e.currentTarget.getBoundingClientRect();
-    setTooltip({ p, x: rect.right + 8, y: rect.top });
+    setTooltip({ p, x: rect.left, y: rect.bottom + 6 });
   };
   const handleMouseLeave = () => setTooltip(null);
 
