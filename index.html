@@ -910,7 +910,7 @@ const VERTICALS = [
 // Set this to your Railway API URL after deploying, e.g. 'https://your-app.railway.app'
 const API_URL = window.API_URL || 'https://capacity-planner-production-1cf7.up.railway.app';
 
-const DEFAULT_SIZE_MAP = { XS: 0.5, S: 1, M: 2, L: 3, XL: 5, XXL: 8, XXXL: 13 };
+// DEFAULT_SIZE_MAP, PILLAR_COLORS from shared/computations.js (CP.*)
 const DEFAULT_TRACK_CAPACITY = {
   'core-bonus': { backend: 0, frontend: 0, natives: 0, qa: 0 },
   'gateway': { backend: 0, frontend: 0, natives: 0, qa: 0 },
@@ -918,7 +918,6 @@ const DEFAULT_TRACK_CAPACITY = {
 };
 const DEFAULT_CAPACITY = { backend: 40, frontend: 30, natives: 25, qa: 20 };
 
-// PILLAR_COLORS now from shared/computations.js (CP.PILLAR_COLORS)
 const PILLAR_CLASSES = {
   'Expansion': 'pill-expansion', 'Acquisition': 'pill-acquisition',
   'Core Platform': 'pill-core-platform', 'Comms': 'pill-comms',
@@ -1201,7 +1200,7 @@ function App({ onLogout, user: authUser }) {
   };
 
   const [activeVertical, setActiveVertical] = useState('growth');
-  const [sizeMap, setSizeMap] = useState({...DEFAULT_SIZE_MAP});
+  const [sizeMap, setSizeMap] = useState({...CP.DEFAULT_SIZE_MAP});
   const sizeMapRef = useRef(sizeMap);
   useEffect(() => { sizeMapRef.current = sizeMap; }, [sizeMap]);
   const [tooltip, setTooltip] = useState(null);

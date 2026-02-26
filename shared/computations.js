@@ -3,6 +3,8 @@
 // Used by both frontend (index.html via <script>) and tests (require)
 // ══════════════════════════════════════════════════════════
 
+var CP = (function() {
+
 const DEFAULT_SIZE_MAP = { XS: 0.5, S: 1, M: 2, L: 3, XL: 5, XXL: 8, XXXL: 13 };
 const TRACK_KEYS = ['core-bonus', 'gateway', 'seo-aff'];
 const DISCIPLINES = ['backend', 'frontend', 'natives', 'qa'];
@@ -302,9 +304,9 @@ function getBlockBg(pillar) {
   return `linear-gradient(135deg, ${c}cc, ${c}88)`;
 }
 
-// ── Exports (Node.js) / Globals (browser) ──
+// ── Return public API ──
 
-var CP = {
+return {
   DEFAULT_SIZE_MAP, TRACK_KEYS, DISCIPLINES, ZERO_DISC, IMPACT_ORDER, PILLAR_COLORS,
   sizeToSprints, computeProjectSprints, computeEffectiveSprints,
   migrateTracks, migrateTrackCapacity,
@@ -314,6 +316,8 @@ var CP = {
   filterProjects, sortProjects,
   getCapColor, getBlockBg,
 };
+
+})();
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = CP;
