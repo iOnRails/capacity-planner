@@ -512,3 +512,91 @@ describe('404 handling', () => {
     expect(res.body.error).toContain('Route not found');
   });
 });
+
+// ═══════════════════════════════════════════════
+// Additional Conflict Resolution Tests
+// ═══════════════════════════════════════════════
+
+describe('State merge — mixed accept/reject', () => {
+  test('accepts fresh fields and rejects stale fields in same request', async () => {
+    // Set initial state
+    await request(app)
+      .post('/api/verticals/growth/state')
+      .send({ capacity: { backend: 10 }, milestones: [{ id: 1, name: 'M1' }], _loadedAt: 0 });
+
+    // Client loads state
+    const loadRes = await request(app).get('/api/verticals/growth/state');
+    const loadedAt = loadRes.body._loadedAt;
+
+    // Another client updates milestones (makes milestones stale for first client)
+    await request(app)
+      .post('/api/verticals/growth/state')
+      .send({ milestones: [{ id: 1, name: 'M1 Updated' }], _loadedAt: loadedAt });
+
+    // First client sends BOTH capacity (fresh-ish, object field → merge) and milestones (stale, array → reject)
+    const res = await request(app)
+      .post('/api/verticals/growth/state')
+      .send({ capacity: { backend: 20 }, milestones: [{ id: 2, name: 'M2' }], _loadedAt: loadedAt });
+
+    // Milestones should be rejected (array, stale)
+    expect(res.body.conflicts).toContain('milestones');
+    expect(res.body.mergedState.milestones[0].name).toBe('M1 Updated');
+    // Capacity is an object — sub-key merge applies
+    expect(res.body.mergedState.capacity.backend).toBe(20);
+  });
+});
+
+describe('State merge — _loadedAt: 0 force overwrite', () => {
+  test('_loadedAt: 0 accepts all fields regardless of staleness', async () => {
+    // Set initial state and let fieldTs be set
+    await request(app)
+      .post('/api/verticals/growth/state')
+      .send({ capacity: { backend: 10 }, milestones: [{ id: 1, name: 'M1' }], _loadedAt: 0 });
+
+    // Save again with _loadedAt: 0 — should always accept
+    const res = await request(app)
+      .post('/api/verticals/growth/state')
+      .send({ capacity: { backend: 99 }, milestones: [{ id: 2, name: 'Overwrite' }], _loadedAt: 0 });
+
+    expect(res.body.conflicts).toEqual([]);
+    expect(res.body.mergedState.capacity.backend).toBe(99);
+    expect(res.body.mergedState.milestones[0].name).toBe('Overwrite');
+  });
+});
+
+describe('Project save — track cleanup', () => {
+  test('removes deleted project IDs from tracks', async () => {
+    // Set up tracks with project IDs
+    await request(app)
+      .post('/api/verticals/growth/state')
+      .send({ tracks: { 'core-bonus': [1, 2, 3], 'gateway': [4], 'seo-aff': [] }, _loadedAt: 0 });
+
+    // Save projects WITHOUT id 2 (simulating deletion)
+    await request(app)
+      .post('/api/verticals/growth/projects')
+      .send({ projects: [{ id: 1 }, { id: 3 }, { id: 4 }] });
+
+    // Verify tracks no longer contain deleted project
+    const stateRes = await request(app).get('/api/verticals/growth/state');
+    expect(stateRes.body.tracks['core-bonus']).not.toContain(2);
+    expect(stateRes.body.tracks['core-bonus']).toContain(1);
+    expect(stateRes.body.tracks['core-bonus']).toContain(3);
+  });
+});
+
+describe('Project validation edge cases', () => {
+  test('rejects projects with duplicate IDs gracefully', async () => {
+    const res = await request(app)
+      .post('/api/verticals/growth/projects')
+      .send({ projects: [{ id: 1, backend: 'S' }, { id: 1, backend: 'M' }] });
+    // Should accept (server doesn't validate uniqueness) but not crash
+    expect(res.status).toBe(200);
+  });
+
+  test('accepts project with all empty size fields', async () => {
+    const res = await request(app)
+      .post('/api/verticals/growth/projects')
+      .send({ projects: [{ id: 1, backend: '', frontend: '', natives: '', qa: '', impact: '' }] });
+    expect(res.status).toBe(200);
+  });
+});

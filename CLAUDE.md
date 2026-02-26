@@ -19,7 +19,9 @@ vercel.json         — SPA routing config
 api/
   server.js         (895 lines) — Express.js API with WebSocket support
   package.json      — Dependencies: express, cors, ws; devDeps: jest, supertest
-  __tests__/        — Test suite (119 tests across 4 files)
+  __tests__/        — Test suite (214 tests across 5 files)
+shared/
+  computations.js   — Pure computation functions shared by frontend + tests
 ```
 
 **CDN Dependencies** (loaded in index.html):
@@ -314,10 +316,11 @@ All state and project changes are logged to `audit_log.json` with:
 
 ## Testing
 
-- **119 tests** across 4 test files in `api/__tests__/`
+- **214 tests** across 5 test files in `api/__tests__/`
+- `computations.test.js` — 91 tests for shared pure functions (sizeToSprints, projectSprints, effectiveSprints, deepMerge, migration, capacity, overflow, filter/sort)
 - `helpers.test.js` — loadJSON, saveJSON, buildNarratives, findMovedItem, summarizeValue, describeStateChanges, logAudit
-- `api.test.js` — All REST endpoints, validation, conflict resolution
+- `api.test.js` — All REST endpoints, validation, conflict resolution (incl. mixed accept/reject, force overwrite)
 - `websocket.test.js` — WS subscribe, broadcast, sender exclusion, multi-client, disconnect
 - `snapshots.test.js` — Snapshot CRUD, restore, audit logging
-- Run: `npm test` (or `npm run test:unit`, `test:integration`, `test:ws`, `test:snapshots`)
+- Run: `npm test` (or `npm run test:unit`, `test:integration`, `test:ws`, `test:snapshots`, `test:computations`)
 - `require.main === module` guard on server allows test imports without starting the listener

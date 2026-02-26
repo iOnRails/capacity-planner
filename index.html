@@ -894,6 +894,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="shared/computations.js"></script>
 <script type="text/babel">
 const { useState, useMemo, useCallback, useRef, useEffect } = React;
 
@@ -917,49 +918,15 @@ const DEFAULT_TRACK_CAPACITY = {
 };
 const DEFAULT_CAPACITY = { backend: 40, frontend: 30, natives: 25, qa: 20 };
 
-const PILLAR_COLORS = {
-  'Expansion': '#00b894', 'Acquisition': '#0984e3', 'Core Platform': '#6c5ce7',
-  'Comms': '#e67e22', 'Gamification': '#e84393', 'Core Bonus': '#fdcb6e',
-};
+// PILLAR_COLORS now from shared/computations.js (CP.PILLAR_COLORS)
 const PILLAR_CLASSES = {
   'Expansion': 'pill-expansion', 'Acquisition': 'pill-acquisition',
   'Core Platform': 'pill-core-platform', 'Comms': 'pill-comms',
   'Gamification': 'pill-gamification', 'Core Bonus': 'pill-core-bonus',
 };
 
-function getCapColor(pct) {
-  if (pct <= 70) return 'var(--green)';
-  if (pct <= 90) return 'var(--yellow)';
-  return 'var(--red)';
-}
-
-function getBlockBg(pillar) {
-  const c = PILLAR_COLORS[pillar] || '#6c5ce7';
-  return `linear-gradient(135deg, ${c}cc, ${c}88)`;
-}
-
-// Migrate old track keys to new ones
-function migrateTracks(tracks) {
-  const result = { ...tracks };
-  if ('gamification' in result && !('gateway' in result)) {
-    result['gateway'] = result['gamification'];
-    delete result['gamification'];
-  }
-  // Ensure all expected keys exist
-  if (!result['core-bonus']) result['core-bonus'] = [];
-  if (!result['gateway']) result['gateway'] = [];
-  if (!result['seo-aff']) result['seo-aff'] = [];
-  return result;
-}
-
-function migrateTrackCapacity(tc) {
-  const result = tc ? JSON.parse(JSON.stringify(tc)) : {};
-  const ZERO = { backend: 0, frontend: 0, natives: 0, qa: 0 };
-  if (!result['core-bonus']) result['core-bonus'] = { ...ZERO };
-  if (!result['gateway']) result['gateway'] = { ...ZERO };
-  if (!result['seo-aff']) result['seo-aff'] = { ...ZERO };
-  return result;
-}
+// getCapColor, getBlockBg, migrateTracks, migrateTrackCapacity — from shared/computations.js
+const { getCapColor, getBlockBg, migrateTracks, migrateTrackCapacity, PILLAR_COLORS } = CP;
 
 const BLOCK_HEIGHT = 94;
 const MIN_WIDTH = 100;
@@ -1393,38 +1360,13 @@ function App({ onLogout, user: authUser }) {
   // For object fields (tracks, trackBlockOrder, etc.), deep-merge local changes
   // with the LATEST server state so we only overwrite sub-keys the user changed
   const deepMergeField = useCallback((key, fieldName, localValue, capturedSnapshotJson) => {
-    // Only deep-merge plain objects (not arrays, not primitives)
     if (typeof localValue !== 'object' || localValue === null || Array.isArray(localValue)) return localValue;
-    // Get the LATEST server value using the key param (not activeVertical from closure)
     const latestSnapshot = serverSnapshotRef.current[key] || {};
     const latestServerJson = latestSnapshot[fieldName];
     if (!latestServerJson) return localValue;
     const latestServer = JSON.parse(latestServerJson);
     const capturedServer = capturedSnapshotJson ? JSON.parse(capturedSnapshotJson) : latestServer;
-    // Start from USER's version (respects deletions), then incorporate
-    // server-side changes the user didn't touch.
-    const merged = { ...localValue };
-    const overlaid = [];
-    const deleted = [];
-    for (const subKey of Object.keys(latestServer)) {
-      if (!(subKey in capturedServer)) {
-        // Key is NEW on the server (added after client loaded) — include it
-        merged[subKey] = latestServer[subKey];
-        overlaid.push('+' + subKey);
-      } else if (subKey in localValue) {
-        // Key exists in both — if user didn't change it, use server's latest
-        if (JSON.stringify(localValue[subKey]) === JSON.stringify(capturedServer[subKey])) {
-          merged[subKey] = latestServer[subKey];
-        }
-        // else: user changed it — keep their version (already in merged)
-      }
-      // If key is in latestServer + capturedServer but NOT in localValue:
-      // user DELETED it — don't add it back (respects deletion)
-    }
-    // Log deletions for debugging
-    for (const subKey of Object.keys(capturedServer)) {
-      if (!(subKey in localValue)) deleted.push(subKey);
-    }
+    const { merged, overlaid, deleted } = CP.deepMergeObject(localValue, latestServer, capturedServer);
     if (overlaid.length > 0 || deleted.length > 0) {
       console.log('[deepMerge] ' + fieldName + ': overlaid=[' + overlaid.join(',') + '] deleted=[' + deleted.join(',') + ']');
     }
@@ -1963,18 +1905,9 @@ function App({ onLogout, user: authUser }) {
     setLoading(true);
   };
 
-  const sizeToSprints = useCallback((size) => {
-    if (!size || size === 'nan' || size === '' || size === 'NaN') return 0;
-    return sizeMap[size] || 0;
-  }, [sizeMap]);
+  const sizeToSprints = useCallback((size) => CP.sizeToSprints(size, sizeMap), [sizeMap]);
 
-  const projectSprints = useCallback((p) => ({
-    backend: sizeToSprints(p.backend),
-    frontend: sizeToSprints(p.frontend),
-    natives: sizeToSprints(p.natives),
-    qa: sizeToSprints(p.qa),
-    total: sizeToSprints(p.backend) + sizeToSprints(p.frontend) + sizeToSprints(p.natives) + sizeToSprints(p.qa)
-  }), [sizeToSprints]);
+  const projectSprints = useCallback((p) => CP.computeProjectSprints(p, sizeMap), [sizeMap]);
 
   const uniqueValues = useMemo(() => ({
     pillar: [...new Set(currentData.map(p => p.pillar).filter(Boolean))].sort(),
@@ -1984,75 +1917,23 @@ function App({ onLogout, user: authUser }) {
     impact: ['XS','S','M','L','XL','XXL','XXXL'],
   }), [currentData]);
 
-  const filterProjects = useCallback((projects) => {
-    return projects.filter(p => {
-      if (search) {
-        const q = search.toLowerCase();
-        if (!(p.subTask||'').toLowerCase().includes(q) && !(p.nvrd||'').toLowerCase().includes(q) && !(p.masterEpic||'').toLowerCase().includes(q)) return false;
-      }
-      if (filters.pillar.length && !filters.pillar.includes(p.pillar)) return false;
-      if (filters.market.length && !filters.market.includes(p.targetMarket)) return false;
-      if (filters.epic.length && !filters.epic.includes(p.masterEpic)) return false;
-      if (filters.kpi.length && !filters.kpi.includes(p.targetKPI)) return false;
-      if (filters.impact.length && !filters.impact.includes(p.impact)) return false;
-      return true;
-    });
-  }, [search, filters]);
+  const filterProjects = useCallback((projects) => CP.filterProjects(projects, search, filters), [search, filters]);
 
-  const impactOrder = { XXXL: 7, XXL: 6, XL: 5, L: 4, M: 3, S: 2, XS: 1 };
-  const sortProjects = useCallback((projects) => {
-    return [...projects].sort((a, b) => {
-      if (sortBy === 'impact') return (impactOrder[b.impact]||0) - (impactOrder[a.impact]||0);
-      if (sortBy === 'effort') return projectSprints(b).total - projectSprints(a).total;
-      if (sortBy === 'name') return a.subTask.localeCompare(b.subTask);
-      if (sortBy === 'epic') return a.masterEpic.localeCompare(b.masterEpic);
-      if (sortBy === 'pillar') return a.pillar.localeCompare(b.pillar);
-      return 0;
-    });
-  }, [sortBy, projectSprints]);
+  const sortProjects = useCallback((projects) => CP.sortProjects(projects, sortBy, sizeMap), [sortBy, sizeMap]);
 
   const roadmapProjects = useMemo(() => sortProjects(filterProjects(currentData.filter(p => roadmapIds.has(p.id)))), [roadmapIds, filterProjects, sortProjects, currentData]);
   const backlogProjects = useMemo(() => sortProjects(filterProjects(currentData.filter(p => !roadmapIds.has(p.id)))), [roadmapIds, filterProjects, sortProjects, currentData]);
 
-  const usedCapacity = useMemo(() => {
-    return currentData.filter(p => roadmapIds.has(p.id)).reduce((acc, p) => {
-      const s = projectSprints(p);
-      return { backend: acc.backend + s.backend, frontend: acc.frontend + s.frontend, natives: acc.natives + s.natives, qa: acc.qa + s.qa };
-    }, { backend: 0, frontend: 0, natives: 0, qa: 0 });
-  }, [roadmapIds, projectSprints, currentData]);
-
-  // Apply buffer to roadmap used capacity
-  const bufferedUsed = useMemo(() => ({
-    backend: Math.round(usedCapacity.backend * (1 + buffer.backend / 100) * 10) / 10,
-    frontend: Math.round(usedCapacity.frontend * (1 + buffer.frontend / 100) * 10) / 10,
-    natives: Math.round(usedCapacity.natives * (1 + buffer.natives / 100) * 10) / 10,
-    qa: Math.round(usedCapacity.qa * (1 + buffer.qa / 100) * 10) / 10,
-  }), [usedCapacity, buffer]);
+  const usedCapacity = useMemo(() => CP.computeUsedCapacity(currentData, roadmapIds, sizeMap), [roadmapIds, sizeMap, currentData]);
+  const bufferedUsed = useMemo(() => CP.computeBuffered(usedCapacity, buffer), [usedCapacity, buffer]);
 
   const totalCapacity = capacity.backend + capacity.frontend + capacity.natives + capacity.qa;
   const totalUsed = bufferedUsed.backend + bufferedUsed.frontend + bufferedUsed.natives + bufferedUsed.qa;
 
-  // Total demand across ALL projects (not just roadmap)
-  const totalDemand = useMemo(() => {
-    return currentData.reduce((acc, p) => {
-      const s = projectSprints(p);
-      return { backend: acc.backend + s.backend, frontend: acc.frontend + s.frontend, natives: acc.natives + s.natives, qa: acc.qa + s.qa };
-    }, { backend: 0, frontend: 0, natives: 0, qa: 0 });
-  }, [currentData, projectSprints]);
+  const totalDemand = useMemo(() => CP.computeTotalDemand(currentData, sizeMap), [currentData, sizeMap]);
+  const bufferedDemand = useMemo(() => CP.computeBuffered(totalDemand, buffer), [totalDemand, buffer]);
 
-  const bufferedDemand = useMemo(() => ({
-    backend: Math.round(totalDemand.backend * (1 + buffer.backend / 100) * 10) / 10,
-    frontend: Math.round(totalDemand.frontend * (1 + buffer.frontend / 100) * 10) / 10,
-    natives: Math.round(totalDemand.natives * (1 + buffer.natives / 100) * 10) / 10,
-    qa: Math.round(totalDemand.qa * (1 + buffer.qa / 100) * 10) / 10,
-  }), [totalDemand, buffer]);
-
-  // Remove id from all tracks
-  const removeFromTracks = (trks, id) => {
-    const n = {};
-    for (const k of Object.keys(trks)) n[k] = trks[k].filter(x => x !== id);
-    return n;
-  };
+  const removeFromTracks = (trks, id) => CP.removeFromTracks(trks, id);
 
   const moveToTrack = (id, trackKey, insertIndex) => setTracks(prev => {
     const n = removeFromTracks(prev, id);
@@ -2244,30 +2125,7 @@ function App({ onLogout, user: authUser }) {
     return m;
   }, [currentData]);
 
-  // Compute effective sprints for a project in its home track:
-  // full sizing minus any capacity sent to other tracks via splits
-  const effectiveSprints = useCallback((p) => {
-    const full = projectSprints(p);
-    const projectSplits = splits[p.id];
-    if (!projectSplits || typeof projectSplits !== 'object') return full;
-    // Sum all split sizings across target tracks
-    let subtracted = { backend: 0, frontend: 0, natives: 0, qa: 0 };
-    for (const sizing of Object.values(projectSplits)) {
-      if (sizing && typeof sizing === 'object') {
-        subtracted.backend += (sizing.backend || 0);
-        subtracted.frontend += (sizing.frontend || 0);
-        subtracted.natives += (sizing.natives || 0);
-        subtracted.qa += (sizing.qa || 0);
-      }
-    }
-    return {
-      backend: Math.max(0, full.backend - subtracted.backend),
-      frontend: Math.max(0, full.frontend - subtracted.frontend),
-      natives: Math.max(0, full.natives - subtracted.natives),
-      qa: Math.max(0, full.qa - subtracted.qa),
-      total: Math.max(0, full.total - subtracted.backend - subtracted.frontend - subtracted.natives - subtracted.qa),
-    };
-  }, [projectSprints, splits]);
+  const effectiveSprints = useCallback((p) => CP.computeEffectiveSprints(p, splits, sizeMap), [splits, sizeMap]);
 
   // Find which track a project primarily lives in
   const getProjectHomeTrack = useCallback((projectId) => {
@@ -2375,38 +2233,16 @@ function App({ onLogout, user: authUser }) {
     );
   };
 
-  // Compute ghost blocks per track
   const ghostsByTrack = useMemo(() => {
     try {
-      const result = {};
-      for (const t of TRACKS) result[t.key] = [];
-      if (!splits || typeof splits !== 'object' || Array.isArray(splits)) return result;
-      const entries = Object.entries(splits);
-      for (let ei = 0; ei < entries.length; ei++) {
-        const pidStr = entries[ei][0];
-        const trackSplits = entries[ei][1];
-        if (!trackSplits || typeof trackSplits !== 'object') continue;
-        const pid = parseInt(pidStr);
-        if (isNaN(pid)) continue;
-        const p = projectById[pid];
-        if (!p) continue;
-        const tsEntries = Object.entries(trackSplits);
-        for (let ti = 0; ti < tsEntries.length; ti++) {
-          const targetTrack = tsEntries[ti][0];
-          const sizing = tsEntries[ti][1];
-          if (result[targetTrack] && sizing && typeof sizing === 'object') {
-            result[targetTrack].push({ project: p, sizing, homeTrack: getProjectHomeTrack(pid)?.key || '' });
-          }
-        }
-      }
-      return result;
+      return CP.computeGhostsByTrack(splits, projectById, tracks);
     } catch (err) {
       console.error('ghostsByTrack error:', err, 'splits:', JSON.stringify(splits));
       const result = {};
       for (const t of TRACKS) result[t.key] = [];
       return result;
     }
-  }, [splits, projectById, getProjectHomeTrack]);
+  }, [splits, projectById, tracks]);
 
   const FilterDropdown = ({ filterKey, label }) => {
     const values = uniqueValues[filterKey];
@@ -2441,90 +2277,11 @@ function App({ onLogout, user: authUser }) {
     return result;
   }, [tracks, projectById, filterProjects, currentData]);
 
-  // Per-track used capacity: home projects use effectiveSprints (minus splits), ghosts add their sizing
-  const trackUsed = useMemo(() => {
-    const result = {};
-    for (const t of TRACKS) {
-      const fromProjects = (trackProjects[t.key] || []).reduce((acc, p) => {
-        const s = effectiveSprints(p);
-        return { backend: acc.backend + s.backend, frontend: acc.frontend + s.frontend, natives: acc.natives + s.natives, qa: acc.qa + s.qa };
-      }, { backend: 0, frontend: 0, natives: 0, qa: 0 });
-      // Add ghost split sizings (these are the capacity sent FROM other tracks)
-      const fromGhosts = (ghostsByTrack[t.key] || []).reduce((acc, g) => {
-        if (!g || !g.sizing) return acc;
-        return { backend: acc.backend + (g.sizing.backend || 0), frontend: acc.frontend + (g.sizing.frontend || 0), natives: acc.natives + (g.sizing.natives || 0), qa: acc.qa + (g.sizing.qa || 0) };
-      }, { backend: 0, frontend: 0, natives: 0, qa: 0 });
-      result[t.key] = {
-        backend: fromProjects.backend + fromGhosts.backend,
-        frontend: fromProjects.frontend + fromGhosts.frontend,
-        natives: fromProjects.natives + fromGhosts.natives,
-        qa: fromProjects.qa + fromGhosts.qa,
-      };
-    }
-    return result;
-  }, [trackProjects, effectiveSprints, ghostsByTrack]);
+  const trackUsed = useMemo(() => CP.computeTrackUsed(trackProjects, ghostsByTrack, splits, sizeMap), [trackProjects, ghostsByTrack, splits, sizeMap]);
 
-  // Unallocated capacity per discipline
-  const unallocated = useMemo(() => {
-    const result = {};
-    for (const d of ['backend', 'frontend', 'natives', 'qa']) {
-      const allocated = Object.values(trackCapacity).reduce((s, tc) => s + (tc[d] || 0), 0);
-      result[d] = capacity[d] - allocated;
-    }
-    return result;
-  }, [capacity, trackCapacity]);
+  const unallocated = useMemo(() => CP.computeUnallocated(capacity, trackCapacity), [capacity, trackCapacity]);
 
-  // Per-track overflow detection: which projects push a discipline over the track's allocation
-  const trackOverflow = useMemo(() => {
-    const result = {};
-    for (const t of TRACKS) {
-      const tc = trackCapacity[t.key] || { backend:0, frontend:0, natives:0, qa:0 };
-      const hasAllocation = Object.values(tc).some(v => v > 0);
-      if (!hasAllocation) { result[t.key] = {}; continue; }
-      const running = { backend:0, frontend:0, natives:0, qa:0 };
-      const overflows = {};
-
-      // Build combined list in display order (respecting trackBlockOrder)
-      const realItems = (trackProjects[t.key] || []).map(p => ({ type: 'real', project: p }));
-      const ghostItems = (ghostsByTrack[t.key] || []).filter(g => g && g.sizing).map(g => ({ type: 'ghost', project: g.project, sizing: g.sizing }));
-      const combined = [...realItems, ...ghostItems];
-      const order = trackBlockOrder[t.key];
-      if (order && order.length > 0) {
-        combined.sort((a, b) => {
-          const aKey = a.type === 'ghost' ? `ghost:${a.project.id}` : String(a.project.id);
-          const bKey = b.type === 'ghost' ? `ghost:${b.project.id}` : String(b.project.id);
-          const aIdx = order.indexOf(aKey);
-          const bIdx = order.indexOf(bKey);
-          if (aIdx === -1 && bIdx === -1) return 0;
-          if (aIdx === -1) return 1;
-          if (bIdx === -1) return 1;
-          return aIdx - bIdx;
-        });
-      }
-
-      // Walk in display order, accumulating and checking overflow
-      for (const item of combined) {
-        if (item.type === 'real') {
-          const s = effectiveSprints(item.project);
-          for (const d of ['backend','frontend','natives','qa']) running[d] += s[d];
-          const exceeded = [];
-          for (const d of ['backend','frontend','natives','qa']) {
-            if (tc[d] > 0 && running[d] > tc[d]) exceeded.push(d);
-          }
-          if (exceeded.length > 0) overflows[item.project.id] = exceeded;
-        } else {
-          for (const d of ['backend','frontend','natives','qa']) running[d] += (item.sizing[d] || 0);
-          const exceeded = [];
-          for (const d of ['backend','frontend','natives','qa']) {
-            if (tc[d] > 0 && running[d] > tc[d]) exceeded.push(d);
-          }
-          if (exceeded.length > 0) overflows[`ghost-${item.project.id}`] = exceeded;
-        }
-      }
-      result[t.key] = overflows;
-    }
-    return result;
-  }, [trackProjects, trackCapacity, effectiveSprints, ghostsByTrack, trackBlockOrder]);
+  const trackOverflow = useMemo(() => CP.computeTrackOverflow(trackProjects, trackCapacity, ghostsByTrack, trackBlockOrder, splits, sizeMap), [trackProjects, trackCapacity, ghostsByTrack, trackBlockOrder, splits, sizeMap]);
 
   // ── Timeline helpers ──
   const updateTimelineConfig = useCallback((updates) => {
