@@ -3363,8 +3363,6 @@ function App({ onLogout, user: authUser }) {
               onClick={() => setActiveTab('projects')}>Projects</button>
             <button className={`tab-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
               onClick={() => setActiveTab('dashboard')}>Dashboard</button>
-            <button className={`tab-btn ${activeTab === 'quarterly' ? 'active' : ''}`}
-              onClick={() => setActiveTab('quarterly')}>Quarterly</button>
           </div>
           <div className="vertical-selector">
             <select className="vertical-select" value={activeVertical}
@@ -3427,7 +3425,6 @@ function App({ onLogout, user: authUser }) {
                   <div style={{width:'100%',textAlign:'center',padding:'32px 8px',color:'var(--text2)',fontSize:11,opacity:0.6}}>No projects</div>
                 )}
                 {q.projects.map(({project: p, totalSprints, fraction, continuesLeft, continuesRight}) => {
-                  const sp = projectSprints(p);
                   const w = Math.max(60, Math.min(200, fraction * totalSprints * PX_PER_SPRINT * 1.5));
                   const cls = ['q-block', p.inProgress ? 'in-progress' : '', continuesRight ? 'continues-right' : '', continuesLeft ? 'continues-left' : ''].filter(Boolean).join(' ');
                   return (
@@ -3439,10 +3436,6 @@ function App({ onLogout, user: authUser }) {
                       {continuesRight && <span className="q-arrow right">&rarr;</span>}
                       <div className="block-content">
                         <div className="block-title">{p.subTask}</div>
-                        <div className="block-bottom">
-                          <span className="block-jira">{p.nvrd}</span>
-                          <span className="block-sprints">{sp.total}sp</span>
-                        </div>
                       </div>
                     </div>
                   );
@@ -3635,6 +3628,7 @@ function App({ onLogout, user: authUser }) {
                 </span>
               ))}
               <button className="btn-timeline" onClick={() => setShowTimeline(true)}>📊 Timeline</button>
+              <button className="btn-timeline" onClick={() => setActiveTab('quarterly')}>📅 Quarterly</button>
             </div>
           </div>
           <div className="track-group">
