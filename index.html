@@ -3369,38 +3369,6 @@ function App({ onLogout, user: authUser }) {
         )}
       </div>
 
-      <div className="filters-bar">
-        <input className="search-input" placeholder="Search projects..." value={search} onChange={e => setSearch(e.target.value)} />
-        <FilterDropdown filterKey="pillar" label="Pillar" />
-        <FilterDropdown filterKey="epic" label="Epic" />
-        <FilterDropdown filterKey="market" label="Market" />
-        <FilterDropdown filterKey="kpi" label="KPI" />
-        <FilterDropdown filterKey="impact" label="Impact" />
-        {activeFilterCount > 0 && (
-          <button className="btn" onClick={() => setFilters({pillar:[],market:[],epic:[],kpi:[],impact:[]})}>
-            Clear ({activeFilterCount})
-          </button>
-        )}
-        <div style={{marginLeft:'auto'}} className="sort-controls">
-          <span style={{fontSize:10,color:'var(--text2)'}}>Sort:</span>
-          <select value={sortBy} onChange={e => setSortBy(e.target.value)}>
-            <option value="impact">Impact ↓</option>
-            <option value="effort">Effort ↓</option>
-            <option value="epic">Epic</option>
-            <option value="pillar">Pillar</option>
-            <option value="name">Name</option>
-          </select>
-        </div>
-        <div className="color-legend">
-          {Object.entries(pillarColorMap).map(([name, color]) => (
-            <div key={name} className="legend-item">
-              <div className="legend-dot" style={{background: color}}></div>
-              {name}
-            </div>
-          ))}
-        </div>
-      </div>
-
       <div className="main-scroll">
         {/* Roadmap Lane */}
         <div className="lane-section">
@@ -3485,6 +3453,39 @@ function App({ onLogout, user: authUser }) {
                   </div>
                 </div>
               </React.Fragment>
+            ))}
+          </div>
+        </div>
+
+        {/* Filters & Sort */}
+        <div className="filters-bar">
+          <input className="search-input" placeholder="Search projects..." value={search} onChange={e => setSearch(e.target.value)} />
+          <FilterDropdown filterKey="pillar" label="Pillar" />
+          <FilterDropdown filterKey="epic" label="Epic" />
+          <FilterDropdown filterKey="market" label="Market" />
+          <FilterDropdown filterKey="kpi" label="KPI" />
+          <FilterDropdown filterKey="impact" label="Impact" />
+          {activeFilterCount > 0 && (
+            <button className="btn" onClick={() => setFilters({pillar:[],market:[],epic:[],kpi:[],impact:[]})}>
+              Clear ({activeFilterCount})
+            </button>
+          )}
+          <div style={{marginLeft:'auto'}} className="sort-controls">
+            <span style={{fontSize:10,color:'var(--text2)'}}>Sort:</span>
+            <select value={sortBy} onChange={e => setSortBy(e.target.value)}>
+              <option value="impact">Impact ↓</option>
+              <option value="effort">Effort ↓</option>
+              <option value="epic">Epic</option>
+              <option value="pillar">Pillar</option>
+              <option value="name">Name</option>
+            </select>
+          </div>
+          <div className="color-legend">
+            {Object.entries(pillarColorMap).map(([name, color]) => (
+              <div key={name} className="legend-item">
+                <div className="legend-dot" style={{background: color}}></div>
+                {name}
+              </div>
             ))}
           </div>
         </div>
