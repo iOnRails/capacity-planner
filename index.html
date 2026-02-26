@@ -2046,7 +2046,7 @@ function App({ onLogout, user: authUser }) {
   const [openFilter, setOpenFilter] = useState(null);
   const [sortBy, setSortBy] = useState('impact');
   const [colorBy, setColorBy] = useState('pillar');
-  const [backlogView, setBacklogView] = useState('blocks');
+  const [backlogView, setBacklogView] = useState('table');
   const [trackPicker, setTrackPicker] = useState(null); // { projectId, x, y }
   const dragItem = useRef(null);
   const dragSource = useRef(null);
@@ -3503,8 +3503,8 @@ function App({ onLogout, user: authUser }) {
               <span className="badge backlog-badge">{backlogProjects.length}</span>
             </h2>
             <div style={{display:'flex',gap:6}}>
-              <button className="btn" style={{fontSize:11,padding:'4px 10px',background: backlogView === 'blocks' ? 'var(--accent1)' : 'var(--surface2)'}} onClick={() => setBacklogView('blocks')}>Blocks</button>
               <button className="btn" style={{fontSize:11,padding:'4px 10px',background: backlogView === 'table' ? 'var(--accent1)' : 'var(--surface2)'}} onClick={() => setBacklogView('table')}>List</button>
+              <button className="btn" style={{fontSize:11,padding:'4px 10px',background: backlogView === 'blocks' ? 'var(--accent1)' : 'var(--surface2)'}} onClick={() => setBacklogView('blocks')}>Blocks</button>
             </div>
           </div>
           {backlogView === 'blocks' ? (
