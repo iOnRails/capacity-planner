@@ -1268,14 +1268,16 @@ function App({ onLogout, user: authUser }) {
     return h;
   };
 
-  const [activeVertical, setActiveVertical] = useState('growth');
+  const [activeVertical, setActiveVertical] = useState(() => localStorage.getItem('cp_vertical') || 'growth');
+  useEffect(() => { localStorage.setItem('cp_vertical', activeVertical); }, [activeVertical]);
   const [sizeMap, setSizeMap] = useState({...CP.DEFAULT_SIZE_MAP});
   const sizeMapRef = useRef(sizeMap);
   useEffect(() => { sizeMapRef.current = sizeMap; }, [sizeMap]);
   const [tooltip, setTooltip] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState('planner');
+  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('cp_tab') || 'planner');
+  useEffect(() => { localStorage.setItem('cp_tab', activeTab); }, [activeTab]);
   const [settingsTab, setSettingsTab] = useState(() => localStorage.getItem('cp_settings_tab') || 'none');
   const toggleSettingsTab = (tab) => {
     const next = settingsTab === tab ? 'none' : tab;
