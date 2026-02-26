@@ -2019,6 +2019,18 @@ function App({ onLogout, user: authUser }) {
     });
   }, [currentTrackConfig, activeVertical, debouncedSave, setVerticalStatesWithUndo]);
 
+  const moveTrack = useCallback((fromIdx, toIdx) => {
+    if (toIdx < 0 || toIdx >= currentTrackConfig.length) return;
+    const newConfig = [...currentTrackConfig];
+    const [item] = newConfig.splice(fromIdx, 1);
+    newConfig.splice(toIdx, 0, item);
+    setVerticalStatesWithUndo(prev => {
+      const newState = { ...prev, [activeVertical]: { ...prev[activeVertical], trackConfig: newConfig }};
+      debouncedSave(activeVertical, newState[activeVertical]);
+      return newState;
+    });
+  }, [currentTrackConfig, activeVertical, debouncedSave, setVerticalStatesWithUndo]);
+
   const saveSplit = (projectId, targetTrack, sizings) => {
     setVerticalStatesWithUndo(prev => {
       const prevSplits = { ...(prev[activeVertical].splits || {}) };
@@ -3370,6 +3382,14 @@ function App({ onLogout, user: authUser }) {
               <h3 style={{fontSize:11,textTransform:'uppercase',letterSpacing:1,color:'var(--text2)',marginBottom:8}}>Swimlane Tracks</h3>
               {currentTrackConfig.map((t, idx) => (
                 <div key={t.key} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderBottom:'1px solid var(--border)'}}>
+                  <div style={{display:'flex',flexDirection:'column',gap:2}}>
+                    <button onClick={() => moveTrack(idx, idx - 1)} disabled={idx === 0}
+                      style={{fontSize:10,padding:'1px 4px',background:'none',border:'1px solid var(--border)',borderRadius:3,color:'var(--text2)',cursor:'pointer',opacity:idx===0?0.3:1,lineHeight:1}}
+                      title="Move up">▲</button>
+                    <button onClick={() => moveTrack(idx, idx + 1)} disabled={idx === currentTrackConfig.length - 1}
+                      style={{fontSize:10,padding:'1px 4px',background:'none',border:'1px solid var(--border)',borderRadius:3,color:'var(--text2)',cursor:'pointer',opacity:idx===currentTrackConfig.length-1?0.3:1,lineHeight:1}}
+                      title="Move down">▼</button>
+                  </div>
                   <div style={{width:20,height:20,borderRadius:4,background:`linear-gradient(135deg, ${t.color}cc, ${t.color}88)`,flexShrink:0}} />
                   <input type="color" value={t.color}
                     onChange={e => updateTrackColor(idx, e.target.value)}
