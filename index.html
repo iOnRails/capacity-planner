@@ -3535,7 +3535,7 @@ function App({ onLogout, user: authUser }) {
                   const pColor = pillarColorMap[p.pillar];
                   return (
                     <tr key={p.id} style={{borderBottom:'1px solid var(--border)',cursor:'pointer'}}
-                      onMouseEnter={(e) => setTooltip({ project: p, x: e.clientX, y: e.clientY })}
+                      onMouseEnter={(e) => setTooltip({ p, x: e.clientX, y: e.clientY })}
                       onMouseLeave={() => setTooltip(null)}
                       draggable onDragStart={() => { dragItem.current = p.id; dragSource.current = 'backlog'; }}>
                       <td style={{padding:'6px 8px',color:'var(--text1)'}}>{p.subTask || '—'}</td>
