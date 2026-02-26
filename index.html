@@ -2094,7 +2094,7 @@ function App({ onLogout, user: authUser }) {
     else n[trackKey].push(id);
     return n;
   });
-  const moveToBacklog = (id) => setTracks(prev => removeFromTracks(prev, id));
+  const moveToBacklog = (id) => { setTooltip(null); setTracks(prev => removeFromTracks(prev, id)); };
 
   const handleDragStart = (e, id, source) => {
     dragItem.current = id; dragSource.current = source;
