@@ -867,27 +867,18 @@
     display: flex; justify-content: flex-end; margin-bottom: 8px; gap: 6px;
   }
   .quarterly-container {
-    display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
-    flex: 1; min-height: 0;
-  }
-  .quarter-column {
-    background: var(--surface1); border-radius: 12px; padding: 10px;
-    border: 1px solid var(--border); display: flex; flex-direction: column;
-    overflow: hidden;
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;
+    flex: 1; min-height: 0; overflow-y: auto; align-content: start;
   }
   .quarter-header {
-    font-size: 14px; font-weight: 700; padding: 6px 4px 10px;
-    border-bottom: 1px solid var(--border); margin-bottom: 8px;
+    font-size: 14px; font-weight: 700; padding: 8px 8px 10px;
+    border-bottom: 2px solid var(--border);
     display: flex; justify-content: space-between; align-items: center;
-    flex-shrink: 0;
+    position: sticky; top: 0; background: var(--bg); z-index: 2;
   }
   .quarter-header .q-count {
     font-size: 10px; font-weight: 600; color: var(--text2);
     background: var(--surface2); padding: 2px 8px; border-radius: 10px;
-  }
-  .quarter-blocks {
-    display: flex; flex-wrap: wrap; gap: 4px; align-content: flex-start;
-    flex: 1; overflow-y: auto;
   }
   .q-block {
     position: relative; border-radius: 6px; overflow: hidden;
@@ -2849,7 +2840,42 @@ function App({ onLogout, user: authUser }) {
       }
     }
 
-    return quarters;
+    // Build row-based layout for cross-quarter alignment
+    // Each "row" is a project that may span 1-4 quarters
+    // rows: [{id, project, totalSprints, cells: [{qi, fraction, continuesLeft, continuesRight}|null, ...]}]
+    const rows = [];
+    const projectQuarters = new Map(); // projectId -> [{qi, fraction, continuesLeft, continuesRight}]
+
+    for (let qi = 0; qi < 4; qi++) {
+      for (const entry of quarters[qi].projects) {
+        if (!projectQuarters.has(entry.project.id)) projectQuarters.set(entry.project.id, []);
+        projectQuarters.get(entry.project.id).push({ qi, ...entry });
+      }
+    }
+
+    // Sort projects by their earliest quarter, then by total sprints (desc) for visual weight
+    const sortedProjects = [...projectQuarters.entries()].sort((a, b) => {
+      const aMin = Math.min(...a[1].map(e => e.qi));
+      const bMin = Math.min(...b[1].map(e => e.qi));
+      if (aMin !== bMin) return aMin - bMin;
+      return b[1][0].totalSprints - a[1][0].totalSprints;
+    });
+
+    for (const [pid, entries] of sortedProjects) {
+      const cells = [null, null, null, null];
+      for (const e of entries) {
+        cells[e.qi] = e;
+      }
+      rows.push({ id: pid, project: entries[0].project, totalSprints: entries[0].totalSprints, cells });
+    }
+
+    // Compute height weight per row (max weighted sprints across its cells)
+    const totalWeight = rows.reduce((s, r) => {
+      const w = Math.max(...r.cells.filter(Boolean).map(c => c.fraction * c.totalSprints));
+      return s + w;
+    }, 0) || 1;
+
+    return { quarters, rows, totalWeight };
   }, [timelineData, timelineConfig]);
 
   // Drag handlers for timeline bars (resize left/right + move with lane support)
@@ -3437,46 +3463,40 @@ function App({ onLogout, user: authUser }) {
             }} title="Toggle fullscreen">&#x26F6;</button>
           </div>
           <div className="quarterly-container">
-            {quarterlyData.map((q, qi) => {
-              // Sort: continues-left (from prev quarter) first, normal middle, continues-right (to next) last
-              const sorted = [...q.projects].sort((a, b) => {
-                const aOrder = a.continuesLeft ? 0 : a.continuesRight ? 2 : 1;
-                const bOrder = b.continuesLeft ? 0 : b.continuesRight ? 2 : 1;
-                return aOrder - bOrder;
-              });
-              // Total weighted sprints for height proportioning
-              const totalWeighted = sorted.reduce((s, e) => s + e.fraction * e.totalSprints, 0) || 1;
-              return (
-              <div key={qi} className="quarter-column">
-                <div className="quarter-header">
-                  <span>{q.label}</span>
-                  <span className="q-count">{q.projects.length}</span>
-                </div>
-                <div className="quarter-blocks">
-                  {q.projects.length === 0 && (
-                    <div style={{width:'100%',textAlign:'center',padding:'32px 8px',color:'var(--text2)',fontSize:11,opacity:0.6}}>No projects</div>
-                  )}
-                  {sorted.map(({project: p, totalSprints, fraction, continuesLeft, continuesRight}) => {
-                    const weight = fraction * totalSprints;
-                    const heightPct = Math.max(6, (weight / totalWeighted) * 100);
-                    const cls = ['q-block', p.inProgress ? 'in-progress' : '', continuesRight ? 'continues-right' : '', continuesLeft ? 'continues-left' : ''].filter(Boolean).join(' ');
-                    return (
-                      <div key={`${p.id}-${qi}`} className={cls}
-                        style={{width: '100%', height: `${heightPct}%`, background: CP.getBlockBg(p.pillar, pillarColorMap)}}
-                        onMouseEnter={(e) => handleMouseEnter(e, p)}
-                        onMouseLeave={handleMouseLeave}>
-                        {continuesLeft && <span className="q-arrow left">&larr;</span>}
-                        {continuesRight && <span className="q-arrow right">&rarr;</span>}
-                        <div className="block-content">
-                          <div className="block-title">{p.subTask}</div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+            {/* Column headers */}
+            {quarterlyData.quarters.map((q, qi) => (
+              <div key={qi} className="quarter-header" style={{gridColumn: qi + 1, gridRow: 1}}>
+                <span>{q.label}</span>
+                <span className="q-count">{q.projects.length}</span>
               </div>
-              );
+            ))}
+            {/* Project rows — each row aligns across all 4 columns */}
+            {quarterlyData.rows.map((row, ri) => {
+              const weight = Math.max(...row.cells.filter(Boolean).map(c => c.fraction * c.totalSprints));
+              const heightPct = Math.max(3, (weight / quarterlyData.totalWeight) * 100);
+              return row.cells.map((cell, qi) => {
+                if (!cell) return (
+                  <div key={`${row.id}-${qi}`} style={{gridColumn: qi + 1, gridRow: ri + 2, height: `calc(${heightPct}vh - 4px)`}} />
+                );
+                const {continuesLeft, continuesRight, project: p} = cell;
+                const cls = ['q-block', p.inProgress ? 'in-progress' : '', continuesRight ? 'continues-right' : '', continuesLeft ? 'continues-left' : ''].filter(Boolean).join(' ');
+                return (
+                  <div key={`${row.id}-${qi}`} className={cls}
+                    style={{gridColumn: qi + 1, gridRow: ri + 2, height: `calc(${heightPct}vh - 4px)`, background: CP.getBlockBg(p.pillar, pillarColorMap)}}
+                    onMouseEnter={(e) => handleMouseEnter(e, p)}
+                    onMouseLeave={handleMouseLeave}>
+                    {continuesLeft && <span className="q-arrow left">&larr;</span>}
+                    {continuesRight && <span className="q-arrow right">&rarr;</span>}
+                    <div className="block-content">
+                      <div className="block-title">{p.subTask}</div>
+                    </div>
+                  </div>
+                );
+              });
             })}
+            {quarterlyData.rows.length === 0 && (
+              <div style={{gridColumn:'1/5',gridRow:2,textAlign:'center',padding:'48px',color:'var(--text2)',fontSize:12}}>No roadmap projects in the current 4 quarters</div>
+            )}
           </div>
         </div>
       ) : activeTab === 'projects' ? (
