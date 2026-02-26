@@ -853,6 +853,31 @@
   }
   .btn-timeline:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(108,92,231,0.4); }
 
+  /* Error Boundary */
+  .error-boundary {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh; background: var(--bg);
+  }
+  .error-boundary-box {
+    background: var(--surface); border-radius: 16px; padding: 40px;
+    text-align: center; max-width: 440px; width: 90%;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+  }
+  .error-boundary-box h2 { margin: 8px 0 12px; color: var(--text); }
+  .error-boundary-box p { color: var(--muted); font-size: 14px; margin-bottom: 16px; }
+  .error-boundary-box pre {
+    background: var(--surface2); color: var(--red); border-radius: 8px;
+    padding: 12px; font-size: 12px; text-align: left;
+    max-height: 200px; overflow: auto; margin-bottom: 20px;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .error-boundary-box button {
+    padding: 10px 24px; background: var(--accent); color: white;
+    border: none; border-radius: 8px; font-size: 14px; font-weight: 600;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .error-boundary-box button:hover { opacity: 0.9; transform: translateY(-1px); }
+
   /* Auth Gate */
   .auth-gate {
     display: flex; align-items: center; justify-content: center;
@@ -897,6 +922,37 @@
 <script src="shared/computations.js"></script>
 <script type="text/babel">
 const { useState, useMemo, useCallback, useRef, useEffect } = React;
+
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error('[ErrorBoundary]', error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="error-boundary">
+          <div className="error-boundary-box">
+            <div style={{ fontSize: 40, marginBottom: 12 }}>&#9888;&#65039;</div>
+            <h2>Something went wrong</h2>
+            <p>The application encountered an unexpected error. Try reloading the page.</p>
+            {this.state.error && (
+              <pre>{this.state.error.message || String(this.state.error)}</pre>
+            )}
+            <button onClick={() => window.location.reload()}>Reload Page</button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const VERTICALS = [
   { key: 'growth', label: 'Growth', color: '#6c5ce7', icon: '📈' },
@@ -3751,7 +3807,7 @@ function AuthGate() {
     }
   };
 
-  if (user) return <App onLogout={handleLogout} user={user} />;
+  if (user) return <ErrorBoundary><App onLogout={handleLogout} user={user} /></ErrorBoundary>;
 
   return (
     <div className="auth-gate">

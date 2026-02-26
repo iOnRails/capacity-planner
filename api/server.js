@@ -33,6 +33,52 @@ function getStateFile(key) { return `state_${key}.json`; }
 const AUDIT_FILE = 'audit_log.json';
 const AUDIT_MAX_DAYS = 30;
 
+// ── Input Sanitization ──
+const KNOWN_PILLARS = new Set(['Expansion', 'Acquisition', 'Core Platform', 'Comms', 'Gamification', 'Core Bonus', '']);
+const KNOWN_KPIS = new Set(['Revenue', 'Efficiency', 'Experience', '']);
+
+function stripHtmlTags(str) {
+  if (typeof str !== 'string') return str;
+  return str.replace(/<[^>]*>/g, '');
+}
+
+function sanitizeString(str, maxLength) {
+  if (typeof str !== 'string') return str;
+  return stripHtmlTags(str).trim().slice(0, maxLength);
+}
+
+const PROJECT_STRING_LIMITS = {
+  nvrd: 50, masterEpic: 200, subTask: 300,
+  pillar: 100, targetMarket: 50, targetKPI: 50,
+};
+
+function sanitizeProject(project) {
+  const sanitized = { ...project };
+  for (const [field, limit] of Object.entries(PROJECT_STRING_LIMITS)) {
+    if (sanitized[field] != null) {
+      sanitized[field] = sanitizeString(String(sanitized[field]), limit);
+    }
+  }
+  if (sanitized.pillar && !KNOWN_PILLARS.has(sanitized.pillar)) {
+    console.warn(`[sanitize] Unknown pillar "${sanitized.pillar}" for project ${sanitized.id}`);
+  }
+  if (sanitized.targetKPI && !KNOWN_KPIS.has(sanitized.targetKPI)) {
+    console.warn(`[sanitize] Unknown targetKPI "${sanitized.targetKPI}" for project ${sanitized.id}`);
+  }
+  return sanitized;
+}
+
+function sanitizeMilestones(milestones) {
+  if (!Array.isArray(milestones)) return milestones;
+  return milestones.map(m => {
+    const cleaned = { ...m };
+    if (typeof cleaned.name === 'string') cleaned.name = sanitizeString(cleaned.name, 100);
+    if (typeof cleaned.label === 'string') cleaned.label = sanitizeString(cleaned.label, 100);
+    if (typeof cleaned.description === 'string') cleaned.description = sanitizeString(cleaned.description, 500);
+    return cleaned;
+  });
+}
+
 // ── Audit Logging ──
 function logAudit(req, action, details) {
   try {
@@ -501,6 +547,11 @@ function saveStateHandler(req, res) {
     return res.status(400).json({ error: 'No state fields provided' });
   }
 
+  // Sanitize milestone content if present
+  if (req.body.milestones) {
+    req.body.milestones = sanitizeMilestones(req.body.milestones);
+  }
+
   const existing = loadJSON(getStateFile(req.params.key), {});
   const fieldTs = existing._fieldTs || {};
   const now = Date.now();
@@ -606,6 +657,11 @@ function saveProjectsHandler(req, res) {
 
   const VALID_SIZES = new Set(['', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL']);
 
+  // Sanitize all project string fields
+  for (let i = 0; i < projects.length; i++) {
+    projects[i] = sanitizeProject(projects[i]);
+  }
+
   for (let i = 0; i < projects.length; i++) {
     const p = projects[i];
     if (p.id == null) {
@@ -670,8 +726,9 @@ app.get('/api/verticals/:key/snapshots', (req, res) => {
 // Save a new snapshot
 app.post('/api/verticals/:key/snapshots', (req, res) => {
   try {
-    const { name, description } = req.body;
-    if (!name || typeof name !== 'string' || !name.trim()) {
+    const sanitizedName = sanitizeString(req.body.name, 100);
+    const sanitizedDesc = sanitizeString(req.body.description || '', 500);
+    if (!sanitizedName || typeof sanitizedName !== 'string' || !sanitizedName.trim()) {
       return res.status(400).json({ error: 'Snapshot name is required' });
     }
     const key = req.params.key;
@@ -681,8 +738,8 @@ app.post('/api/verticals/:key/snapshots', (req, res) => {
 
     const snapshot = {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-      name: name.trim(),
-      description: (description || '').trim(),
+      name: sanitizedName.trim(),
+      description: sanitizedDesc.trim(),
       createdAt: new Date().toISOString(),
       createdBy: req.headers['x-user-email'] || 'unknown',
       state: JSON.parse(JSON.stringify(state)),
@@ -892,4 +949,8 @@ module.exports = {
   verticalClients,
   keepaliveInterval,
   getSnapshotsFile,
+  stripHtmlTags,
+  sanitizeString,
+  sanitizeProject,
+  sanitizeMilestones,
 };

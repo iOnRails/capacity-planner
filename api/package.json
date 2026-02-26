@@ -11,6 +11,7 @@
     "test:ws": "jest --verbose --forceExit --detectOpenHandles __tests__/websocket.test.js",
     "test:snapshots": "jest --verbose --forceExit --detectOpenHandles __tests__/snapshots.test.js",
     "test:computations": "jest --verbose __tests__/computations.test.js",
+    "test:sanitization": "jest --verbose --forceExit --detectOpenHandles __tests__/sanitization.test.js",
     "test:coverage": "jest --verbose --forceExit --detectOpenHandles --coverage"
   },
   "jest": {
