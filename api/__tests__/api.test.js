@@ -707,3 +707,95 @@ describe('trackConfig state field', () => {
     expect(res.body.mergedState.trackConfig[0].label).toBe('A Updated');
   });
 });
+
+// ═══════════════════════════════════════════════
+// Editor access requests
+// ═══════════════════════════════════════════════
+
+describe('Editor access requests', () => {
+  test('GET /api/editors returns requests array', async () => {
+    const res = await request(app).get('/api/editors');
+    expect(res.status).toBe(200);
+    expect(res.body.requests).toEqual([]);
+    expect(res.body.editors).toBeDefined();
+    expect(res.body.admin).toBeDefined();
+  });
+
+  test('POST /api/editors/request creates a pending request', async () => {
+    const res = await request(app)
+      .post('/api/editors/request')
+      .set('X-User-Email', 'viewer@novibet.com')
+      .set('X-User-Name', 'Viewer User');
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+
+    // Verify it appears in GET
+    const get = await request(app).get('/api/editors');
+    expect(get.body.requests).toHaveLength(1);
+    expect(get.body.requests[0].email).toBe('viewer@novibet.com');
+    expect(get.body.requests[0].name).toBe('Viewer User');
+    expect(get.body.requests[0].requestedAt).toBeDefined();
+  });
+
+  test('POST /api/editors/request rejects duplicate', async () => {
+    await request(app)
+      .post('/api/editors/request')
+      .set('X-User-Email', 'viewer@novibet.com')
+      .set('X-User-Name', 'Viewer');
+    const res = await request(app)
+      .post('/api/editors/request')
+      .set('X-User-Email', 'viewer@novibet.com')
+      .set('X-User-Name', 'Viewer');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/already pending/i);
+  });
+
+  test('POST /api/editors/request rejects existing editor', async () => {
+    const res = await request(app)
+      .post('/api/editors/request')
+      .set('X-User-Email', 'test@novibet.com')
+      .set('X-User-Name', 'Test');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/already an editor/i);
+  });
+
+  test('POST /api/editors/request rejects non-novibet email', async () => {
+    const res = await request(app)
+      .post('/api/editors/request')
+      .set('X-User-Email', 'user@gmail.com');
+    expect(res.status).toBe(400);
+  });
+
+  test('POST /api/editors/request is exempt from auth middleware', async () => {
+    // A non-editor can still POST to this endpoint
+    const res = await request(app)
+      .post('/api/editors/request')
+      .set('X-User-Email', 'newviewer@novibet.com')
+      .set('X-User-Name', 'New Viewer');
+    expect(res.status).toBe(200);
+  });
+
+  test('DELETE /api/editors/request removes a pending request (admin only)', async () => {
+    // Create a request first
+    await request(app)
+      .post('/api/editors/request')
+      .set('X-User-Email', 'viewer@novibet.com')
+      .set('X-User-Name', 'Viewer');
+
+    // Admin dismisses it
+    const res = await request(app)
+      .delete('/api/editors/request')
+      .set('X-User-Email', 'kmermigkas@novibet.com')
+      .send({ email: 'viewer@novibet.com' });
+    expect(res.status).toBe(200);
+    expect(res.body.requests).toHaveLength(0);
+  });
+
+  test('DELETE /api/editors/request rejects non-admin', async () => {
+    const res = await request(app)
+      .delete('/api/editors/request')
+      .set('X-User-Email', 'test@novibet.com')
+      .send({ email: 'viewer@novibet.com' });
+    expect(res.status).toBe(403);
+  });
+});

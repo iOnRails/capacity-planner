@@ -33,6 +33,7 @@ function getStateFile(key) { return `state_${key}.json`; }
 const AUDIT_FILE = 'audit_log.json';
 const AUDIT_MAX_DAYS = 30;
 const EDITORS_FILE = 'editors.json';
+const ACCESS_REQUESTS_FILE = 'access_requests.json';
 const ADMIN_EMAIL = 'kmermigkas@novibet.com';
 
 function isEditorUser(email) {
@@ -502,7 +503,7 @@ app.use((req, res, next) => {
 // ── Authorization: reject writes from non-editors ──
 app.use((req, res, next) => {
   if (['POST', 'PUT', 'DELETE'].includes(req.method)) {
-    if (req.path === '/api/test-post' || req.path === '/api/health') return next();
+    if (req.path === '/api/test-post' || req.path === '/api/health' || req.path === '/api/editors/request') return next();
     const email = req.headers['x-user-email'] || '';
     if (!isEditorUser(email)) {
       return res.status(403).json({ error: 'View-only access. Contact admin for editor permissions.' });
@@ -847,7 +848,8 @@ app.get('/api/audit-log', (req, res) => {
 // ── Editors management ──
 app.get('/api/editors', (req, res) => {
   const editors = loadJSON(EDITORS_FILE, []);
-  res.json({ editors, admin: ADMIN_EMAIL });
+  const requests = loadJSON(ACCESS_REQUESTS_FILE, []);
+  res.json({ editors, admin: ADMIN_EMAIL, requests });
 });
 
 app.post('/api/editors', (req, res) => {
@@ -867,6 +869,42 @@ app.post('/api/editors', (req, res) => {
   saveJSON(EDITORS_FILE, cleaned);
   logAudit(req, 'Updated editors', `Editor list updated: ${cleaned.length} editors`);
   res.json({ success: true, editors: cleaned });
+});
+
+// Request editor access (exempt from auth middleware — viewers need this)
+app.post('/api/editors/request', (req, res) => {
+  const email = (req.headers['x-user-email'] || '').toLowerCase().trim();
+  const name = req.headers['x-user-name'] || '';
+  if (!email || !email.endsWith('@novibet.com')) {
+    return res.status(400).json({ error: 'Valid @novibet.com email required' });
+  }
+  if (isEditorUser(email)) {
+    return res.status(400).json({ error: 'Already an editor' });
+  }
+  const requests = loadJSON(ACCESS_REQUESTS_FILE, []);
+  if (requests.some(r => r.email.toLowerCase() === email)) {
+    return res.status(400).json({ error: 'Request already pending' });
+  }
+  requests.push({ email, name, requestedAt: new Date().toISOString() });
+  saveJSON(ACCESS_REQUESTS_FILE, requests);
+  logAudit(req, 'Requested editor access', `${email} requested editor access`);
+  res.json({ success: true });
+});
+
+// Dismiss a pending access request (admin-only, passes through auth middleware)
+app.delete('/api/editors/request', (req, res) => {
+  const adminEmail = (req.headers['x-user-email'] || '').toLowerCase();
+  if (adminEmail !== ADMIN_EMAIL) {
+    return res.status(403).json({ error: 'Only admin can manage requests' });
+  }
+  const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({ error: 'Email required' });
+  }
+  const requests = loadJSON(ACCESS_REQUESTS_FILE, []);
+  const filtered = requests.filter(r => r.email.toLowerCase() !== email.toLowerCase());
+  saveJSON(ACCESS_REQUESTS_FILE, filtered);
+  res.json({ success: true, requests: filtered });
 });
 
 // ── Catch-all 404 (debug) ──
@@ -1007,6 +1045,7 @@ module.exports = {
   sanitizeProject,
   sanitizeMilestones,
   EDITORS_FILE,
+  ACCESS_REQUESTS_FILE,
   ADMIN_EMAIL,
   isEditorUser,
 };

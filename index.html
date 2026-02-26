@@ -1281,6 +1281,8 @@ function App({ onLogout, user: authUser }) {
   const [isEditor, setIsEditor] = useState(false);
   const [editorList, setEditorList] = useState([]);
   const [showEditorPanel, setShowEditorPanel] = useState(false);
+  const [accessRequests, setAccessRequests] = useState([]);
+  const [requestSent, setRequestSent] = useState(false);
   const isAdmin = authUser.email === 'kmermigkas@novibet.com';
   const [settingsTab, setSettingsTab] = useState(() => localStorage.getItem('cp_settings_tab') || 'none');
   const toggleSettingsTab = (tab) => {
@@ -1313,6 +1315,9 @@ function App({ onLogout, user: authUser }) {
         setEditorList(editors);
         const email = authUser.email.toLowerCase();
         setIsEditor(email === (data.admin || '').toLowerCase() || editors.map(e => e.toLowerCase()).includes(email));
+        const requests = data.requests || [];
+        setAccessRequests(requests);
+        if (requests.some(r => r.email.toLowerCase() === email)) setRequestSent(true);
       })
       .catch(err => console.error('Failed to fetch editors:', err));
   }, []);
@@ -3236,7 +3241,27 @@ function App({ onLogout, user: authUser }) {
       {!isEditor && (
         <div style={{padding:'6px 28px',background:'rgba(9,132,227,0.1)',borderBottom:'1px solid rgba(9,132,227,0.2)',fontSize:11,color:'var(--blue)',fontWeight:600,display:'flex',alignItems:'center',gap:8}}>
           <span>View-only mode</span>
-          <span style={{color:'var(--text2)',fontWeight:400}}>Contact admin for editor access</span>
+          {requestSent ? (
+            <span style={{color:'var(--text2)',fontWeight:400,display:'flex',alignItems:'center',gap:4}}>
+              <span style={{color:'#00b894'}}>&#10003;</span> Request sent — waiting for admin approval
+            </span>
+          ) : (
+            <button onClick={async () => {
+              try {
+                const resp = await fetch(`${API_URL}/api/editors/request`, {
+                  method: 'POST', headers: getAuthHeaders(),
+                });
+                if (!resp.ok) {
+                  const data = await resp.json();
+                  setSaveStatus({type:'error', msg: data.error || 'Request failed'});
+                  return;
+                }
+                setRequestSent(true);
+              } catch (e) { setSaveStatus({type:'error', msg: 'Failed to send request'}); }
+            }} style={{background:'none',border:'1px solid rgba(9,132,227,0.4)',borderRadius:4,padding:'1px 8px',color:'var(--blue)',fontSize:10,cursor:'pointer',fontWeight:600}}>
+              Request Access
+            </button>
+          )}
         </div>
       )}
 
@@ -3908,10 +3933,72 @@ function App({ onLogout, user: authUser }) {
           <div style={{background:'var(--surface1)',border:'1px solid var(--border)',borderRadius:12,padding:24,width:460,maxHeight:'80vh',overflow:'auto',boxShadow:'0 8px 32px rgba(0,0,0,0.4)'}}
             onClick={e => e.stopPropagation()}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-              <h3 style={{margin:0,fontSize:16,color:'var(--text1)'}}>👥 Editor Access Management</h3>
+              <h3 style={{margin:0,fontSize:16,color:'var(--text1)'}}>Editor Access Management</h3>
               <button onClick={() => setShowEditorPanel(false)}
                 style={{background:'none',border:'none',color:'var(--text2)',fontSize:18,cursor:'pointer'}}>✕</button>
             </div>
+
+            {accessRequests.length > 0 && (
+              <div style={{marginBottom:16,padding:12,background:'rgba(253,203,110,0.08)',border:'1px solid rgba(253,203,110,0.25)',borderRadius:8}}>
+                <div style={{fontSize:12,fontWeight:600,color:'var(--yellow)',marginBottom:8}}>
+                  Pending Requests ({accessRequests.length})
+                </div>
+                {accessRequests.map(r => (
+                  <div key={r.email} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid var(--border)'}}>
+                    <div>
+                      <div style={{fontSize:12,color:'var(--text1)',fontWeight:500}}>{r.name || r.email}</div>
+                      {r.name && <div style={{fontSize:10,color:'var(--text2)'}}>{r.email}</div>}
+                      <div style={{fontSize:9,color:'var(--text2)'}}>
+                        {(() => {
+                          const mins = Math.floor((Date.now() - new Date(r.requestedAt).getTime()) / 60000);
+                          if (mins < 1) return 'just now';
+                          if (mins < 60) return `${mins}m ago`;
+                          const hrs = Math.floor(mins / 60);
+                          if (hrs < 24) return `${hrs}h ago`;
+                          return `${Math.floor(hrs / 24)}d ago`;
+                        })()}
+                      </div>
+                    </div>
+                    <div style={{display:'flex',gap:4}}>
+                      <button onClick={async () => {
+                        try {
+                          const newEditors = [...editorList, r.email];
+                          const resp = await fetch(`${API_URL}/api/editors`, {
+                            method: 'POST', headers: getAuthHeaders(),
+                            body: JSON.stringify({ editors: newEditors }),
+                          });
+                          if (resp.ok) {
+                            const data = await resp.json();
+                            setEditorList(data.editors);
+                            const ta = document.getElementById('editor-emails-textarea');
+                            if (ta) ta.value = data.editors.join('\n');
+                          }
+                          await fetch(`${API_URL}/api/editors/request`, {
+                            method: 'DELETE', headers: getAuthHeaders(),
+                            body: JSON.stringify({ email: r.email }),
+                          });
+                          setAccessRequests(prev => prev.filter(x => x.email !== r.email));
+                        } catch (e) { alert('Error: ' + e.message); }
+                      }} style={{padding:'2px 8px',background:'rgba(0,184,148,0.15)',color:'#00b894',border:'1px solid rgba(0,184,148,0.3)',borderRadius:4,fontSize:10,fontWeight:600,cursor:'pointer'}}>
+                        Accept
+                      </button>
+                      <button onClick={async () => {
+                        try {
+                          await fetch(`${API_URL}/api/editors/request`, {
+                            method: 'DELETE', headers: getAuthHeaders(),
+                            body: JSON.stringify({ email: r.email }),
+                          });
+                          setAccessRequests(prev => prev.filter(x => x.email !== r.email));
+                        } catch (e) { alert('Error: ' + e.message); }
+                      }} style={{padding:'2px 8px',background:'rgba(225,112,85,0.1)',color:'var(--red)',border:'1px solid rgba(225,112,85,0.2)',borderRadius:4,fontSize:10,fontWeight:600,cursor:'pointer'}}>
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <p style={{fontSize:12,color:'var(--text2)',marginBottom:12}}>
               One email per line. Only @novibet.com emails allowed. Admin always has editor access.
             </p>
