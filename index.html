@@ -3620,8 +3620,8 @@ function App({ onLogout, user: authUser }) {
               </div>
               <button className="tl-btn" onClick={() => {
                 const el = document.querySelector('.timeline-modal');
-                if (document.fullscreenElement) document.exitFullscreen();
-                else if (el) el.requestFullscreen();
+                if (document.fullscreenElement) { document.exitFullscreen(); }
+                else if (el) { setTlSidebarOpen(false); el.requestFullscreen(); }
               }} title="Toggle fullscreen" style={{fontSize:16,padding:'2px 6px'}}>⛶</button>
               <button className="tl-close" onClick={() => setShowTimeline(false)} title="Close">✕</button>
             </div>
