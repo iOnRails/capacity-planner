@@ -885,7 +885,7 @@
     position: relative;
   }
   .q-block {
-    position: absolute; top: 2px; bottom: 2px; margin: 0 4px; border-radius: 6px; overflow: hidden;
+    position: absolute; top: 2px; bottom: 2px; border-radius: 6px; overflow: hidden;
     display: flex; flex-direction: column;
     border: 1px solid transparent; transition: all 0.15s;
     cursor: default;
@@ -3489,7 +3489,7 @@ function App({ onLogout, user: authUser }) {
                 <div key={p.id} className="q-cell"
                   style={{gridColumn: `${startQi + 1} / ${endQi + 2}`, gridRow: lane + 2}}>
                   <div className={cls} title={p.subTask}
-                    style={{left: `${leftPct}%`, width: `${widthPct}%`, background: CP.getBlockBg(p.pillar, pillarColorMap)}}
+                    style={{left: `calc(${leftPct}% + 3px)`, width: `calc(${widthPct}% - 6px)`, background: CP.getBlockBg(p.pillar, pillarColorMap)}}
                     onMouseEnter={(e) => handleMouseEnter(e, p)}
                     onMouseLeave={handleMouseLeave}>
                     <div className="block-content">
