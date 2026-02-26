@@ -867,7 +867,8 @@
     display: flex; justify-content: flex-end; margin-bottom: 8px; gap: 6px;
   }
   .quarterly-container {
-    display: grid; grid-template-columns: repeat(4, 1fr); row-gap: 2px;
+    display: grid; grid-template-columns: repeat(4, 1fr); row-gap: 3px;
+    grid-auto-rows: 36px; grid-template-rows: auto;
     flex: 1; min-height: 0; overflow-y: auto; align-content: start;
   }
   .quarter-header {
@@ -884,10 +885,10 @@
     position: relative;
   }
   .q-block {
-    position: absolute; top: 0; bottom: 0; border-radius: 6px; overflow: hidden;
+    position: absolute; top: 1px; bottom: 1px; border-radius: 6px; overflow: hidden;
     display: flex; flex-direction: column;
     border: 1px solid transparent; transition: all 0.15s;
-    cursor: default; min-height: 36px;
+    cursor: default;
   }
   .q-block:hover {
     border-color: rgba(255,255,255,0.25);
@@ -896,12 +897,11 @@
   }
   .q-block.in-progress { box-shadow: inset 0 0 0 2px var(--green); }
   .q-block .block-content {
-    padding: 6px 8px; flex: 1; display: flex; flex-direction: column; justify-content: center;
+    padding: 4px 8px; flex: 1; display: flex; align-items: center;
   }
   .q-block .block-title {
     font-size: 10px; font-weight: 600; color: white; line-height: 1.3;
-    overflow: hidden; text-overflow: ellipsis;
-    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .q-block.continues-right {
     border-right: 3px dashed rgba(255,255,255,0.4);
@@ -911,12 +911,6 @@
     border-left: 3px dashed rgba(255,255,255,0.4);
     border-top-left-radius: 0; border-bottom-left-radius: 0;
   }
-  .q-block .q-arrow {
-    position: absolute; top: 50%; transform: translateY(-50%);
-    font-size: 10px; color: rgba(255,255,255,0.5); font-weight: 700;
-  }
-  .q-block .q-arrow.right { right: 2px; }
-  .q-block .q-arrow.left { left: 2px; }
 
   /* Timeline trigger button */
   .btn-timeline {
@@ -2815,83 +2809,79 @@ function App({ onLogout, user: authUser }) {
       }
     }
 
-    // Map each project span to calendar dates and assign to quarters
+    // Build spanning blocks — one per project across its quarter range
+    const blocks = []; // {project, totalSprints, startQi, endQi, leftPct, widthPct, startsBeforeWindow, endsAfterWindow}
+    const windowStart = qStart.getTime();
+    const windowEnd = qEnd.getTime();
     for (const {project, minStart, maxEnd} of projectSpans.values()) {
       const totalSprints = maxEnd - minStart;
-      const projStartDays = minStart * sprintWeeks * 7;
-      const projEndDays = maxEnd * sprintWeeks * 7;
-      const projStart = new Date(sprintStartDate.getTime() + projStartDays * 86400000);
-      const projEnd = new Date(sprintStartDate.getTime() + projEndDays * 86400000);
-      const totalDays = Math.max(1, (projEnd - projStart) / 86400000);
-
+      const projStartMs = sprintStartDate.getTime() + minStart * sprintWeeks * 7 * 86400000;
+      const projEndMs = sprintStartDate.getTime() + maxEnd * sprintWeeks * 7 * 86400000;
       // Skip projects entirely outside the 4-quarter window
-      if (projEnd < qStart || projStart > qEnd) continue;
-
+      if (projEndMs <= windowStart || projStartMs >= windowEnd) continue;
+      // Clamp to window
+      const clampedStart = Math.max(projStartMs, windowStart);
+      const clampedEnd = Math.min(projEndMs, windowEnd);
+      // Determine which quarters the project spans
+      let startQi = -1, endQi = -1;
       for (let qi = 0; qi < 4; qi++) {
-        const q = quarters[qi];
-        // Overlap between project and this quarter
-        const overlapStart = Math.max(projStart.getTime(), q.start.getTime());
-        const overlapEnd = Math.min(projEnd.getTime(), q.end.getTime());
-        if (overlapEnd <= overlapStart) continue;
-
-        const overlapDays = (overlapEnd - overlapStart) / 86400000;
-        const fraction = Math.min(1, overlapDays / totalDays);
-        const startsBeforeQ = projStart < q.start;
-        const endsAfterQ = projEnd > q.end;
-
-        // Gantt-style: compute left% and width% within the quarter
-        const qDays = Math.max(1, (q.end.getTime() - q.start.getTime()) / 86400000);
-        const leftPct = Math.max(0, (overlapStart - q.start.getTime()) / 86400000 / qDays * 100);
-        const widthPct = Math.min(100 - leftPct, overlapDays / qDays * 100);
-
-        q.projects.push({
-          project,
-          totalSprints,
-          fraction,
-          continuesLeft: startsBeforeQ,
-          continuesRight: endsAfterQ,
-          leftPct,
-          widthPct,
-        });
+        const qs = quarters[qi].start.getTime(), qe = quarters[qi].end.getTime();
+        if (clampedStart < qe && clampedEnd > qs) {
+          if (startQi === -1) startQi = qi;
+          endQi = qi;
+        }
       }
+      if (startQi === -1) continue;
+      // Compute left% and width% relative to the spanned quarter columns
+      // The block will use gridColumn: (startQi+1) / (endQi+2), so left/width are relative to that span
+      const spanStartMs = quarters[startQi].start.getTime();
+      const spanEndMs = quarters[endQi].end.getTime();
+      const spanMs = spanEndMs - spanStartMs;
+      const leftPct = Math.max(0, (clampedStart - spanStartMs) / spanMs * 100);
+      const rightPct = Math.max(0, (spanEndMs - clampedEnd) / spanMs * 100);
+      const widthPct = 100 - leftPct - rightPct;
+
+      // Count projects per quarter for the header count
+      for (let qi = startQi; qi <= endQi; qi++) quarters[qi].projects.push(project);
+
+      // Global position within the 4-quarter window (for bin-packing overlap checks)
+      const globalLeft = (clampedStart - windowStart) / (windowEnd - windowStart) * 100;
+      const globalRight = (clampedEnd - windowStart) / (windowEnd - windowStart) * 100;
+
+      blocks.push({
+        project, totalSprints, startQi, endQi, leftPct, widthPct,
+        globalLeft, globalRight,
+        startsBeforeWindow: projStartMs < windowStart,
+        endsAfterWindow: projEndMs > windowEnd,
+      });
     }
 
-    // Build row-based layout for cross-quarter alignment
-    // Each "row" is a project that may span 1-4 quarters
-    // rows: [{id, project, totalSprints, cells: [{qi, fraction, continuesLeft, continuesRight}|null, ...]}]
-    const rows = [];
-    const projectQuarters = new Map(); // projectId -> [{qi, fraction, continuesLeft, continuesRight}]
-
-    for (let qi = 0; qi < 4; qi++) {
-      for (const entry of quarters[qi].projects) {
-        if (!projectQuarters.has(entry.project.id)) projectQuarters.set(entry.project.id, []);
-        projectQuarters.get(entry.project.id).push({ qi, ...entry });
-      }
-    }
-
-    // Sort projects by their earliest quarter, then by total sprints (desc) for visual weight
-    const sortedProjects = [...projectQuarters.entries()].sort((a, b) => {
-      const aMin = Math.min(...a[1].map(e => e.qi));
-      const bMin = Math.min(...b[1].map(e => e.qi));
-      if (aMin !== bMin) return aMin - bMin;
-      return b[1][0].totalSprints - a[1][0].totalSprints;
+    // Sort blocks by global start position, then by size (larger first)
+    blocks.sort((a, b) => {
+      if (a.globalLeft !== b.globalLeft) return a.globalLeft - b.globalLeft;
+      return b.totalSprints - a.totalSprints;
     });
 
-    for (const [pid, entries] of sortedProjects) {
-      const cells = [null, null, null, null];
-      for (const e of entries) {
-        cells[e.qi] = e;
+    // Bin-pack blocks into lanes (rows) — place each block in the first lane where it fits
+    const lanes = []; // each lane is an array of blocks
+    for (const block of blocks) {
+      let placed = false;
+      for (let li = 0; li < lanes.length; li++) {
+        const overlaps = lanes[li].some(b => block.globalLeft < b.globalRight && block.globalRight > b.globalLeft);
+        if (!overlaps) {
+          lanes[li].push(block);
+          block.lane = li;
+          placed = true;
+          break;
+        }
       }
-      rows.push({ id: pid, project: entries[0].project, totalSprints: entries[0].totalSprints, cells });
+      if (!placed) {
+        block.lane = lanes.length;
+        lanes.push([block]);
+      }
     }
 
-    // Compute height weight per row (max weighted sprints across its cells)
-    const totalWeight = rows.reduce((s, r) => {
-      const w = Math.max(...r.cells.filter(Boolean).map(c => c.fraction * c.totalSprints));
-      return s + w;
-    }, 0) || 1;
-
-    return { quarters, rows, totalWeight };
+    return { quarters, blocks, laneCount: lanes.length };
   }, [timelineData, timelineConfig]);
 
   // Drag handlers for timeline bars (resize left/right + move with lane support)
@@ -3478,43 +3468,37 @@ function App({ onLogout, user: authUser }) {
               else if (el) el.requestFullscreen();
             }} title="Toggle fullscreen">&#x26F6;</button>
           </div>
-          <div className="quarterly-container">
+          <div className="quarterly-container" style={{position:'relative'}}>
+            {/* Quarter divider lines */}
+            {[1,2,3].map(i => <div key={`div-${i}`} style={{position:'absolute',top:0,bottom:0,left:`${i*25}%`,width:'1px',background:'var(--border)',zIndex:1,pointerEvents:'none'}} />)}
             {/* Column headers */}
             {quarterlyData.quarters.map((q, qi) => (
-              <div key={qi} className="quarter-header" style={{gridColumn: qi + 1, gridRow: 1, ...(qi > 0 ? {borderLeft: '1px solid var(--border)'} : {})}}>
+              <div key={qi} className="quarter-header" style={{gridColumn: qi + 1, gridRow: 1}}>
                 <span>{q.label}</span>
                 <span className="q-count">{q.projects.length}</span>
               </div>
             ))}
-            {/* Project rows — each row aligns across all 4 columns */}
-            {quarterlyData.rows.map((row, ri) => {
-              const weight = Math.max(...row.cells.filter(Boolean).map(c => c.fraction * c.totalSprints));
-              const heightPct = Math.max(3, (weight / quarterlyData.totalWeight) * 100);
-              const qBorder = qi => qi > 0 ? {borderLeft: '1px solid var(--border)'} : {};
-              return row.cells.map((cell, qi) => {
-                if (!cell) return (
-                  <div key={`${row.id}-${qi}`} style={{gridColumn: qi + 1, gridRow: ri + 2, height: `calc(${heightPct}vh - 4px)`, ...qBorder(qi)}} />
-                );
-                const {continuesLeft, continuesRight, project: p, leftPct, widthPct} = cell;
-                const cls = ['q-block', p.inProgress ? 'in-progress' : '', continuesRight ? 'continues-right' : '', continuesLeft ? 'continues-left' : ''].filter(Boolean).join(' ');
-                return (
-                  <div key={`${row.id}-${qi}`} className="q-cell"
-                    style={{gridColumn: qi + 1, gridRow: ri + 2, height: `calc(${heightPct}vh - 4px)`, ...qBorder(qi)}}>
-                    <div className={cls}
-                      style={{left: `${leftPct}%`, width: `${widthPct}%`, background: CP.getBlockBg(p.pillar, pillarColorMap)}}
-                      onMouseEnter={(e) => handleMouseEnter(e, p)}
-                      onMouseLeave={handleMouseLeave}>
-                      {continuesLeft && <span className="q-arrow left">&larr;</span>}
-                      {continuesRight && <span className="q-arrow right">&rarr;</span>}
-                      <div className="block-content">
-                        <div className="block-title">{p.subTask}</div>
-                      </div>
+            {/* Project blocks — each spans its quarter range as a single element */}
+            {quarterlyData.blocks.map((block) => {
+              const {project: p, startQi, endQi, leftPct, widthPct, lane, startsBeforeWindow, endsAfterWindow} = block;
+              const cls = ['q-block', p.inProgress ? 'in-progress' : '',
+                endsAfterWindow ? 'continues-right' : '',
+                startsBeforeWindow ? 'continues-left' : ''].filter(Boolean).join(' ');
+              return (
+                <div key={p.id} className="q-cell"
+                  style={{gridColumn: `${startQi + 1} / ${endQi + 2}`, gridRow: lane + 2}}>
+                  <div className={cls}
+                    style={{left: `${leftPct}%`, width: `${widthPct}%`, background: CP.getBlockBg(p.pillar, pillarColorMap)}}
+                    onMouseEnter={(e) => handleMouseEnter(e, p)}
+                    onMouseLeave={handleMouseLeave}>
+                    <div className="block-content">
+                      <div className="block-title">{p.subTask}</div>
                     </div>
                   </div>
-                );
-              });
+                </div>
+              );
             })}
-            {quarterlyData.rows.length === 0 && (
+            {quarterlyData.blocks.length === 0 && (
               <div style={{gridColumn:'1/5',gridRow:2,textAlign:'center',padding:'48px',color:'var(--text2)',fontSize:12}}>No roadmap projects in the current 4 quarters</div>
             )}
           </div>
