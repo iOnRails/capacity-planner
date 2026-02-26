@@ -3204,6 +3204,31 @@ function App({ onLogout, user: authUser }) {
         <h1>
           <span style={{color: activeV.color}}>{activeV.icon}</span>
           {' '}{activeV.label} <span>Capacity Planner</span> <span style={{fontSize:9,color:'var(--text2)',opacity:0.5}}>v3.0</span>
+          {!isEditor && (
+            <span style={{fontSize:10,color:'var(--blue)',fontWeight:600,marginLeft:12,display:'inline-flex',alignItems:'center',gap:6,background:'rgba(9,132,227,0.1)',padding:'1px 8px',borderRadius:4,border:'1px solid rgba(9,132,227,0.2)'}}>
+              View-only
+              {requestSent ? (
+                <span style={{color:'#00b894',fontWeight:400,fontSize:9}}>&#10003; Request sent</span>
+              ) : (
+                <button onClick={async (e) => {
+                  e.stopPropagation();
+                  try {
+                    const resp = await fetch(`${API_URL}/api/editors/request`, {
+                      method: 'POST', headers: getAuthHeaders(),
+                    });
+                    if (!resp.ok) {
+                      const data = await resp.json();
+                      setSaveStatus({type:'error', msg: data.error || 'Request failed'});
+                      return;
+                    }
+                    setRequestSent(true);
+                  } catch (e) { setSaveStatus({type:'error', msg: 'Failed to send request'}); }
+                }} style={{background:'none',border:'1px solid rgba(9,132,227,0.4)',borderRadius:3,padding:'0px 6px',color:'var(--blue)',fontSize:9,cursor:'pointer',fontWeight:600,lineHeight:'16px'}}>
+                  Request Access
+                </button>
+              )}
+            </span>
+          )}
         </h1>
         <div className="header-right">
           <div className="tab-switcher">
@@ -3238,32 +3263,6 @@ function App({ onLogout, user: authUser }) {
         </div>
       </div>
 
-      {!isEditor && (
-        <div style={{padding:'6px 28px',background:'rgba(9,132,227,0.1)',borderBottom:'1px solid rgba(9,132,227,0.2)',fontSize:11,color:'var(--blue)',fontWeight:600,display:'flex',alignItems:'center',gap:8}}>
-          <span>View-only mode</span>
-          {requestSent ? (
-            <span style={{color:'var(--text2)',fontWeight:400,display:'flex',alignItems:'center',gap:4}}>
-              <span style={{color:'#00b894'}}>&#10003;</span> Request sent — waiting for admin approval
-            </span>
-          ) : (
-            <button onClick={async () => {
-              try {
-                const resp = await fetch(`${API_URL}/api/editors/request`, {
-                  method: 'POST', headers: getAuthHeaders(),
-                });
-                if (!resp.ok) {
-                  const data = await resp.json();
-                  setSaveStatus({type:'error', msg: data.error || 'Request failed'});
-                  return;
-                }
-                setRequestSent(true);
-              } catch (e) { setSaveStatus({type:'error', msg: 'Failed to send request'}); }
-            }} style={{background:'none',border:'1px solid rgba(9,132,227,0.4)',borderRadius:4,padding:'1px 8px',color:'var(--blue)',fontSize:10,cursor:'pointer',fontWeight:600}}>
-              Request Access
-            </button>
-          )}
-        </div>
-      )}
 
       {loading ? (
         <div className="empty-vertical">
