@@ -887,10 +887,17 @@
   }
   .q-block {
     position: absolute; top: 2px; bottom: 2px; border-radius: 6px; overflow: hidden;
-    pointer-events: auto;
+    pointer-events: auto; min-width: 80px;
     display: flex; flex-direction: column;
     border: 1px solid transparent; transition: all 0.15s;
     cursor: default;
+  }
+  .q-tip {
+    position: fixed; z-index: 9999; pointer-events: none;
+    background: var(--surface2); color: var(--text1); border: 1px solid var(--border);
+    padding: 6px 10px; border-radius: 6px; font-size: 12px; font-weight: 600;
+    max-width: 320px; white-space: normal; line-height: 1.4;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
   }
   .q-block:hover {
     border-color: rgba(255,255,255,0.25);
@@ -1333,6 +1340,7 @@ function App({ onLogout, user: authUser }) {
   const sizeMapRef = useRef(sizeMap);
   useEffect(() => { sizeMapRef.current = sizeMap; }, [sizeMap]);
   const [tooltip, setTooltip] = useState(null);
+  const [qTip, setQTip] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem('cp_tab') || 'planner');
@@ -3490,8 +3498,11 @@ function App({ onLogout, user: authUser }) {
               return (
                 <div key={p.id} className="q-cell"
                   style={{gridColumn: `${startQi + 1} / ${endQi + 2}`, gridRow: lane + 2}}>
-                  <div className={cls} title={p.subTask}
-                    style={{left: `calc(${leftPct}% + 3px)`, width: `calc(${widthPct}% - 6px)`, background: CP.getBlockBg(p.pillar, pillarColorMap)}}>
+                  <div className={cls}
+                    style={{left: `calc(${leftPct}% + 3px)`, width: `calc(${widthPct}% - 6px)`, background: CP.getBlockBg(p.pillar, pillarColorMap)}}
+                    onMouseEnter={(e) => setQTip({text: p.subTask, x: e.clientX, y: e.clientY})}
+                    onMouseMove={(e) => setQTip(t => t ? {...t, x: e.clientX, y: e.clientY} : t)}
+                    onMouseLeave={() => setQTip(null)}>
                     <div className="block-content">
                       <div className="block-title">{p.subTask}</div>
                     </div>
@@ -3503,6 +3514,7 @@ function App({ onLogout, user: authUser }) {
               <div style={{gridColumn:'1/5',gridRow:2,textAlign:'center',padding:'48px',color:'var(--text2)',fontSize:12}}>No roadmap projects in the current 4 quarters</div>
             )}
           </div>
+          {qTip && <div className="q-tip" style={{left: qTip.x + 12, top: qTip.y - 32}}>{qTip.text}</div>}
         </div>
       ) : activeTab === 'projects' ? (
         projectsTableJSX
