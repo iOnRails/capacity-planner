@@ -3627,7 +3627,7 @@ function App({ onLogout, user: authUser }) {
                       <td style={{padding:'6px 8px',textAlign:'center',fontWeight:600,color:'var(--text1)'}}>{sp.total || '—'}</td>
                       <td style={{padding:'6px 8px',textAlign:'center',color:'var(--text2)',fontSize:11}}>{p.targetMarket || '—'}</td>
                       <td style={{padding:'6px 8px',textAlign:'center'}}>
-                        {isEditor && <button className="btn" style={{fontSize:10,padding:'2px 6px'}} onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setTrackPicker({ projectId: p.id, x: r.left - 140, y: r.bottom + 4 }); }}>+ Roadmap</button>}
+                        {isEditor && <button className="btn" style={{fontSize:16,padding:'0 8px',lineHeight:'26px'}} onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setTrackPicker({ projectId: p.id, x: r.left - 140, y: r.bottom + 4 }); }} title="Add to Roadmap">+</button>}
                       </td>
                     </tr>
                   );
