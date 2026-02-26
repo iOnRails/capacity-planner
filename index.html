@@ -885,7 +885,7 @@
     position: relative;
   }
   .q-block {
-    position: absolute; top: 2px; bottom: 2px; border-radius: 6px; overflow: hidden;
+    position: absolute; top: 2px; bottom: 2px; margin: 0 4px; border-radius: 6px; overflow: hidden;
     display: flex; flex-direction: column;
     border: 1px solid transparent; transition: all 0.15s;
     cursor: default;
@@ -897,10 +897,10 @@
   }
   .q-block.in-progress { box-shadow: inset 0 0 0 2px var(--green); }
   .q-block .block-content {
-    padding: 4px 8px; flex: 1; display: flex; align-items: center;
+    padding: 4px 10px; flex: 1; display: flex; align-items: center; justify-content: center;
   }
   .q-block .block-title {
-    font-size: 10px; font-weight: 600; color: white; line-height: 1.3;
+    font-size: 11px; font-weight: 600; color: white; line-height: 1.35; text-align: center;
     overflow: hidden; text-overflow: ellipsis;
     display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
   }
@@ -3488,7 +3488,7 @@ function App({ onLogout, user: authUser }) {
               return (
                 <div key={p.id} className="q-cell"
                   style={{gridColumn: `${startQi + 1} / ${endQi + 2}`, gridRow: lane + 2}}>
-                  <div className={cls}
+                  <div className={cls} title={p.subTask}
                     style={{left: `${leftPct}%`, width: `${widthPct}%`, background: CP.getBlockBg(p.pillar, pillarColorMap)}}
                     onMouseEnter={(e) => handleMouseEnter(e, p)}
                     onMouseLeave={handleMouseLeave}>
