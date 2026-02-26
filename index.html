@@ -3515,13 +3515,13 @@ function App({ onLogout, user: authUser }) {
             {backlogProjects.map(p => renderBlock(p, 'backlog'))}
           </div>
           ) : (
-          <div style={{overflowX:'auto'}}>
+          <div style={{overflow:'auto',maxHeight:'calc(100vh - 200px)'}}>
             {backlogProjects.length === 0 ? <div className="empty-flow">All projects are in the roadmap</div> : (
             <table style={{width:'100%',borderCollapse:'separate',borderSpacing:0,fontSize:12}}>
               <thead>
                 <tr style={{textAlign:'left'}}>
                   {[['30%','Name'],['14%','Epic'],['10%','Pillar'],['7%','Impact','center'],['5%','BE','center'],['5%','FE','center'],['5%','Nat','center'],['5%','QA','center'],['7%','Sprints','center'],['8%','Market','center'],['4%','']].map(([w,label,align],i) => (
-                    <th key={i} style={{padding:'6px 8px',color:'var(--text2)',fontWeight:600,width:w,textAlign:align||'left',position:'sticky',top:0,background:'var(--surface1)',borderBottom:'2px solid var(--border)',zIndex:2}}>{label}</th>
+                    <th key={i} style={{padding:'6px 8px',color:'var(--text2)',fontWeight:600,width:w,textAlign:align||'left',position:'sticky',top:0,background:'#1f1a2e',borderBottom:'2px solid var(--border)',zIndex:2}}>{label}</th>
                   ))}
                 </tr>
               </thead>
