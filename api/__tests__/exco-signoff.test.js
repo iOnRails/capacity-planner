@@ -279,3 +279,72 @@ describe('GET /api/verticals/:key/signoffs/:id', () => {
     expect(res.body.quarterlyBlocks).toEqual(blocks1);
   });
 });
+
+// ═══════════════════════════════════════════════
+// Delete sign-off versions (admin-only)
+// ═══════════════════════════════════════════════
+
+describe('DELETE /api/verticals/:key/signoffs/:id', () => {
+  beforeEach(() => {
+    fs.writeFileSync(path.join(TEST_DATA_DIR, EXCO_FILE), JSON.stringify(['exco1@novibet.com']));
+    fs.writeFileSync(path.join(TEST_DATA_DIR, getStateFile('growth')), JSON.stringify({}));
+    fs.writeFileSync(path.join(TEST_DATA_DIR, getProjectsFile('growth')), JSON.stringify([]));
+  });
+
+  test('admin can delete a sign-off version', async () => {
+    const create = await request(app)
+      .post('/api/verticals/growth/signoffs')
+      .set('x-user-email', 'exco1@novibet.com')
+      .send({ quarterlyBlocks: [{ projectId: 1 }] });
+    const id = create.body.signoff.id;
+
+    const res = await request(app)
+      .delete(`/api/verticals/growth/signoffs/${id}`)
+      .set('x-user-email', ADMIN_EMAIL);
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+
+    // Verify it's gone
+    const list = await request(app).get('/api/verticals/growth/signoffs');
+    expect(list.body.signoffs).toHaveLength(0);
+  });
+
+  test('non-admin cannot delete a sign-off version', async () => {
+    const create = await request(app)
+      .post('/api/verticals/growth/signoffs')
+      .set('x-user-email', 'exco1@novibet.com')
+      .send({ quarterlyBlocks: [] });
+    const id = create.body.signoff.id;
+
+    const res = await request(app)
+      .delete(`/api/verticals/growth/signoffs/${id}`)
+      .set('x-user-email', 'exco1@novibet.com');
+    expect(res.status).toBe(403);
+  });
+
+  test('returns 404 for non-existent sign-off', async () => {
+    const res = await request(app)
+      .delete('/api/verticals/growth/signoffs/nonexistent')
+      .set('x-user-email', ADMIN_EMAIL);
+    expect(res.status).toBe(404);
+  });
+
+  test('deleting one sign-off leaves others intact', async () => {
+    await request(app)
+      .post('/api/verticals/growth/signoffs')
+      .set('x-user-email', 'exco1@novibet.com')
+      .send({ quarterlyBlocks: [{ projectId: 1 }] });
+    const create2 = await request(app)
+      .post('/api/verticals/growth/signoffs')
+      .set('x-user-email', 'exco1@novibet.com')
+      .send({ quarterlyBlocks: [{ projectId: 2 }] });
+
+    await request(app)
+      .delete(`/api/verticals/growth/signoffs/${create2.body.signoff.id}`)
+      .set('x-user-email', ADMIN_EMAIL);
+
+    const list = await request(app).get('/api/verticals/growth/signoffs');
+    expect(list.body.signoffs).toHaveLength(1);
+    expect(list.body.signoffs[0].id).not.toBe(create2.body.signoff.id);
+  });
+});

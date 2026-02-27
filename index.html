@@ -4267,14 +4267,29 @@ function App({ onLogout, user: authUser }) {
               <div className="tl-controls">
                 {/* Diff dropdown — lists all sign-off versions */}
                 <select value={selectedSignoffId || ''} onChange={e => loadSignoffBlocks(e.target.value || null)}
-                  style={{fontSize:11,padding:'4px 8px',background:'var(--surface2)',color:'var(--text1)',border:'1px solid var(--border)',borderRadius:4,cursor:'pointer',maxWidth:220}}>
+                  style={{fontSize:11,padding:'4px 8px',background:'var(--surface2)',color:'var(--text1)',border:'1px solid var(--border)',borderRadius:4,cursor:'pointer',maxWidth:280}}>
                   <option value="">Diff: Off</option>
                   {signoffVersions.map(v => (
                     <option key={v.id} value={v.id}>
-                      {v.label} — {new Date(v.createdAt).toLocaleDateString()}
+                      {v.label} — {v.signedOff?.by || 'unknown'} — {new Date(v.createdAt).toLocaleDateString()}
                     </option>
                   ))}
                 </select>
+                {isAdmin && selectedSignoffId && (
+                  <button onClick={async () => {
+                    const ver = signoffVersions.find(v => v.id === selectedSignoffId);
+                    if (!confirm(`Delete sign-off "${ver?.label}"?\nSigned by: ${ver?.signedOff?.by || 'unknown'}\nThis cannot be undone.`)) return;
+                    try {
+                      const res = await fetch(`${API_URL}/api/verticals/${activeVertical}/signoffs/${selectedSignoffId}`, { method: 'DELETE', headers: getAuthHeaders() });
+                      if (res.ok) {
+                        setSelectedSignoffId(null); setSignedOffBlocks(null);
+                        await loadSignoffVersions();
+                      } else { const d = await res.json(); alert(d.error || 'Delete failed'); }
+                    } catch (e) { alert('Delete error: ' + e.message); }
+                  }} style={{fontSize:11,padding:'4px 8px',background:'rgba(214,48,49,0.12)',color:'#d63031',
+                    border:'1px solid rgba(214,48,49,0.3)',borderRadius:4,fontWeight:600,cursor:'pointer'}}
+                    title="Delete this sign-off version">🗑</button>
+                )}
                 {isOnMasterplan && isExCo && (
                   <button className="tl-btn" onClick={performSignOff}
                     style={{fontSize:11,padding:'4px 10px',background:'rgba(0,184,148,0.15)',color:'#00b894',

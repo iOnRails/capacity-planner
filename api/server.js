@@ -1073,6 +1073,22 @@ app.post('/api/verticals/:key/signoffs', (req, res) => {
   }
 });
 
+// Delete a sign-off version (admin-only)
+app.delete('/api/verticals/:key/signoffs/:id', (req, res) => {
+  const email = (req.headers['x-user-email'] || '').toLowerCase();
+  if (email !== ADMIN_EMAIL) {
+    return res.status(403).json({ error: 'Only admin can delete sign-off versions' });
+  }
+  const key = req.params.key;
+  const signoffs = loadJSON(getSignoffsFile(key), []);
+  const idx = signoffs.findIndex(s => s.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Sign-off not found' });
+  const removed = signoffs.splice(idx, 1)[0];
+  saveJSON(getSignoffsFile(key), signoffs);
+  logAudit(req, 'Deleted sign-off version', `Deleted "${removed.label}" (signed by ${removed.signedOff?.by || 'unknown'})`);
+  res.json({ success: true });
+});
+
 // ── Audit log endpoint ──
 app.get('/api/audit-log', (req, res) => {
   let log = loadJSON(AUDIT_FILE, []);
