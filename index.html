@@ -912,6 +912,26 @@
     border-left: 3px dashed rgba(255,255,255,0.4);
     border-top-left-radius: 0; border-bottom-left-radius: 0;
   }
+  /* Diff badges */
+  .q-diff-badge {
+    position: absolute; top: 3px; right: 3px; font-size: 8px; font-weight: 700;
+    padding: 1px 5px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.5px;
+    z-index: 3; line-height: 1.4;
+  }
+  .q-diff-badge.new { background: #00b894; color: white; }
+  .q-diff-badge.moved { background: #0984e3; color: white; }
+  .q-diff-badge.removed { background: #e74c3c; color: white; }
+  .q-block.diff-removed {
+    opacity: 0.45; border: 2px dashed #e74c3c !important;
+  }
+  .q-block.diff-removed .block-title {
+    text-decoration: line-through; opacity: 0.7;
+  }
+  .q-diff-separator {
+    grid-column: 1 / 5; border-top: 1px dashed rgba(231,76,60,0.4); margin: 4px 0;
+    display: flex; align-items: center; gap: 6px; padding: 4px 8px;
+    font-size: 10px; color: #e74c3c; font-weight: 600;
+  }
 
   /* Timeline trigger button */
   .btn-timeline {
@@ -2924,6 +2944,58 @@ function App({ onLogout, user: authUser }) {
     return { quarters, blocks, laneCount: lanes.length };
   }, [timelineData, timelineConfig]);
 
+  // Compute diff blocks when diff mode is active
+  const diffBlocks = useMemo(() => {
+    if (!diffMode || !signedOffBlocks || signedOffBlocks.length === 0) return null;
+
+    const signedOffMap = new Map();
+    for (const b of signedOffBlocks) signedOffMap.set(b.projectId, b);
+
+    const currentMap = new Map();
+    for (const b of quarterlyData.blocks) currentMap.set(b.project.id, b);
+
+    // Classify current blocks
+    const result = [];
+    for (const block of quarterlyData.blocks) {
+      const old = signedOffMap.get(block.project.id);
+      if (!old) {
+        result.push({ ...block, diffType: 'new' });
+      } else {
+        const moved = old.startQi !== block.startQi || old.endQi !== block.endQi ||
+          Math.abs(old.leftPct - block.leftPct) > 2 || Math.abs(old.widthPct - block.widthPct) > 2;
+        result.push({ ...block, diffType: moved ? 'moved' : 'unchanged', oldBlock: moved ? old : null });
+      }
+    }
+
+    // Collect removed blocks and bin-pack into lanes below current
+    const removed = [];
+    for (const old of signedOffBlocks) {
+      if (!currentMap.has(old.projectId)) removed.push({ ...old });
+    }
+    const removedLanes = [];
+    for (const b of removed) {
+      let placed = false;
+      for (let li = 0; li < removedLanes.length; li++) {
+        const overlaps = removedLanes[li].some(x => b.globalLeft < x.globalRight && b.globalRight > x.globalLeft);
+        if (!overlaps) { removedLanes[li].push(b); b._lane = li; placed = true; break; }
+      }
+      if (!placed) { b._lane = removedLanes.length; removedLanes.push([b]); }
+    }
+    const laneOffset = quarterlyData.laneCount;
+    for (const b of removed) {
+      result.push({
+        project: { id: b.projectId, subTask: b.subTask, pillar: b.pillar, inProgress: b.inProgress },
+        startQi: b.startQi, endQi: b.endQi, leftPct: b.leftPct, widthPct: b.widthPct,
+        lane: laneOffset + b._lane,
+        startDate: new Date(b.startDate), endDate: new Date(b.endDate),
+        startsBeforeWindow: b.startsBeforeWindow, endsAfterWindow: b.endsAfterWindow,
+        diffType: 'removed',
+      });
+    }
+
+    return { blocks: result, removedCount: removed.length, removedLaneOffset: laneOffset };
+  }, [diffMode, signedOffBlocks, quarterlyData]);
+
   // Perform sign-off (must be after quarterlyData is computed)
   const performSignOff = useCallback(async () => {
     if (!confirm('Sign off the current quarterly plan? This creates a signed snapshot for comparison.')) return;
@@ -4106,73 +4178,79 @@ function App({ onLogout, user: authUser }) {
               <button className="tl-close" onClick={() => { setShowQuarterly(false); setQTip(null); setDiffMode(false); }} title="Close">✕</button>
             </div>
             <div className="quarterly-modal-body" style={{flex:1,overflow:'auto',padding:'12px 16px',position:'relative'}}>
-              <div style={{position:'relative'}}>
-                {/* Ghost layer — signed-off blocks at low opacity */}
-                {diffMode && signedOffBlocks && signedOffBlocks.length > 0 && (
-                  <div className="quarterly-container" style={{position:'absolute',inset:0,opacity:0.15,pointerEvents:'none',zIndex:0}}>
-                    {[1,2,3].map(i => <div key={`gdiv-${i}`} style={{position:'absolute',top:0,bottom:0,left:`${i*25}%`,width:'1px',background:'transparent',zIndex:1,pointerEvents:'none'}} />)}
+              {(() => {
+                const blocksToRender = diffMode && diffBlocks ? diffBlocks.blocks : quarterlyData.blocks.map(b => ({ ...b, diffType: null }));
+                const fmtDate = d => d instanceof Date ? d.toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'}) : '';
+                return (
+                  <div className="quarterly-container" style={{position:'relative'}}>
+                    {[1,2,3].map(i => <div key={`div-${i}`} style={{position:'absolute',top:0,bottom:0,left:`${i*25}%`,width:'1px',background:'var(--border)',zIndex:1,pointerEvents:'none'}} />)}
                     {quarterlyData.quarters.map((q, qi) => (
-                      <div key={qi} className="quarter-header" style={{gridColumn: qi + 1, gridRow: 1, visibility:'hidden'}}>
+                      <div key={qi} className="quarter-header" style={{gridColumn: qi + 1, gridRow: 1}}>
                         <span>{q.label}</span>
+                        <span className="q-count">{q.projects.length}</span>
                       </div>
                     ))}
-                    {signedOffBlocks.map((b, idx) => {
-                      const cls = ['q-block', b.inProgress ? 'in-progress' : '',
-                        b.endsAfterWindow ? 'continues-right' : '',
-                        b.startsBeforeWindow ? 'continues-left' : ''].filter(Boolean).join(' ');
+                    {/* Removed separator */}
+                    {diffMode && diffBlocks && diffBlocks.removedCount > 0 && (
+                      <div className="q-diff-separator" style={{gridRow: diffBlocks.removedLaneOffset + 2}}>
+                        <span>Removed since sign-off ({diffBlocks.removedCount})</span>
+                      </div>
+                    )}
+                    {blocksToRender.map((block) => {
+                      const {project: p, startQi, endQi, leftPct, widthPct, lane, startDate, endDate, startsBeforeWindow, endsAfterWindow, diffType, oldBlock} = block;
+                      const cls = ['q-block',
+                        p.inProgress && diffType !== 'removed' ? 'in-progress' : '',
+                        endsAfterWindow ? 'continues-right' : '',
+                        startsBeforeWindow ? 'continues-left' : '',
+                        diffType === 'removed' ? 'diff-removed' : '',
+                      ].filter(Boolean).join(' ');
+                      // Build tooltip content
+                      const tipData = { text: p.subTask, x: 0, y: 0 };
+                      if (diffType === 'removed') {
+                        tipData.text = p.subTask + ' (Removed)';
+                        tipData.start = 'Was: ' + fmtDate(startDate) + ' \u2192 ' + fmtDate(endDate);
+                      } else {
+                        tipData.start = fmtDate(startDate);
+                        tipData.end = fmtDate(endDate);
+                        if (diffType === 'moved' && oldBlock) {
+                          tipData.oldDates = 'Was: ' + fmtDate(new Date(oldBlock.startDate)) + ' \u2192 ' + fmtDate(new Date(oldBlock.endDate));
+                        }
+                      }
+                      // Lane offset for removed blocks: +1 extra row for separator
+                      const rowOffset = diffType === 'removed' ? 1 : 0;
                       return (
-                        <div key={`ghost-${b.projectId}-${idx}`} className="q-cell"
-                          style={{gridColumn: `${b.startQi + 1} / ${b.endQi + 2}`, gridRow: b.lane + 2}}>
+                        <div key={`${diffType === 'removed' ? 'rm-' : ''}${p.id}`} className="q-cell"
+                          style={{gridColumn: `${startQi + 1} / ${endQi + 2}`, gridRow: lane + 2 + rowOffset}}>
                           <div className={cls}
-                            style={{left: `calc(${b.leftPct}% + 3px)`, width: `calc(${b.widthPct}% - 6px)`, background: CP.getBlockBg(b.pillar, pillarColorMap)}}>
+                            style={{left: `calc(${leftPct}% + 3px)`, width: `calc(${widthPct}% - 6px)`, background: CP.getBlockBg(p.pillar, pillarColorMap)}}
+                            onMouseEnter={(e) => setQTip({...tipData, x: e.clientX, y: e.clientY})}
+                            onMouseMove={(e) => setQTip(t => t ? {...t, x: e.clientX, y: e.clientY} : t)}
+                            onMouseLeave={() => setQTip(null)}>
+                            {diffType && diffType !== 'unchanged' && (
+                              <span className={`q-diff-badge ${diffType}`}>
+                                {diffType === 'new' ? 'NEW' : diffType === 'moved' ? 'MOVED' : 'REMOVED'}
+                              </span>
+                            )}
                             <div className="block-content">
-                              <div className="block-title">{b.subTask}</div>
+                              <div className="block-title">{p.subTask}</div>
                             </div>
                           </div>
                         </div>
                       );
                     })}
+                    {quarterlyData.blocks.length === 0 && !diffMode && (
+                      <div style={{gridColumn:'1/5',gridRow:2,textAlign:'center',padding:'48px',color:'var(--text2)',fontSize:12}}>No roadmap projects in the current 4 quarters</div>
+                    )}
                   </div>
-                )}
-                {/* Current layer (vivid) */}
-                <div className="quarterly-container" style={{position:'relative',zIndex:1}}>
-                  {[1,2,3].map(i => <div key={`div-${i}`} style={{position:'absolute',top:0,bottom:0,left:`${i*25}%`,width:'1px',background:'var(--border)',zIndex:1,pointerEvents:'none'}} />)}
-                  {quarterlyData.quarters.map((q, qi) => (
-                    <div key={qi} className="quarter-header" style={{gridColumn: qi + 1, gridRow: 1}}>
-                      <span>{q.label}</span>
-                      <span className="q-count">{q.projects.length}</span>
-                    </div>
-                  ))}
-                  {quarterlyData.blocks.map((block) => {
-                    const {project: p, startQi, endQi, leftPct, widthPct, lane, startDate, endDate, startsBeforeWindow, endsAfterWindow} = block;
-                    const fmtDate = d => d.toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'});
-                    const cls = ['q-block', p.inProgress ? 'in-progress' : '',
-                      endsAfterWindow ? 'continues-right' : '',
-                      startsBeforeWindow ? 'continues-left' : ''].filter(Boolean).join(' ');
-                    return (
-                      <div key={p.id} className="q-cell"
-                        style={{gridColumn: `${startQi + 1} / ${endQi + 2}`, gridRow: lane + 2}}>
-                        <div className={cls}
-                          style={{left: `calc(${leftPct}% + 3px)`, width: `calc(${widthPct}% - 6px)`, background: CP.getBlockBg(p.pillar, pillarColorMap)}}
-                          onMouseEnter={(e) => setQTip({text: p.subTask, start: fmtDate(startDate), end: fmtDate(endDate), x: e.clientX, y: e.clientY})}
-                          onMouseMove={(e) => setQTip(t => t ? {...t, x: e.clientX, y: e.clientY} : t)}
-                          onMouseLeave={() => setQTip(null)}>
-                          <div className="block-content">
-                            <div className="block-title">{p.subTask}</div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {quarterlyData.blocks.length === 0 && (
-                    <div style={{gridColumn:'1/5',gridRow:2,textAlign:'center',padding:'48px',color:'var(--text2)',fontSize:12}}>No roadmap projects in the current 4 quarters</div>
-                  )}
-                </div>
-              </div>
+                );
+              })()}
             </div>
             {qTip && <div className="q-tip" style={{left: qTip.x + 12, top: qTip.y - 40}}>
               <div>{qTip.text}</div>
-              <div style={{fontSize:10,fontWeight:400,color:'var(--text2)',marginTop:3}}>{qTip.start} → {qTip.end}</div>
+              <div style={{fontSize:10,fontWeight:400,color:'var(--text2)',marginTop:3}}>
+                {qTip.end ? `${qTip.start} \u2192 ${qTip.end}` : qTip.start}
+              </div>
+              {qTip.oldDates && <div style={{fontSize:9,fontWeight:400,color:'#74b9ff',marginTop:2}}>{qTip.oldDates}</div>}
             </div>}
           </div>
         </div>
