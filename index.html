@@ -3127,18 +3127,19 @@ function App({ onLogout, user: authUser }) {
     const qEnd = quarters[3].end;
 
     // Collect all bars and merge core + ghost per project (earliest start, latest end)
-    const projectSpans = new Map(); // projectId -> {project, minStartSprints, maxEndSprints}
+    const projectSpans = new Map(); // projectId -> {project, minStart, maxEnd, ghostTrackKeys}
     if (timelineData && timelineData.trackBars) {
       for (const bars of Object.values(timelineData.trackBars)) {
         for (const bar of bars) {
           const pid = bar.project.id;
           const endSp = bar.startSprints + bar.sprints;
           if (!projectSpans.has(pid)) {
-            projectSpans.set(pid, { project: bar.project, minStart: bar.startSprints, maxEnd: endSp });
+            projectSpans.set(pid, { project: bar.project, minStart: bar.startSprints, maxEnd: endSp, ghostTrackKeys: bar.ghost ? [bar.trackKey] : [] });
           } else {
             const span = projectSpans.get(pid);
             span.minStart = Math.min(span.minStart, bar.startSprints);
             span.maxEnd = Math.max(span.maxEnd, endSp);
+            if (bar.ghost && bar.trackKey) span.ghostTrackKeys.push(bar.trackKey);
           }
         }
       }
@@ -3148,7 +3149,7 @@ function App({ onLogout, user: authUser }) {
     const blocks = []; // {project, totalSprints, startQi, endQi, leftPct, widthPct, startsBeforeWindow, endsAfterWindow}
     const windowStart = qStart.getTime();
     const windowEnd = qEnd.getTime();
-    for (const {project, minStart, maxEnd} of projectSpans.values()) {
+    for (const {project, minStart, maxEnd, ghostTrackKeys} of projectSpans.values()) {
       const totalSprints = maxEnd - minStart;
       const projStartMs = sprintStartDate.getTime() + minStart * sprintWeeks * 7 * 86400000;
       const projEndMs = sprintStartDate.getTime() + maxEnd * sprintWeeks * 7 * 86400000;
@@ -3185,7 +3186,7 @@ function App({ onLogout, user: authUser }) {
 
       blocks.push({
         project, totalSprints, startQi, endQi, leftPct, widthPct,
-        globalLeft, globalRight,
+        globalLeft, globalRight, ghostTrackKeys,
         startDate: new Date(projStartMs), endDate: new Date(projEndMs),
         startsBeforeWindow: projStartMs < windowStart,
         endsAfterWindow: projEndMs > windowEnd,
@@ -4503,8 +4504,19 @@ function App({ onLogout, user: authUser }) {
                       </div>
                     )}
                     {blocksToRender.map((block) => {
-                      const {project: p, startQi, endQi, leftPct, widthPct, lane, startDate, endDate, startsBeforeWindow, endsAfterWindow, diffType, oldBlock} = block;
-                      const pStatus = CP.getProjectStatus(p);
+                      const {project: p, startQi, endQi, leftPct, widthPct, lane, startDate, endDate, startsBeforeWindow, endsAfterWindow, diffType, oldBlock, ghostTrackKeys} = block;
+                      // Aggregate status + progress from parent + all splits
+                      const parentStatus = CP.getProjectStatus(p);
+                      const parentPct = CP.getPercentComplete(p);
+                      const gTracks = ghostTrackKeys || [];
+                      const allStatuses = [parentStatus];
+                      const allPcts = [parentPct];
+                      for (const tk of gTracks) {
+                        allStatuses.push(CP.getSplitStatus(splitStatuses, p.id, tk));
+                        allPcts.push(CP.getSplitPercentComplete(splitStatuses, p.id, tk));
+                      }
+                      const pStatus = allStatuses.includes('in_progress') ? 'in_progress' : allStatuses.includes('paused') ? 'paused' : 'not_started';
+                      const aggPct = Math.round(allPcts.reduce((a, b) => a + b, 0) / allPcts.length);
                       const cls = ['q-block',
                         pStatus === 'in_progress' && diffType !== 'removed' ? 'in-progress' : '',
                         pStatus === 'paused' && diffType !== 'removed' ? 'paused' : '',
@@ -4543,9 +4555,9 @@ function App({ onLogout, user: authUser }) {
                               <div className="block-title">{p.subTask}</div>
                             </div>
                             {pStatus === 'paused' && diffType !== 'removed' && <div className="pause-overlay">⏸</div>}
-                            {(pStatus === 'in_progress' || pStatus === 'paused') && diffType !== 'removed' && CP.getPercentComplete(p) > 0 && (
+                            {(pStatus === 'in_progress' || pStatus === 'paused') && diffType !== 'removed' && aggPct > 0 && (
                               <div className="q-progress-bar">
-                                <div className={`q-progress-fill ${pStatus === 'paused' ? 'paused' : ''}`} style={{width: `${CP.getPercentComplete(p)}%`}} />
+                                <div className={`q-progress-fill ${pStatus === 'paused' ? 'paused' : ''}`} style={{width: `${aggPct}%`}} />
                               </div>
                             )}
                           </div>

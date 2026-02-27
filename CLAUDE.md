@@ -291,6 +291,7 @@ The **Masterplan** is the permanent, non-deletable live roadmap per vertical (st
 
 ### Quarterly View (modal)
 - **Gantt-style blocks**: Projects positioned by `leftPct`/`widthPct` across quarters
+- **Aggregated status/progress**: Merges parent + all split statuses — most active status wins (`in_progress > paused > not_started`), progress is averaged across parent + splits
 - **Swimlane tracks**: Same 3 tracks as roadmap, each with sub-lanes
 - **Sign-off button**: Only visible when on Masterplan and user is ExCo
 - **Diff overlay**: Ghost blocks from signed-off version with comparison badges

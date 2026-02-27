@@ -334,6 +334,7 @@ A Gantt-style quarterly planning modal showing project blocks positioned across 
 - **Modal overlay:** Opened via "Quarterly" button in header, fullscreen-capable
 - **Swimlane tracks:** Same 3 tracks as the roadmap (Core Bonus, Gateway, SEO & AFF) with sub-lanes
 - **Block positioning:** Projects rendered with `leftPct`/`widthPct` percentages across the quarter timeline
+- **Aggregated status/progress:** Quarterly blocks merge parent + all split statuses — most active status wins (`in_progress > paused > not_started`), progress bar shows averaged percentComplete across parent + splits
 - **Sign-off button:** Only visible when user is on Masterplan and is ExCo member
 - **Diff overlay:** When a sign-off version is selected, ghost blocks from that version are shown with comparison badges (NEW, MOVED, REMOVED)
 
