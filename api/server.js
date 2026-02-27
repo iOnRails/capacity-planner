@@ -510,9 +510,9 @@ if (!fs.existsSync(path.join(DATA_DIR, getProjectsFile('growth')))) {
     capacity: { ...DEFAULT_CAPACITY },
     tracks: { 'core-bonus': inProgressIds, 'gateway': [], 'seo-aff': [] },
     trackConfig: [
-      { key: 'core-bonus', label: 'Core Bonus', color: '#fdcb6e' },
-      { key: 'gateway', label: 'Gateway', color: '#e84393' },
-      { key: 'seo-aff', label: 'SEO & AFF', color: '#00b894' },
+      { key: 'core-bonus', label: 'Core Bonus', color: '#636e72' },
+      { key: 'gateway', label: 'Gateway', color: '#636e72' },
+      { key: 'seo-aff', label: 'SEO & AFF', color: '#636e72' },
     ],
   });
   console.log(`Seeded ${SEED.length} Growth projects`);

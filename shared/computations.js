@@ -98,6 +98,14 @@ function migrateTrackCapacity(tc, trackConfig) {
   return result;
 }
 
+var OLD_TRACK_COLORS = { '#fdcb6e': '#636e72', '#e84393': '#636e72', '#00b894': '#636e72' };
+function migrateTrackConfigColors(trackConfig) {
+  if (!trackConfig) return trackConfig;
+  return trackConfig.map(function(t) {
+    return OLD_TRACK_COLORS[t.color] ? { key: t.key, label: t.label, color: OLD_TRACK_COLORS[t.color] } : t;
+  });
+}
+
 // ── Track Helpers ──
 
 function removeFromTracks(tracks, id) {
@@ -359,7 +367,7 @@ return {
   DEFAULT_SIZE_MAP, TRACK_KEYS, DEFAULT_TRACK_CONFIG, DISCIPLINES, ZERO_DISC, IMPACT_ORDER,
   PILLAR_PALETTE, buildPillarColorMap, generateTrackKey,
   sizeToSprints, computeProjectSprints, computeEffectiveSprints,
-  migrateTracks, migrateTrackCapacity,
+  migrateTracks, migrateTrackCapacity, migrateTrackConfigColors,
   removeFromTracks, deepMergeObject,
   computeBuffered, computeUsedCapacity, computeTotalDemand, computeUnallocated,
   computeGhostsByTrack, computeTrackUsed, computeTrackOverflow,

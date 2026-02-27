@@ -1594,7 +1594,7 @@ function App({ onLogout, user: authUser }) {
     loadedAtRef.current[key] = stateRes._loadedAt || Date.now();
 
     // Build final state WITH defaults and migrations applied
-    const tc = stateRes.trackConfig || undefined;
+    const tc = CP.migrateTrackConfigColors(stateRes.trackConfig) || undefined;
     const defaultTracks = {};
     for (const t of (tc || CP.DEFAULT_TRACK_CONFIG)) defaultTracks[t.key] = [];
     const newState = {
@@ -2308,7 +2308,7 @@ function App({ onLogout, user: authUser }) {
   };
 
   // ── Track Management (add/remove/rename/recolor) ──
-  const TRACK_COLOR_PALETTE = ['#6c5ce7','#0984e3','#e17055','#a29bfe','#00cec9','#fd79a8','#ffeaa7','#55efc4','#74b9ff','#b2bec3'];
+  const TRACK_COLOR_PALETTE = ['#636e72','#2d3436','#b2bec3','#dfe6e9','#a29bfe','#74b9ff','#00cec9','#e17055','#fd79a8','#ffeaa7'];
 
   const addTrack = useCallback(() => {
     const name = prompt('Track name:');
