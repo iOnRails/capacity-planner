@@ -3851,16 +3851,6 @@ function App({ onLogout, user: authUser }) {
                     onChange={e => updateTimelineConfig({ sprintStartDate: e.target.value })} />
                 </div>
                 <div className="tl-ctrl-group">
-                  <label>Sprint:</label>
-                  <select value={timelineConfig.sprintDurationWeeks} disabled={!isEditor}
-                    onChange={e => updateTimelineConfig({ sprintDurationWeeks: parseInt(e.target.value) })}>
-                    <option value={1}>1 wk</option>
-                    <option value={2}>2 wk</option>
-                    <option value={3}>3 wk</option>
-                    <option value={4}>4 wk</option>
-                  </select>
-                </div>
-                <div className="tl-ctrl-group">
                   <label>Scale:</label>
                   <select value={timelineConfig.timeScale} disabled={!isEditor}
                     onChange={e => updateTimelineConfig({ timeScale: e.target.value })}>
