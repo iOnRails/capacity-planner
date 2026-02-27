@@ -1092,6 +1092,112 @@
   }
   .auth-logout:hover { color: var(--red); }
   .auth-domain { font-size: 11px; color: var(--text2); margin-bottom: 8px; }
+
+  /* ── Comments Sidebar ── */
+  .comments-sidebar {
+    position: fixed; top: 0; right: -420px; width: 400px; height: 100vh;
+    background: var(--surface1); border-left: 1px solid var(--border);
+    z-index: 600; display: flex; flex-direction: column;
+    box-shadow: -8px 0 32px rgba(0,0,0,0.4);
+    transition: right 0.25s ease-out;
+  }
+  .comments-sidebar.open { right: 0; }
+  .comments-sidebar-header {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+    background: var(--surface); flex-shrink: 0;
+  }
+  .comments-sidebar-header h3 {
+    font-size: 14px; font-weight: 700; color: var(--text);
+    margin: 0 0 2px; line-height: 1.3; max-width: 300px;
+    overflow: hidden; text-overflow: ellipsis;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  }
+  .comments-count { font-size: 11px; color: var(--text2); }
+  .comments-close {
+    background: none; border: none; color: var(--text2); font-size: 16px;
+    cursor: pointer; padding: 4px 8px; border-radius: 4px; transition: all 0.15s;
+  }
+  .comments-close:hover { color: var(--text); background: var(--surface2); }
+  .comments-body { flex: 1; overflow-y: auto; padding: 12px 16px; }
+  .comments-loading, .comments-empty {
+    text-align: center; padding: 40px 20px; color: var(--text2); font-size: 12px;
+  }
+  .comment-thread {
+    margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--border);
+  }
+  .comment-thread:last-child { border-bottom: none; }
+  .comment-item { display: flex; gap: 10px; margin-bottom: 8px; }
+  .comment-item.reply { margin-left: 36px; }
+  .comment-avatar {
+    width: 32px; height: 32px; border-radius: 50%; overflow: hidden; flex-shrink: 0;
+  }
+  .comment-avatar.small { width: 24px; height: 24px; }
+  .comment-avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .comment-avatar-fallback {
+    width: 100%; height: 100%; background: var(--accent); color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700;
+  }
+  .comment-avatar.small .comment-avatar-fallback { font-size: 10px; }
+  .comment-content { flex: 1; min-width: 0; }
+  .comment-meta { display: flex; gap: 8px; align-items: baseline; margin-bottom: 3px; }
+  .comment-author { font-size: 12px; font-weight: 600; color: var(--text); }
+  .comment-time { font-size: 10px; color: var(--text2); }
+  .comment-text {
+    font-size: 12px; color: var(--text); line-height: 1.5;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .comment-actions-row { display: flex; gap: 8px; margin-top: 4px; }
+  .comment-reply-btn, .comment-delete-btn {
+    background: none; border: none; color: var(--text2); font-size: 11px;
+    cursor: pointer; padding: 2px 0;
+  }
+  .comment-reply-btn:hover { color: var(--accent); }
+  .comment-delete-btn:hover { color: var(--red); }
+  .comment-reply-input { margin-left: 42px; margin-top: 8px; }
+  .comment-reply-input textarea {
+    width: 100%; min-height: 48px; padding: 8px 10px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text); font-size: 12px; font-family: inherit;
+    resize: vertical; outline: none; box-sizing: border-box;
+  }
+  .comment-reply-input textarea:focus { border-color: var(--accent); }
+  .comment-reply-actions {
+    display: flex; gap: 6px; justify-content: flex-end; margin-top: 6px;
+  }
+  .comment-reply-actions button {
+    padding: 4px 12px; border-radius: 4px; border: 1px solid var(--border);
+    background: var(--surface2); color: var(--text); font-size: 11px; cursor: pointer;
+  }
+  .comment-reply-actions .btn-primary {
+    background: var(--accent); color: white; border-color: var(--accent);
+  }
+  .comments-input-area {
+    padding: 12px 16px; border-top: 1px solid var(--border);
+    background: var(--surface); flex-shrink: 0;
+    display: flex; gap: 8px; align-items: flex-end;
+  }
+  .comments-input-area textarea {
+    flex: 1; min-height: 40px; max-height: 100px; padding: 8px 10px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); font-size: 12px; font-family: inherit;
+    resize: none; outline: none; box-sizing: border-box;
+  }
+  .comments-input-area textarea:focus { border-color: var(--accent); }
+  .comments-send {
+    padding: 8px 16px; background: var(--accent); color: white;
+    border: none; border-radius: 8px; font-size: 12px; font-weight: 600;
+    cursor: pointer; transition: opacity 0.15s; white-space: nowrap;
+  }
+  .comments-send:disabled { opacity: 0.4; cursor: default; }
+  .comments-send:not(:disabled):hover { opacity: 0.8; }
+  .comment-badge {
+    position: absolute; top: 3px; left: 4px;
+    font-size: 9px; color: rgba(255,255,255,0.7);
+    display: flex; align-items: center; gap: 2px;
+    z-index: 3; pointer-events: none;
+  }
 </style>
 </head>
 <body>
@@ -1428,6 +1534,137 @@ function DashboardView({ capacity, buffer, usedCapacity, bufferedUsed, totalDema
   );
 }
 
+function CommentsSidebar({ sidebar, comments, loading, onClose, onAddComment, onAddReply, onDeleteComment, authUser }) {
+  const [newComment, setNewComment] = React.useState('');
+  const [replyingTo, setReplyingTo] = React.useState(null);
+  const [replyText, setReplyText] = React.useState('');
+  const bottomRef = React.useRef(null);
+  const prevLen = React.useRef(0);
+
+  React.useEffect(() => {
+    if (comments.length > prevLen.current && bottomRef.current) {
+      bottomRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+    prevLen.current = comments.length;
+  }, [comments.length]);
+
+  const formatTime = (iso) => {
+    const d = new Date(iso);
+    const now = new Date();
+    const diffMs = now - d;
+    if (diffMs < 60000) return 'just now';
+    if (diffMs < 3600000) return `${Math.floor(diffMs / 60000)}m ago`;
+    if (diffMs < 86400000) return `${Math.floor(diffMs / 3600000)}h ago`;
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  };
+
+  const handleSubmitComment = () => {
+    if (!newComment.trim()) return;
+    onAddComment(newComment.trim());
+    setNewComment('');
+  };
+
+  const handleSubmitReply = (commentId) => {
+    if (!replyText.trim()) return;
+    onAddReply(commentId, replyText.trim());
+    setReplyText('');
+    setReplyingTo(null);
+  };
+
+  const canDelete = (authorEmail) => {
+    if (!authUser) return false;
+    const userEmail = authUser.email.toLowerCase();
+    return userEmail === authorEmail.toLowerCase() || userEmail === 'kmermigkas@novibet.com';
+  };
+
+  return (
+    <React.Fragment>
+      {sidebar && <div style={{position:'fixed',inset:0,zIndex:599,background:'rgba(0,0,0,0.2)'}} onClick={onClose} />}
+      <div className={`comments-sidebar ${sidebar ? 'open' : ''}`}>
+        {sidebar && (
+          <React.Fragment>
+            <div className="comments-sidebar-header">
+              <div>
+                <h3>{sidebar.projectName}</h3>
+                <span className="comments-count">{comments.length} comment{comments.length !== 1 ? 's' : ''}</span>
+              </div>
+              <button className="comments-close" onClick={onClose}>✕</button>
+            </div>
+            <div className="comments-body">
+              {loading ? (
+                <div className="comments-loading">Loading comments...</div>
+              ) : comments.length === 0 ? (
+                <div className="comments-empty">No comments yet. Be the first to add a note!</div>
+              ) : (
+                comments.map(comment => (
+                  <div key={comment.id} className="comment-thread">
+                    <div className="comment-item">
+                      <div className="comment-avatar">
+                        {comment.authorPicture
+                          ? <img src={comment.authorPicture} referrerPolicy="no-referrer" alt="" />
+                          : <div className="comment-avatar-fallback">{(comment.authorName || 'U').charAt(0).toUpperCase()}</div>
+                        }
+                      </div>
+                      <div className="comment-content">
+                        <div className="comment-meta">
+                          <span className="comment-author">{comment.authorName}</span>
+                          <span className="comment-time">{formatTime(comment.createdAt)}</span>
+                        </div>
+                        <div className="comment-text">{comment.text}</div>
+                        <div className="comment-actions-row">
+                          <button className="comment-reply-btn" onClick={() => setReplyingTo(replyingTo === comment.id ? null : comment.id)}>Reply</button>
+                          {canDelete(comment.authorEmail) && (
+                            <button className="comment-delete-btn" onClick={() => onDeleteComment(comment.id)}>Delete</button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    {(comment.replies || []).map(reply => (
+                      <div key={reply.id} className="comment-item reply">
+                        <div className="comment-avatar small">
+                          {reply.authorPicture
+                            ? <img src={reply.authorPicture} referrerPolicy="no-referrer" alt="" />
+                            : <div className="comment-avatar-fallback">{(reply.authorName || 'U').charAt(0).toUpperCase()}</div>
+                          }
+                        </div>
+                        <div className="comment-content">
+                          <div className="comment-meta">
+                            <span className="comment-author">{reply.authorName}</span>
+                            <span className="comment-time">{formatTime(reply.createdAt)}</span>
+                          </div>
+                          <div className="comment-text">{reply.text}</div>
+                        </div>
+                      </div>
+                    ))}
+                    {replyingTo === comment.id && (
+                      <div className="comment-reply-input">
+                        <textarea value={replyText} onChange={e => setReplyText(e.target.value)}
+                          placeholder="Write a reply..." autoFocus
+                          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmitReply(comment.id); } }} />
+                        <div className="comment-reply-actions">
+                          <button onClick={() => { setReplyingTo(null); setReplyText(''); }}>Cancel</button>
+                          <button className="btn-primary" onClick={() => handleSubmitReply(comment.id)}>Reply</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+              <div ref={bottomRef} />
+            </div>
+            <div className="comments-input-area">
+              <textarea value={newComment} onChange={e => setNewComment(e.target.value)}
+                placeholder="Add a comment..."
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmitComment(); } }} />
+              <button className="comments-send" onClick={handleSubmitComment} disabled={!newComment.trim()}>Send</button>
+            </div>
+          </React.Fragment>
+        )}
+      </div>
+    </React.Fragment>
+  );
+}
+
 function App({ onLogout, user: authUser }) {
   // Auth headers for API requests (audit logging) — reads from localStorage to avoid dependency issues
   // Unique ID for this browser tab — used to skip own WS broadcasts
@@ -1441,6 +1678,7 @@ function App({ onLogout, user: authUser }) {
         const data = JSON.parse(stored);
         if (data.email) h['X-User-Email'] = data.email;
         if (data.name) h['X-User-Name'] = encodeURIComponent(data.name);
+        if (data.picture) h['X-User-Picture'] = data.picture;
       }
     } catch {}
     return h;
@@ -1497,6 +1735,10 @@ function App({ onLogout, user: authUser }) {
   const [saveStatus, setSaveStatus] = useState(null); // {type: 'ok'|'error', msg: '...'}
   // buffer is now stored inside verticalStates and persisted to the server
   const [settingsModal, setSettingsModal] = useState(null); // { projectId, projectName, existing: {...} }
+  const [commentsSidebar, setCommentsSidebar] = useState(null); // { projectId, projectName, vertical }
+  const [sidebarComments, setSidebarComments] = useState([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [commentCounts, setCommentCounts] = useState({}); // { "1": 5, "6": 2 }
   const [showTimeline, setShowTimeline] = useState(false);
   const [showQuarterly, setShowQuarterly] = useState(false);
   const [tlSidebarOpen, setTlSidebarOpen] = useState(true);
@@ -2451,6 +2693,107 @@ function App({ onLogout, user: authUser }) {
     });
   };
 
+  // ── Comments Sidebar Functions ──
+  const fetchComments = useCallback(async (vertical, projectId) => {
+    setCommentsLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/verticals/${vertical}/projects/${projectId}/comments`, { headers: getAuthHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        setSidebarComments(data.comments || []);
+      }
+    } catch (e) { console.error('[comments] Fetch error:', e.message); }
+    finally { setCommentsLoading(false); }
+  }, []);
+
+  const fetchCommentCounts = useCallback(async (vertical) => {
+    try {
+      const res = await fetch(`${API_URL}/api/verticals/${vertical}/comments/counts`, { headers: getAuthHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        setCommentCounts(data.counts || {});
+      }
+    } catch (e) { console.error('[comments] Count fetch error:', e.message); }
+  }, []);
+
+  const addComment = useCallback(async (text) => {
+    if (!commentsSidebar) return;
+    const { projectId, vertical } = commentsSidebar;
+    try {
+      const res = await fetch(`${API_URL}/api/verticals/${vertical}/projects/${projectId}/comments`,
+        { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ text }) });
+      if (res.ok) {
+        const data = await res.json();
+        setSidebarComments(prev => [...prev, data.comment]);
+        setCommentCounts(prev => ({ ...prev, [projectId]: (prev[projectId] || 0) + 1 }));
+      }
+    } catch (e) { console.error('[comments] Add error:', e.message); }
+  }, [commentsSidebar]);
+
+  const addReply = useCallback(async (commentId, text) => {
+    if (!commentsSidebar) return;
+    const { projectId, vertical } = commentsSidebar;
+    try {
+      const res = await fetch(`${API_URL}/api/verticals/${vertical}/projects/${projectId}/comments/${commentId}/replies`,
+        { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ text }) });
+      if (res.ok) {
+        const data = await res.json();
+        setSidebarComments(prev => prev.map(c =>
+          c.id === commentId ? { ...c, replies: [...(c.replies || []), data.reply] } : c
+        ));
+        setCommentCounts(prev => ({ ...prev, [projectId]: (prev[projectId] || 0) + 1 }));
+      }
+    } catch (e) { console.error('[comments] Reply error:', e.message); }
+  }, [commentsSidebar]);
+
+  const deleteComment = useCallback(async (commentId) => {
+    if (!commentsSidebar) return;
+    const { projectId, vertical } = commentsSidebar;
+    try {
+      const res = await fetch(`${API_URL}/api/verticals/${vertical}/projects/${projectId}/comments/${commentId}`,
+        { method: 'DELETE', headers: getAuthHeaders() });
+      if (res.ok) {
+        setSidebarComments(prev => {
+          const comment = prev.find(c => c.id === commentId);
+          const removedCount = comment ? 1 + (comment.replies || []).length : 1;
+          setCommentCounts(pc => {
+            const newCount = (pc[projectId] || 0) - removedCount;
+            const updated = { ...pc };
+            if (newCount <= 0) delete updated[projectId];
+            else updated[projectId] = newCount;
+            return updated;
+          });
+          return prev.filter(c => c.id !== commentId);
+        });
+      }
+    } catch (e) { console.error('[comments] Delete error:', e.message); }
+  }, [commentsSidebar]);
+
+  const openCommentsSidebar = useCallback((projectId, projectName) => {
+    setCommentsSidebar({ projectId, projectName, vertical: activeVertical });
+    fetchComments(activeVertical, projectId);
+  }, [activeVertical, fetchComments]);
+
+  const closeCommentsSidebar = useCallback(() => {
+    setCommentsSidebar(null);
+    setSidebarComments([]);
+  }, []);
+
+  // Close comments sidebar when switching verticals
+  useEffect(() => { closeCommentsSidebar(); }, [activeVertical]);
+
+  // Fetch comment counts when vertical data loads
+  useEffect(() => { fetchCommentCounts(activeVertical); }, [activeVertical, fetchCommentCounts]);
+
+  // Escape key to close sidebar (only if settings modal isn't open)
+  useEffect(() => {
+    const handleEsc = (e) => {
+      if (e.key === 'Escape' && commentsSidebar && !settingsModal) closeCommentsSidebar();
+    };
+    document.addEventListener('keydown', handleEsc);
+    return () => document.removeEventListener('keydown', handleEsc);
+  }, [commentsSidebar, settingsModal, closeCommentsSidebar]);
+
   const setTracks = (updater) => {
     setVerticalStatesWithUndo(prev => {
       const newState = {
@@ -2732,6 +3075,7 @@ function App({ onLogout, user: authUser }) {
         draggable={isEditor}
         onDragStart={isEditor ? (e) => handleDragStart(e, p.id, lane) : undefined}
         onDragEnd={isEditor ? handleDragEnd : undefined}
+        onClick={() => openCommentsSidebar(p.id, p.subTask)}
         onMouseEnter={(e) => handleMouseEnter(e, p)}
         onMouseLeave={handleMouseLeave}
         {...(isTrack && isEditor ? {
@@ -2745,6 +3089,7 @@ function App({ onLogout, user: authUser }) {
           </div>
         )}
         {hasSplits && <div className="ghost-link-icon" title="Has split allocations">🔗</div>}
+        {commentCounts[p.id] && <div className="comment-badge">💬 {commentCounts[p.id]}</div>}
         <div className="block-content">
           <div className="block-title">{p.subTask}</div>
           <div className="block-bottom">
@@ -2794,10 +3139,12 @@ function App({ onLogout, user: authUser }) {
         onDragEnd={isEditor ? handleDragEnd : undefined}
         onDragOver={isEditor ? (e) => handleDragOverBlock(e, trackKey, `ghost:${p.id}`) : undefined}
         onDrop={isEditor ? (e) => handleDropOnBlock(e, trackKey, `ghost:${p.id}`, blockIndex) : undefined}
+        onClick={() => openCommentsSidebar(p.id, p.subTask)}
         onMouseEnter={(e) => handleMouseEnter(e, p)}
         onMouseLeave={handleMouseLeave}
       >
         <div className="ghost-link-icon">🔗</div>
+        {commentCounts[p.id] && <div className="comment-badge">💬 {commentCounts[p.id]}</div>}
         {isOverflow && (
           <div className="overflow-badge" style={{left:'auto',right:3}} title={`Exceeds ${overflowDisciplines.join(', ')} capacity`}>
             ⚠ {overflowDisciplines.map(d => d.charAt(0).toUpperCase()).join('·')}
@@ -3318,8 +3665,13 @@ function App({ onLogout, user: authUser }) {
     const trackBarsEl = barEl?.closest('.tl-track-bars');
     const maxLane = (trackSubLaneCounts[bar.trackKey] || 1) - 1;
 
+    let dragStarted = false;
     const onMouseMove = (ev) => {
       const dx = ev.clientX - startX;
+      const dy = ev.clientY - startY;
+      // 5px threshold to distinguish click from drag
+      if (!dragStarted && Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
+      dragStarted = true;
       const el = barEl;
       if (side === 'right') {
         const newWidth = Math.max(40, origWidth + dx);
@@ -3364,13 +3716,16 @@ function App({ onLogout, user: authUser }) {
           updateLaneAssignment(dragRef.current.projectId, dragRef.current.trackKey, dragRef.current.laneIndex);
         }
         dragRef.current = null;
+      } else if (!dragStarted) {
+        // No movement — treat as click → open comments sidebar
+        openCommentsSidebar(bar.project.id, bar.project.subTask);
       }
     };
 
     document.body.style.cursor = side === 'move' ? 'grabbing' : 'col-resize';
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
-  }, [timelineData.pxPerSprint, updateTimelineOverride, updateLaneAssignment, trackSubLaneCounts]);
+  }, [timelineData.pxPerSprint, updateTimelineOverride, updateLaneAssignment, trackSubLaneCounts, openCommentsSidebar]);
 
   const activeV = VERTICALS.find(v => v.key === activeVertical);
   const roadmapTotalSprints = currentData.filter(p => roadmapIds.has(p.id)).reduce((s, p) => s + projectSprints(p).total, 0);
@@ -4227,7 +4582,8 @@ function App({ onLogout, user: authUser }) {
                   const pColor = pillarColorMap[p.pillar];
                   return (
                     <tr key={p.id} className="backlog-row" style={{borderBottom:'1px solid var(--border)',cursor:'pointer'}}
-                      draggable onDragStart={() => { dragItem.current = p.id; dragSource.current = 'backlog'; }}>
+                      draggable onDragStart={() => { dragItem.current = p.id; dragSource.current = 'backlog'; }}
+                      onClick={() => openCommentsSidebar(p.id, p.subTask)}>
                       <td style={{padding:'6px 8px',color:'var(--text1)'}}>{p.subTask || '—'}</td>
                       <td style={{padding:'6px 8px',color:'var(--text2)',fontSize:11}}>{p.masterEpic || '—'}</td>
                       <td style={{padding:'6px 8px'}}>
@@ -4241,7 +4597,7 @@ function App({ onLogout, user: authUser }) {
                       <td style={{padding:'6px 8px',textAlign:'center',fontWeight:600,color:'var(--text1)'}}>{sp.total || '—'}</td>
                       <td style={{padding:'6px 8px',textAlign:'center',color:'var(--text2)',fontSize:11}}>{p.targetMarket || '—'}</td>
                       <td style={{padding:'6px 8px',textAlign:'center'}}>
-                        {isEditor && <button className="btn" style={{fontSize:16,padding:'0 8px',lineHeight:'26px'}} onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setTrackPicker({ projectId: p.id, x: r.left - 140, y: r.bottom + 4 }); }} title="Add to Roadmap">+</button>}
+                        {isEditor && <button className="btn" style={{fontSize:16,padding:'0 8px',lineHeight:'26px'}} onClick={(e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setTrackPicker({ projectId: p.id, x: r.left - 140, y: r.bottom + 4 }); }} title="Add to Roadmap">+</button>}
                       </td>
                     </tr>
                   );
@@ -4405,11 +4761,13 @@ function App({ onLogout, user: authUser }) {
                             data-name={bar.project.subTask}
                             onMouseEnter={(e) => handleMouseEnter(e, bar.project)}
                             onMouseLeave={handleMouseLeave}
-                            onMouseDown={isEditor ? e => { if (!e.target.classList.contains('tl-bar-handle')) handleBarDragStart(e, bar, 'move'); } : undefined}>
+                            onMouseDown={isEditor ? e => { if (!e.target.classList.contains('tl-bar-handle')) handleBarDragStart(e, bar, 'move'); } : undefined}
+                            onClick={!isEditor ? () => openCommentsSidebar(bar.project.id, bar.project.subTask) : undefined}>
                             {isEditor && <div className="tl-bar-handle left"
                               onMouseDown={e => handleBarDragStart(e, bar, 'left')} />}
                             <div className="tl-bar-row1">
                               <span className="tl-bar-label">{bar.project.subTask}</span>
+                              {commentCounts[bar.project.id] && <span style={{fontSize:9,opacity:0.7,marginLeft:4}}>💬{commentCounts[bar.project.id]}</span>}
                             </div>
                             {isEditor && <div className="tl-bar-handle right"
                               onMouseDown={e => handleBarDragStart(e, bar, 'right')} />}
@@ -4543,6 +4901,7 @@ function App({ onLogout, user: authUser }) {
                           style={{gridColumn: `${startQi + 1} / ${endQi + 2}`, gridRow: lane + 2 + rowOffset}}>
                           <div className={cls}
                             style={{left: `calc(${leftPct}% + 3px)`, width: `calc(${widthPct}% - 6px)`, background: CP.getBlockBg(p.pillar, pillarColorMap)}}
+                            onClick={() => openCommentsSidebar(p.id, p.subTask)}
                             onMouseEnter={(e) => setQTip({...tipData, x: e.clientX, y: e.clientY})}
                             onMouseMove={(e) => setQTip(t => t ? {...t, x: e.clientX, y: e.clientY} : t)}
                             onMouseLeave={() => setQTip(null)}>
@@ -4554,6 +4913,7 @@ function App({ onLogout, user: authUser }) {
                             <div className="block-content">
                               <div className="block-title">{p.subTask}</div>
                             </div>
+                            {commentCounts[p.id] && <div className="comment-badge">💬 {commentCounts[p.id]}</div>}
                             {pStatus === 'paused' && diffType !== 'removed' && <div className="pause-overlay">⏸</div>}
                             {(pStatus === 'in_progress' || pStatus === 'paused') && diffType !== 'removed' && aggPct > 0 && (
                               <div className="q-progress-bar">
@@ -4760,6 +5120,17 @@ function App({ onLogout, user: authUser }) {
           </div>
         );
       })()}
+
+      <CommentsSidebar
+        sidebar={commentsSidebar}
+        comments={sidebarComments}
+        loading={commentsLoading}
+        onClose={closeCommentsSidebar}
+        onAddComment={addComment}
+        onAddReply={addReply}
+        onDeleteComment={deleteComment}
+        authUser={authUser}
+      />
 
       {/* Snapshot Modal */}
       {showEditorPanel && (() => {

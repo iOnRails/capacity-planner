@@ -31,6 +31,7 @@ function saveJSON(filename, data) {
 function getProjectsFile(key) { return `projects_${key}.json`; }
 function getStateFile(key) { return `state_${key}.json`; }
 function getSignoffsFile(key) { return `signoffs_${key}.json`; }
+function getCommentsFile(key) { return `comments_${key}.json`; }
 const AUDIT_FILE = 'audit_log.json';
 const AUDIT_MAX_DAYS = 30;
 const EDITORS_FILE = 'editors.json';
@@ -1183,6 +1184,117 @@ app.delete('/api/editors/request', (req, res) => {
   res.json({ success: true, requests: filtered });
 });
 
+// ── Comments ──
+
+// Get all comments for a project
+app.get('/api/verticals/:key/projects/:projectId/comments', (req, res) => {
+  const { key, projectId } = req.params;
+  if (!VALID_VERTICALS.has(key)) return res.status(400).json({ error: 'Invalid vertical' });
+  const data = loadJSON(getCommentsFile(key), { projectComments: {} });
+  const comments = (data.projectComments[projectId] && data.projectComments[projectId].comments) || [];
+  res.json({ comments });
+});
+
+// Add a new top-level comment
+app.post('/api/verticals/:key/projects/:projectId/comments', (req, res) => {
+  const { key, projectId } = req.params;
+  if (!VALID_VERTICALS.has(key)) return res.status(400).json({ error: 'Invalid vertical' });
+  const text = sanitizeString(req.body.text || '', 2000);
+  if (!text || !text.trim()) return res.status(400).json({ error: 'Comment text is required' });
+
+  const data = loadJSON(getCommentsFile(key), { projectComments: {} });
+  if (!data.projectComments[projectId]) {
+    data.projectComments[projectId] = { comments: [] };
+  }
+
+  const comment = {
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    text: text.trim(),
+    authorEmail: req.headers['x-user-email'] || 'unknown',
+    authorName: req.headers['x-user-name'] ? decodeURIComponent(req.headers['x-user-name']) : 'Unknown',
+    authorPicture: req.headers['x-user-picture'] || '',
+    createdAt: new Date().toISOString(),
+    editedAt: null,
+    replies: [],
+  };
+
+  data.projectComments[projectId].comments.push(comment);
+  saveJSON(getCommentsFile(key), data);
+  logAudit(req, 'Added comment', `Comment on project #${projectId}`);
+  res.json({ success: true, comment });
+});
+
+// Add a reply to an existing comment
+app.post('/api/verticals/:key/projects/:projectId/comments/:commentId/replies', (req, res) => {
+  const { key, projectId, commentId } = req.params;
+  if (!VALID_VERTICALS.has(key)) return res.status(400).json({ error: 'Invalid vertical' });
+  const text = sanitizeString(req.body.text || '', 2000);
+  if (!text || !text.trim()) return res.status(400).json({ error: 'Reply text is required' });
+
+  const data = loadJSON(getCommentsFile(key), { projectComments: {} });
+  const projectData = data.projectComments[projectId];
+  if (!projectData) return res.status(404).json({ error: 'No comments for this project' });
+
+  const comment = projectData.comments.find(c => c.id === commentId);
+  if (!comment) return res.status(404).json({ error: 'Comment not found' });
+
+  const reply = {
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    text: text.trim(),
+    authorEmail: req.headers['x-user-email'] || 'unknown',
+    authorName: req.headers['x-user-name'] ? decodeURIComponent(req.headers['x-user-name']) : 'Unknown',
+    authorPicture: req.headers['x-user-picture'] || '',
+    createdAt: new Date().toISOString(),
+    editedAt: null,
+  };
+
+  comment.replies.push(reply);
+  saveJSON(getCommentsFile(key), data);
+  logAudit(req, 'Added reply', `Reply on project #${projectId}, comment ${commentId}`);
+  res.json({ success: true, reply });
+});
+
+// Delete a comment (author or admin only)
+app.delete('/api/verticals/:key/projects/:projectId/comments/:commentId', (req, res) => {
+  const { key, projectId, commentId } = req.params;
+  if (!VALID_VERTICALS.has(key)) return res.status(400).json({ error: 'Invalid vertical' });
+
+  const data = loadJSON(getCommentsFile(key), { projectComments: {} });
+  const projectData = data.projectComments[projectId];
+  if (!projectData) return res.status(404).json({ error: 'No comments for this project' });
+
+  const idx = projectData.comments.findIndex(c => c.id === commentId);
+  if (idx === -1) return res.status(404).json({ error: 'Comment not found' });
+
+  const comment = projectData.comments[idx];
+  const userEmail = (req.headers['x-user-email'] || '').toLowerCase();
+  if (userEmail !== comment.authorEmail.toLowerCase() && userEmail !== ADMIN_EMAIL) {
+    return res.status(403).json({ error: 'Only the author or admin can delete this comment' });
+  }
+
+  projectData.comments.splice(idx, 1);
+  // Clean up empty project entries
+  if (projectData.comments.length === 0) {
+    delete data.projectComments[projectId];
+  }
+  saveJSON(getCommentsFile(key), data);
+  logAudit(req, 'Deleted comment', `Deleted comment on project #${projectId}`);
+  res.json({ success: true });
+});
+
+// Get comment counts for all projects in a vertical (for badges)
+app.get('/api/verticals/:key/comments/counts', (req, res) => {
+  const { key } = req.params;
+  if (!VALID_VERTICALS.has(key)) return res.status(400).json({ error: 'Invalid vertical' });
+  const data = loadJSON(getCommentsFile(key), { projectComments: {} });
+  const counts = {};
+  for (const [pid, pData] of Object.entries(data.projectComments)) {
+    const total = (pData.comments || []).reduce((sum, c) => sum + 1 + (c.replies || []).length, 0);
+    if (total > 0) counts[pid] = total;
+  }
+  res.json({ counts });
+});
+
 // ── Catch-all 404 (debug) ──
 app.use((req, res) => {
   console.log(`!! 404: ${req.method} ${req.url}`);
@@ -1317,6 +1429,7 @@ module.exports = {
   keepaliveInterval,
   getSnapshotsFile,
   getSignoffsFile,
+  getCommentsFile,
   stripHtmlTags,
   sanitizeString,
   sanitizeProject,
