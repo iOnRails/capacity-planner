@@ -242,21 +242,81 @@ All data is computed from existing `useMemo` hooks — no additional API calls n
 
 **File:** `index.html` (DashboardView component)
 
-### 17. Scenario Snapshots
+### 17. Masterplan + Workspaces
 
-Named snapshots that save the full state + projects for a vertical, allowing teams to compare and restore different planning scenarios.
+The **Masterplan** is the permanent, non-deletable live roadmap per vertical. It is the single source of truth stored in `state_{vertical}.json` / `projects_{vertical}.json`. Only the Masterplan can be signed off by ExCo.
 
-- **Save snapshot:** Captures current state and projects with a name and optional description
-- **List snapshots:** Shows saved snapshots with metadata (name, date, creator, project count) — lightweight (no full state/projects in list response)
-- **Restore snapshot:** Overwrites current state and projects, broadcasts WebSocket update to all connected clients
-- **Delete snapshot:** Removes a snapshot permanently
-- **Audit logging:** All snapshot operations (save, restore, delete) are logged
+**Snapshots** are editable workspace copies — per-user playgrounds where changes auto-save without affecting the Masterplan. Snapshots can be "promoted" to overwrite the Masterplan.
+
+- **Workspace switching:** Each user independently switches between Masterplan and snapshot workspaces. Persisted per-user per-vertical in localStorage
+- **Save routing:** `saveState`/`saveProjects` check `activeWorkspaceRef.current.type` and route to `PUT /snapshots/:id` when on a workspace — all ~40 `debouncedSave` call sites work unchanged
+- **WS/poll/visibility guards:** Masterplan sync is skipped when on a snapshot workspace (prevents overwriting workspace changes)
+- **Promote:** `POST /snapshots/:id/promote` copies snapshot state+projects to Masterplan files, broadcasts WS update to all connected clients
+- **Branch from snapshot:** `sourceSnapshotId` parameter creates a new snapshot from an existing one
+- **Header indicator:** Green "Masterplan" label or blue snapshot name with "Back to Masterplan" and "Promote" buttons (editor-only)
+- **Workspaces modal:** "Workspaces" button in header → Masterplan shown first (non-deletable, green indicator), snapshots listed with "Open" action
+- **Delete snapshot:** Any editor can delete any snapshot (no ExCo guard)
 
 **Storage:** `snapshots_{vertical}.json` — Array of `{ id, name, description, createdAt, createdBy, state, projects }`
 
-**UI:** "📸 Snapshots" button in header → modal dialog with save form and snapshot list
+**UI:** "Workspaces" button in header → modal dialog with save form and snapshot list
 
-**Files:** `api/server.js` (snapshot endpoints), `index.html` (snapshot modal and handlers)
+**Files:** `api/server.js` (snapshot + workspace endpoints), `index.html` (workspace state, save routing, modal)
+
+### 18. ExCo Permission Layer
+
+Admin-managed list of ExCo (Executive Committee) members who have authority to sign off on quarterly plans.
+
+- **Admin panel:** Admin can add/remove ExCo members from the admin settings panel
+- **Storage:** `exco.json` — Array of email addresses
+- **Validation:** Deduplicates, normalizes to lowercase, filters out admin email and non-@novibet.com addresses
+- **Authorization:** ExCo status checked via `isExCoUser()` helper (includes admin as implicit ExCo)
+
+**Endpoints:** `GET /api/exco`, `POST /api/exco` (admin-only)
+
+**Files:** `api/server.js` (ExCo CRUD), `index.html` (admin panel ExCo section)
+
+### 19. Editor Access Control
+
+Per-vertical editor permissions controlling who can modify data.
+
+- **Editor list:** Admin manages editors with per-vertical or `all` access
+- **Access requests:** Non-editors can request access; requests appear in admin panel for approval
+- **Read-only mode:** Non-editors can view but not modify data
+- **Storage:** `editors.json` — Array of `{ email, verticals: ['all'] | ['growth', 'casino', ...] }`
+
+**Endpoints:** `GET /api/editors`, `POST /api/editors` (admin-only), `POST /api/editors/request`
+
+**Files:** `api/server.js` (editor endpoints + auth middleware), `index.html` (access request UI, editor admin panel)
+
+### 20. Sign-Off Versioning & Diff View
+
+Versioned sign-offs stored separately from snapshots, with a diff comparison feature in the quarterly view.
+
+- **Sign-off creation:** ExCo members (or admin) sign off the current Masterplan, capturing quarterly blocks + full state + projects
+- **Versioned storage:** Each sign-off is a separate entry in `signoffs_{vertical}.json` with unique ID, label (e.g., "Q1 2026 Sign-Off"), signer info, and timestamp
+- **Diff dropdown:** Quarterly modal header has a `<select>` listing all sign-off versions showing label, signer email, and date
+- **Diff mode:** Selecting a sign-off version enables diff — ghost blocks from the signed-off version overlay the current Masterplan with NEW/MOVED/REMOVED badges
+- **Delete sign-offs:** Admin can delete old sign-off versions via a red trash button next to the dropdown
+- **Startup migration:** Existing `signedOff` snapshots are automatically migrated to the signoffs file on server startup
+
+**Storage:** `signoffs_{vertical}.json` — Array of `{ id, label, createdAt, signedOff: { by, name, at }, quarterlyBlocks, state, projects }`
+
+**Endpoints:** `GET /signoffs`, `GET /signoffs/:id`, `POST /signoffs` (ExCo-only), `DELETE /signoffs/:id` (admin-only)
+
+**Files:** `api/server.js` (sign-off endpoints, migration), `index.html` (diff dropdown, sign-off button, diff rendering)
+
+### 21. Quarterly View
+
+A Gantt-style quarterly planning modal showing project blocks positioned across quarters.
+
+- **Modal overlay:** Opened via "Quarterly" button in header, fullscreen-capable
+- **Swimlane tracks:** Same 3 tracks as the roadmap (Core Bonus, Gateway, SEO & AFF) with sub-lanes
+- **Block positioning:** Projects rendered with `leftPct`/`widthPct` percentages across the quarter timeline
+- **Sign-off button:** Only visible when user is on Masterplan and is ExCo member
+- **Diff overlay:** When a sign-off version is selected, ghost blocks from that version are shown with comparison badges (NEW, MOVED, REMOVED)
+
+**Files:** `index.html` (quarterly modal component, quarterlyData computation)
 
 ---
 
@@ -273,9 +333,20 @@ Named snapshots that save the full state + projects for a vertical, allowing tea
 | POST/PUT | `/api/verticals/:key/state` | Save state (with conflict-free merge) |
 | GET | `/api/verticals/:key/poll` | Lightweight polling (updatedAt only) |
 | GET | `/api/verticals/:key/snapshots` | List snapshots for a vertical |
-| POST | `/api/verticals/:key/snapshots` | Save new snapshot (name, description) |
-| POST | `/api/verticals/:key/snapshots/:id/restore` | Restore a snapshot |
+| POST | `/api/verticals/:key/snapshots` | Save new snapshot (optional `sourceSnapshotId`) |
+| GET | `/api/verticals/:key/snapshots/:id` | Get full snapshot for workspace loading |
+| PUT | `/api/verticals/:key/snapshots/:id` | Update snapshot (workspace auto-save) |
+| POST | `/api/verticals/:key/snapshots/:id/promote` | Promote snapshot to Masterplan |
 | DELETE | `/api/verticals/:key/snapshots/:id` | Delete a snapshot |
+| GET | `/api/verticals/:key/signoffs` | List sign-off versions |
+| GET | `/api/verticals/:key/signoffs/:id` | Get sign-off blocks (supports `latest`) |
+| POST | `/api/verticals/:key/signoffs` | Create sign-off version (ExCo-only) |
+| DELETE | `/api/verticals/:key/signoffs/:id` | Delete sign-off version (admin-only) |
+| GET | `/api/exco` | Get ExCo member list |
+| POST | `/api/exco` | Save ExCo list (admin-only) |
+| GET | `/api/editors` | Get editor list + pending requests |
+| POST | `/api/editors` | Save editor list (admin-only) |
+| POST | `/api/editors/request` | Request editor access |
 | GET | `/api/audit-log` | Query audit log (?user, ?vertical, ?days) |
 | WS | `/ws` | WebSocket for real-time sync |
 
@@ -312,11 +383,14 @@ npm run test:ws         # WebSocket tests only
 npm run test:coverage   # Run with coverage report
 ```
 
-**Test coverage:**
-- **helpers.test.js** (59 tests) — Unit tests for buildNarratives (all 12 field types), findMovedItem, describeStateChanges, summarizeValue, loadJSON/saveJSON, logAudit
-- **api.test.js** (34 tests) — Integration tests for all endpoints, project validation, track cleanup, state merge with conflict resolution, audit log filtering
+**Test coverage (313 tests across 7 files):**
+- **computations.test.js** (111 tests) — Shared pure functions (sizeToSprints, projectSprints, effectiveSprints, deepMerge, migration, capacity, overflow, filter/sort)
+- **helpers.test.js** (62 tests) — Unit tests for buildNarratives (all 12 field types), findMovedItem, describeStateChanges, summarizeValue, loadJSON/saveJSON, logAudit
+- **api.test.js** (55 tests) — Integration tests for all endpoints, project validation, track cleanup, state merge with conflict resolution, audit log filtering
+- **sanitization.test.js** (30 tests) — Input sanitization and XSS prevention
+- **snapshots.test.js** (23 tests) — Snapshot CRUD, workspace GET/PUT, promote, sourceSnapshotId, audit log integration
+- **exco-signoff.test.js** (21 tests) — ExCo CRUD, sign-off creation/listing/retrieval, admin-only sign-off deletion
 - **websocket.test.js** (11 tests) — WebSocket connection, subscribe/unsubscribe, broadcast on state and project saves, sender exclusion, multi-client sync, disconnection cleanup, invalid message handling
-- **snapshots.test.js** (12 tests) — Snapshot CRUD (save, list, restore, delete), validation, state/project overwrite on restore, audit log integration
 
 ---
 

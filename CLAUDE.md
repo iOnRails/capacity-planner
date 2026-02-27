@@ -13,13 +13,13 @@ A web-based capacity planning tool for managing engineering team workload across
 ## Architecture
 
 ```
-index.html          (4000+ lines) — Single-file React 18 app via CDN + Babel
+index.html          (4900+ lines) — Single-file React 18 app via CDN + Babel
 audit.html          — Standalone audit log viewer
 vercel.json         — SPA routing config
 api/
-  server.js         (895 lines) — Express.js API with WebSocket support
+  server.js         (1320+ lines) — Express.js API with WebSocket support
   package.json      — Dependencies: express, cors, ws; devDeps: jest, supertest
-  __tests__/        — Test suite (214 tests across 5 files)
+  __tests__/        — Test suite (313 tests across 7 files)
 shared/
   computations.js   — Pure computation functions shared by frontend + tests
 ```
@@ -125,13 +125,32 @@ Valid KPIs: Revenue, Efficiency, Experience
 | POST/PUT | `/api/verticals/:key/state` | Save changed fields with conflict resolution |
 | GET | `/api/verticals/:key/poll` | Lightweight check: returns `updatedAt` only |
 
-### Snapshots
+### Workspaces (Snapshots)
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/verticals/:key/snapshots` | List snapshot metadata for a vertical |
-| POST | `/api/verticals/:key/snapshots` | Save named snapshot (state + projects) |
-| POST | `/api/verticals/:key/snapshots/:id/restore` | Restore a snapshot |
+| POST | `/api/verticals/:key/snapshots` | Save named snapshot (optional `sourceSnapshotId` to branch from another snapshot) |
+| GET | `/api/verticals/:key/snapshots/:id` | Get full snapshot (state + projects) for workspace loading |
+| PUT | `/api/verticals/:key/snapshots/:id` | Update snapshot state+projects (workspace auto-save) |
+| POST | `/api/verticals/:key/snapshots/:id/promote` | Promote snapshot to Masterplan (copies state+projects, broadcasts WS) |
 | DELETE | `/api/verticals/:key/snapshots/:id` | Delete a snapshot |
+
+### Sign-Off Versions
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/verticals/:key/signoffs` | List all sign-off versions (metadata: id, label, signedOff, createdAt) |
+| GET | `/api/verticals/:key/signoffs/:id` | Get specific sign-off blocks (supports `latest` as ID) |
+| POST | `/api/verticals/:key/signoffs` | Create new sign-off version (ExCo-only) |
+| DELETE | `/api/verticals/:key/signoffs/:id` | Delete a sign-off version (admin-only) |
+
+### ExCo & Editors
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/exco` | Get ExCo member list |
+| POST | `/api/exco` | Save ExCo member list (admin-only, dedupes, filters) |
+| GET | `/api/editors` | Get editor list + pending requests |
+| POST | `/api/editors` | Save editor list (admin-only) |
+| POST | `/api/editors/request` | Request editor access |
 
 ### Other
 | Method | Path | Description |
@@ -234,12 +253,31 @@ The `serverSnapshotRef` stores **migrated/defaulted** values (matching what Reac
 - **Size Map Reference**: Grid showing current T-shirt size → sprint mappings
 - Accessible via "Dashboard" tab in the header
 
-### Scenario Snapshots
-- **Save**: Capture current state + projects as a named snapshot with optional description
-- **Restore**: Load a previously saved snapshot, overwriting current state and projects
-- **Delete**: Remove snapshots no longer needed
-- **Modal UI**: Accessible via "Snapshots" button in the header
+### Masterplan + Workspaces
+The **Masterplan** is the permanent, non-deletable live roadmap per vertical (stored in `state_{vertical}.json` / `projects_{vertical}.json`). **Snapshots** are editable workspace copies.
+
+- **Workspace switching**: Each user independently works on Masterplan or a snapshot workspace
+- **Auto-save routing**: `saveState`/`saveProjects` route to snapshot PUT endpoint when on a workspace; all ~40 `debouncedSave` call sites work unchanged
+- **WS/poll guards**: Masterplan sync (WS, poll, visibility) is skipped when on a snapshot workspace
+- **Promote**: Copy snapshot state+projects to overwrite the Masterplan, broadcasts to all users
+- **Create from snapshot**: `sourceSnapshotId` parameter branches a new snapshot from an existing one
+- **Header indicator**: Green "Masterplan" label or blue snapshot name + "Back to Masterplan" + "Promote" buttons
+- **Modal UI**: "Workspaces" button in header → modal with Masterplan shown first (non-deletable), snapshots with "Open" action
 - Stored server-side as `snapshots_{vertical}.json`
+
+### ExCo Permission Layer & Sign-Off Versioning
+- **ExCo list**: Admin manages ExCo members via admin panel; stored in `exco.json`
+- **Sign-off**: ExCo members (or admin) can sign off the Masterplan quarterly view, creating a versioned snapshot in `signoffs_{vertical}.json`
+- **Diff dropdown**: Quarterly modal header has a dropdown listing all sign-off versions (label + signer email + date); selecting one enables diff mode
+- **Diff view**: NEW/MOVED/REMOVED badges on quarterly blocks comparing current Masterplan against selected sign-off version
+- **Delete sign-offs**: Admin can delete old sign-off versions via a red trash button in the quarterly header
+- **Editor access**: Editors are managed per-vertical; non-editors get read-only access; users can request access
+
+### Quarterly View (modal)
+- **Gantt-style blocks**: Projects positioned by `leftPct`/`widthPct` across quarters
+- **Swimlane tracks**: Same 3 tracks as roadmap, each with sub-lanes
+- **Sign-off button**: Only visible when on Masterplan and user is ExCo
+- **Diff overlay**: Ghost blocks from signed-off version with comparison badges
 
 ### Auth
 - Google Sign-In with @novibet.com domain restriction
@@ -280,7 +318,7 @@ The entire frontend is in `index.html` — no build system, no bundler. React an
 ### Data Persistence
 - JSON files on Railway's persistent volume (`DATA_DIR=/data`)
 - No database — reads/writes are synchronous `fs.readFileSync`/`fs.writeFileSync`
-- File naming: `projects_{vertical}.json`, `state_{vertical}.json`, `snapshots_{vertical}.json`, `audit_log.json`
+- File naming: `projects_{vertical}.json`, `state_{vertical}.json`, `snapshots_{vertical}.json`, `signoffs_{vertical}.json`, `exco.json`, `editors.json`, `audit_log.json`
 
 ### Migration Functions
 - `migrateTracks()`: Renames legacy 'gamification' → 'gateway', ensures all 3 track keys exist
@@ -316,11 +354,13 @@ All state and project changes are logged to `audit_log.json` with:
 
 ## Testing
 
-- **214 tests** across 5 test files in `api/__tests__/`
-- `computations.test.js` — 91 tests for shared pure functions (sizeToSprints, projectSprints, effectiveSprints, deepMerge, migration, capacity, overflow, filter/sort)
-- `helpers.test.js` — loadJSON, saveJSON, buildNarratives, findMovedItem, summarizeValue, describeStateChanges, logAudit
-- `api.test.js` — All REST endpoints, validation, conflict resolution (incl. mixed accept/reject, force overwrite)
-- `websocket.test.js` — WS subscribe, broadcast, sender exclusion, multi-client, disconnect
-- `snapshots.test.js` — Snapshot CRUD, restore, audit logging
+- **313 tests** across 7 test files in `api/__tests__/`
+- `computations.test.js` (111 tests) — Shared pure functions (sizeToSprints, projectSprints, effectiveSprints, deepMerge, migration, capacity, overflow, filter/sort)
+- `helpers.test.js` (62 tests) — loadJSON, saveJSON, buildNarratives, findMovedItem, summarizeValue, describeStateChanges, logAudit
+- `api.test.js` (55 tests) — All REST endpoints, validation, conflict resolution (incl. mixed accept/reject, force overwrite)
+- `sanitization.test.js` (30 tests) — Input sanitization and XSS prevention
+- `snapshots.test.js` (23 tests) — Snapshot CRUD, workspace GET/PUT, promote, sourceSnapshotId, audit logging
+- `exco-signoff.test.js` (21 tests) — ExCo CRUD, sign-off creation/listing/retrieval, admin-only sign-off deletion
+- `websocket.test.js` (11 tests) — WS subscribe, broadcast, sender exclusion, multi-client, disconnect
 - Run: `npm test` (or `npm run test:unit`, `test:integration`, `test:ws`, `test:snapshots`, `test:computations`)
 - `require.main === module` guard on server allows test imports without starting the listener
