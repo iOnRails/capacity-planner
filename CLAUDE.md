@@ -232,9 +232,10 @@ The `serverSnapshotRef` stores **migrated/defaulted** values (matching what Reac
 - **Split tab**: Allocate partial project work to other tracks (per-discipline sizing with validation)
 - **Status visuals** applied across all views (roadmap, timeline, quarterly):
   - **Not Started**: Default appearance, no special styling
-  - **In Progress**: Green inset border + progress bar below the block
-  - **Paused**: Faded opacity (0.55) + pause icon (⏸) overlay + yellow progress bar
-- **Progress bar**: Thin bar at the bottom of each block, fills proportionally to the block's width based on % complete
+  - **In Progress**: Green inset border + purple progress bar below the block
+  - **Paused**: Desaturated (`filter: saturate(0.3)`) + diagonal stripe overlay + yellow/amber border + pause icon (⏸) overlay + yellow progress bar
+  - **Overflow + In Progress**: Red pulsing outer border coexists with green inset ring (compound CSS selectors)
+- **Progress bar**: 5-6px bar at the bottom of each block, purple fill (`var(--accent)`) for in-progress, yellow for paused, fills proportionally to the block's width based on % complete
 - **Backward compatible**: Projects without `status` field derive it from `inProgress` boolean
 
 ### Projects Table View

@@ -109,9 +109,10 @@ A gear icon (`⚙`) on each track block opens a tabbed **Project Settings Modal*
 
 **Visual indicators** (applied in roadmap, timeline, and quarterly views):
 - **Not Started**: Default appearance, no special styling
-- **In Progress**: Green inset border (`box-shadow: inset 0 0 0 2px var(--green)`) + green progress bar at block bottom
-- **Paused**: Reduced opacity (0.55), muted border, centered pause icon (`⏸`) overlay, yellow (`#fdcb6e`) progress bar
-- **Progress bar**: Thin bar (3-4px) at the bottom of each block, fills proportionally based on % complete
+- **In Progress**: Green inset border (`box-shadow: inset 0 0 0 2px var(--green)`) + purple progress bar (`var(--accent)`) at block bottom
+- **Paused**: Desaturated (`filter: saturate(0.3) brightness(0.85)`), diagonal stripe overlay (`::before` pseudo-element), yellow/amber border (`var(--yellow)`), centered pause icon (`⏸`) overlay (26px roadmap, 18px timeline/quarterly), yellow (`#fdcb6e`) progress bar
+- **Overflow + In Progress**: Red pulsing outer border coexists with green inset ring via compound CSS selectors (`.project-block.in-progress.overflow-block`); similarly for paused + overflow with yellow inset ring
+- **Progress bar**: 5-6px bar at the bottom of each block, purple fill for in-progress, yellow for paused, fills proportionally based on % complete
 
 **Project fields:** `status` (`not_started` | `in_progress` | `paused`), `percentComplete` (0-100)
 **State field:** `splits` — `{ projectId: { targetTrack, backend, frontend, natives, qa } }`
