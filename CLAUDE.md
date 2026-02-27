@@ -19,7 +19,7 @@ vercel.json         — SPA routing config
 api/
   server.js         (1320+ lines) — Express.js API with WebSocket support
   package.json      — Dependencies: express, cors, ws; devDeps: jest, supertest
-  __tests__/        — Test suite (330+ tests across 7 files)
+  __tests__/        — Test suite (340+ tests across 7 files)
 shared/
   computations.js   — Pure computation functions shared by frontend + tests
 ```
@@ -95,6 +95,9 @@ Valid KPIs: Revenue, Efficiency, Experience
   "trackBlockOrder": {
     "core-bonus": ["1", "6", "ghost:7", "10"],
     "gateway": ["13", "14"]
+  },
+  "splitStatuses": {
+    "6": { "gateway": { "status": "in_progress", "percentComplete": 45 } }
   },
   "buffer": { "backend": 0, "frontend": 0, "natives": 0, "qa": 0 },
   "_fieldTs": { "tracks": 1708900000000, "trackBlockOrder": 1708900001000 },
@@ -227,14 +230,15 @@ The `serverSnapshotRef` stores **migrated/defaulted** values (matching what Reac
 - **Auto-layout**: Default positioning based on sprint count, overridable
 
 ### Project Settings Modal (⚙)
-- **Tabbed interface**: Gear icon (`⚙`) on track blocks opens a tabbed modal
+- **Tabbed interface**: Gear icon (`⚙`) on track blocks and ghost blocks opens a tabbed modal
 - **General tab**: Set project status (Not Started / In Progress / Paused) + percentage complete (0-100%)
-- **Split tab**: Allocate partial project work to other tracks (per-discipline sizing with validation)
+- **Split tab**: Allocate partial project work to other tracks (hidden for ghost blocks since they are already splits)
+- **Ghost block independence**: Ghost (split) blocks have their own status and progress, completely independent from the parent project. Stored in `splitStatuses` state field.
 - **Status visuals** applied across all views (roadmap, timeline, quarterly):
   - **Not Started**: Default appearance, no special styling
   - **In Progress**: Green inset border + purple progress bar below the block
   - **Paused**: Desaturated (`filter: saturate(0.3)`) + diagonal stripe overlay + yellow/amber border + pause icon (⏸) overlay + yellow progress bar
-  - **Overflow + In Progress**: Red pulsing outer border coexists with green inset ring (compound CSS selectors)
+  - **Overflow**: Badge only (`⚠ BE·FE`) showing which disciplines exceed capacity — no red border
 - **Progress bar**: 5-6px bar at the bottom of each block, purple fill (`var(--accent)`) for in-progress, yellow for paused, fills proportionally to the block's width based on % complete
 - **Backward compatible**: Projects without `status` field derive it from `inProgress` boolean
 
@@ -366,8 +370,8 @@ All state and project changes are logged to `audit_log.json` with:
 
 ## Testing
 
-- **330+ tests** across 7 test files in `api/__tests__/`
-- `computations.test.js` (121+ tests) — Shared pure functions (sizeToSprints, projectSprints, effectiveSprints, deepMerge, migration, capacity, overflow, filter/sort, getProjectStatus, getPercentComplete)
+- **340+ tests** across 7 test files in `api/__tests__/`
+- `computations.test.js` (131+ tests) — Shared pure functions (sizeToSprints, projectSprints, effectiveSprints, deepMerge, migration, capacity, overflow, filter/sort, getProjectStatus, getPercentComplete, getSplitStatus, getSplitPercentComplete)
 - `helpers.test.js` (62 tests) — loadJSON, saveJSON, buildNarratives, findMovedItem, summarizeValue, describeStateChanges, logAudit
 - `api.test.js` (62+ tests) — All REST endpoints, validation, conflict resolution (incl. mixed accept/reject, force overwrite, status/percentComplete validation)
 - `sanitization.test.js` (30 tests) — Input sanitization and XSS prevention

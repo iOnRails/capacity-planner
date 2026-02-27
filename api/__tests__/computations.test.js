@@ -1027,3 +1027,64 @@ describe('getPercentComplete', () => {
     expect(CP.getPercentComplete(undefined)).toBe(0);
   });
 });
+
+// ═══════════════════════════════════════════════════════════
+// getSplitStatus
+// ═══════════════════════════════════════════════════════════
+describe('getSplitStatus', () => {
+  test('returns status when present', () => {
+    const ss = { 1: { gateway: { status: 'in_progress', percentComplete: 50 } } };
+    expect(CP.getSplitStatus(ss, 1, 'gateway')).toBe('in_progress');
+  });
+
+  test('returns not_started when splitStatuses is empty or missing', () => {
+    expect(CP.getSplitStatus({}, 1, 'gateway')).toBe('not_started');
+    expect(CP.getSplitStatus(null, 1, 'gateway')).toBe('not_started');
+    expect(CP.getSplitStatus(undefined, 1, 'gateway')).toBe('not_started');
+  });
+
+  test('returns not_started when project has no split status', () => {
+    const ss = { 2: { gateway: { status: 'paused', percentComplete: 30 } } };
+    expect(CP.getSplitStatus(ss, 1, 'gateway')).toBe('not_started');
+  });
+
+  test('returns not_started when target track has no split status', () => {
+    const ss = { 1: { 'core-bonus': { status: 'in_progress', percentComplete: 50 } } };
+    expect(CP.getSplitStatus(ss, 1, 'gateway')).toBe('not_started');
+  });
+
+  test('returns not_started when status field is missing in entry', () => {
+    const ss = { 1: { gateway: { percentComplete: 50 } } };
+    expect(CP.getSplitStatus(ss, 1, 'gateway')).toBe('not_started');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════
+// getSplitPercentComplete
+// ═══════════════════════════════════════════════════════════
+describe('getSplitPercentComplete', () => {
+  test('returns percentComplete when present', () => {
+    const ss = { 1: { gateway: { status: 'in_progress', percentComplete: 75 } } };
+    expect(CP.getSplitPercentComplete(ss, 1, 'gateway')).toBe(75);
+  });
+
+  test('returns 0 when splitStatuses is empty or missing', () => {
+    expect(CP.getSplitPercentComplete({}, 1, 'gateway')).toBe(0);
+    expect(CP.getSplitPercentComplete(null, 1, 'gateway')).toBe(0);
+    expect(CP.getSplitPercentComplete(undefined, 1, 'gateway')).toBe(0);
+  });
+
+  test('returns 0 when project has no split status', () => {
+    expect(CP.getSplitPercentComplete({ 2: {} }, 1, 'gateway')).toBe(0);
+  });
+
+  test('returns 0 when percentComplete is not a number', () => {
+    const ss = { 1: { gateway: { status: 'in_progress', percentComplete: 'fifty' } } };
+    expect(CP.getSplitPercentComplete(ss, 1, 'gateway')).toBe(0);
+  });
+
+  test('returns 0 when percentComplete is missing', () => {
+    const ss = { 1: { gateway: { status: 'in_progress' } } };
+    expect(CP.getSplitPercentComplete(ss, 1, 'gateway')).toBe(0);
+  });
+});

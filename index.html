@@ -388,34 +388,7 @@
   .q-progress-fill { height: 100%; background: var(--accent); transition: width 0.3s ease; }
   .q-progress-fill.paused { background: #fdcb6e; }
 
-  /* ── Overflow indicator ── */
-  .project-block.overflow-block {
-    border: 2px solid #ff4444 !important;
-    box-shadow: 0 0 12px rgba(255,68,68,0.5), inset 0 0 0 1px rgba(255,68,68,0.3);
-    animation: overflow-pulse 1.5s ease-in-out infinite alternate;
-  }
-  /* Compound: overflow + in-progress — show BOTH red border AND green inset */
-  .project-block.in-progress.overflow-block {
-    box-shadow: 0 0 12px rgba(255,68,68,0.5), inset 0 0 0 2px var(--green);
-    animation: overflow-pulse-inprogress 1.5s ease-in-out infinite alternate;
-  }
-  /* Compound: overflow + paused — show red border + yellow inset */
-  .project-block.paused.overflow-block {
-    box-shadow: 0 0 12px rgba(255,68,68,0.5), inset 0 0 0 2px var(--yellow);
-    animation: overflow-pulse-paused 1.5s ease-in-out infinite alternate;
-  }
-  @keyframes overflow-pulse {
-    from { box-shadow: 0 0 8px rgba(255,68,68,0.4), inset 0 0 0 1px rgba(255,68,68,0.2); }
-    to { box-shadow: 0 0 16px rgba(255,68,68,0.7), inset 0 0 0 1px rgba(255,68,68,0.4); }
-  }
-  @keyframes overflow-pulse-inprogress {
-    from { box-shadow: 0 0 8px rgba(255,68,68,0.4), inset 0 0 0 2px var(--green); }
-    to { box-shadow: 0 0 16px rgba(255,68,68,0.7), inset 0 0 0 2px var(--green); }
-  }
-  @keyframes overflow-pulse-paused {
-    from { box-shadow: 0 0 8px rgba(255,68,68,0.4), inset 0 0 0 2px var(--yellow); }
-    to { box-shadow: 0 0 16px rgba(255,68,68,0.7), inset 0 0 0 2px var(--yellow); }
-  }
+  /* ── Overflow indicator (badge only, no border) ── */
   .overflow-badge {
     position: absolute; top: 4px; left: 4px; z-index: 10;
     background: #ff4444; color: white; font-size: 9px; font-weight: 800;
@@ -460,6 +433,9 @@
     ) !important;
   }
   .project-block.ghost-block:hover { opacity: 0.9; }
+  .project-block.ghost-block.in-progress { opacity: 0.85; }
+  .project-block.ghost-block.paused { opacity: 0.5; filter: saturate(0.3) brightness(0.85); }
+  .project-block.ghost-block.paused::before { display: none; } /* ghost already has stripes */
   .ghost-origin {
     position: absolute; bottom: 3px; left: 6px; font-size: 8px; font-weight: 700;
     color: rgba(162,155,254,0.9); pointer-events: none; letter-spacing: 0.3px;
@@ -1554,7 +1530,7 @@ function App({ onLogout, user: authUser }) {
     const state = {};
     const defaultTracks = {};
     for (const t of CP.DEFAULT_TRACK_CONFIG) defaultTracks[t.key] = [];
-    for (const v of VERTICALS) state[v.key] = { capacity: {...DEFAULT_CAPACITY}, tracks: JSON.parse(JSON.stringify(defaultTracks)), trackCapacity: buildDefaultTrackCapacity(), splits: {}, timelineConfig: {...DEFAULT_TIMELINE_CONFIG}, milestones: [], timelineOverrides: {}, trackSubLaneCounts: {}, timelineLaneAssignments: {}, trackBlockOrder: {}, buffer: { backend: 0, frontend: 0, natives: 0, qa: 0 } };
+    for (const v of VERTICALS) state[v.key] = { capacity: {...DEFAULT_CAPACITY}, tracks: JSON.parse(JSON.stringify(defaultTracks)), trackCapacity: buildDefaultTrackCapacity(), splits: {}, splitStatuses: {}, timelineConfig: {...DEFAULT_TIMELINE_CONFIG}, milestones: [], timelineOverrides: {}, trackSubLaneCounts: {}, timelineLaneAssignments: {}, trackBlockOrder: {}, buffer: { backend: 0, frontend: 0, natives: 0, qa: 0 } };
     return state;
   });
 
@@ -1604,7 +1580,7 @@ function App({ onLogout, user: authUser }) {
   // Used by saveState to only send fields that actually changed locally
   const serverSnapshotRef = useRef({});
 
-  const STATE_FIELD_NAMES = ['capacity', 'tracks', 'trackCapacity', 'splits', 'timelineConfig', 'milestones', 'timelineOverrides', 'trackSubLaneCounts', 'timelineLaneAssignments', 'trackBlockOrder', 'buffer', 'trackConfig'];
+  const STATE_FIELD_NAMES = ['capacity', 'tracks', 'trackCapacity', 'splits', 'splitStatuses', 'timelineConfig', 'milestones', 'timelineOverrides', 'trackSubLaneCounts', 'timelineLaneAssignments', 'trackBlockOrder', 'buffer', 'trackConfig'];
 
   const loadVerticalRef = useRef(null); // stable ref to avoid circular deps
 
@@ -1627,6 +1603,7 @@ function App({ onLogout, user: authUser }) {
       tracks: migrateTracks(stateRes.tracks || defaultTracks, tc),
       trackCapacity: migrateTrackCapacity(stateRes.trackCapacity, tc),
       splits: stateRes.splits || {},
+      splitStatuses: stateRes.splitStatuses || {},
       timelineConfig: stateRes.timelineConfig || {...DEFAULT_TIMELINE_CONFIG},
       milestones: stateRes.milestones || [],
       timelineOverrides: stateRes.timelineOverrides || {},
@@ -1715,7 +1692,7 @@ function App({ onLogout, user: authUser }) {
       // Diff against the snapshot from CHANGE TIME (not current) to correctly identify
       // what the user actually changed, even if polls updated the snapshot since then.
       const snapshot = capturedSnapshot || serverSnapshotRef.current[key] || {};
-      const fullState = { capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides, trackSubLaneCounts: state.trackSubLaneCounts, timelineLaneAssignments: state.timelineLaneAssignments, trackBlockOrder: state.trackBlockOrder, buffer: state.buffer, trackConfig: state.trackConfig };
+      const fullState = { capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, splitStatuses: state.splitStatuses, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides, trackSubLaneCounts: state.trackSubLaneCounts, timelineLaneAssignments: state.timelineLaneAssignments, trackBlockOrder: state.trackBlockOrder, buffer: state.buffer, trackConfig: state.trackConfig };
       const payload = { _loadedAt: loadedAt };
       const changedFields = [];
       for (const f of STATE_FIELD_NAMES) {
@@ -1766,6 +1743,7 @@ function App({ onLogout, user: authUser }) {
             tracks: migrateTracks(ms.tracks || msDefaultTracks, msTc),
             trackCapacity: migrateTrackCapacity(ms.trackCapacity, msTc),
             splits: ms.splits || {},
+            splitStatuses: ms.splitStatuses || {},
             timelineConfig: ms.timelineConfig || {...DEFAULT_TIMELINE_CONFIG},
             milestones: ms.milestones || [],
             timelineOverrides: ms.timelineOverrides || {},
@@ -1880,7 +1858,7 @@ function App({ onLogout, user: authUser }) {
             body: JSON.stringify({ state }), keepalive: true,
           }).catch(() => {});
         } else {
-          const beaconPayload = { capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides, trackSubLaneCounts: state.trackSubLaneCounts, timelineLaneAssignments: state.timelineLaneAssignments, trackBlockOrder: state.trackBlockOrder, sizeMap: sizeMapRef.current, buffer: state.buffer, _loadedAt: loadedAtRef.current[key] || 0 };
+          const beaconPayload = { capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, splitStatuses: state.splitStatuses, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides, trackSubLaneCounts: state.trackSubLaneCounts, timelineLaneAssignments: state.timelineLaneAssignments, trackBlockOrder: state.trackBlockOrder, sizeMap: sizeMapRef.current, buffer: state.buffer, _loadedAt: loadedAtRef.current[key] || 0 };
           try { const u = JSON.parse(localStorage.getItem('cp_google_auth') || '{}'); if (u.email) { beaconPayload._userEmail = u.email; beaconPayload._userName = u.name; } } catch {}
           navigator.sendBeacon(`${API_URL}/api/verticals/${key}/state`, new Blob([JSON.stringify(beaconPayload)], { type: 'application/json' }));
         }
@@ -2255,7 +2233,7 @@ function App({ onLogout, user: authUser }) {
   }, [activeVertical]);
 
   const currentData = verticalData[activeVertical] || [];
-  const currentState = verticalStates[activeVertical] || { capacity: {...DEFAULT_CAPACITY}, tracks: buildDefaultTrackCapacity(), trackCapacity: buildDefaultTrackCapacity(), splits: {}, timelineConfig: {...DEFAULT_TIMELINE_CONFIG}, milestones: [], timelineOverrides: {}, trackSubLaneCounts: {}, timelineLaneAssignments: {}, trackBlockOrder: {}, buffer: { backend: 0, frontend: 0, natives: 0, qa: 0 } };
+  const currentState = verticalStates[activeVertical] || { capacity: {...DEFAULT_CAPACITY}, tracks: buildDefaultTrackCapacity(), trackCapacity: buildDefaultTrackCapacity(), splits: {}, splitStatuses: {}, timelineConfig: {...DEFAULT_TIMELINE_CONFIG}, milestones: [], timelineOverrides: {}, trackSubLaneCounts: {}, timelineLaneAssignments: {}, trackBlockOrder: {}, buffer: { backend: 0, frontend: 0, natives: 0, qa: 0 } };
 
   // Dynamic pillar colors — derived from project data
   const pillarColorMap = useMemo(() => CP.buildPillarColorMap(currentData), [currentData]);
@@ -2273,6 +2251,7 @@ function App({ onLogout, user: authUser }) {
   const tracks = currentState.tracks;
   const trackCapacity = currentState.trackCapacity || buildDefaultTrackCapacity(currentTrackConfig);
   const splits = currentState.splits || {};
+  const splitStatuses = currentState.splitStatuses || {};
   const timelineConfig = currentState.timelineConfig || {...DEFAULT_TIMELINE_CONFIG};
   const milestones = currentState.milestones || [];
   const timelineOverrides = currentState.timelineOverrides || {};
@@ -2377,13 +2356,19 @@ function App({ onLogout, user: authUser }) {
         const cleaned = { ...ts }; delete cleaned[track.key];
         if (Object.keys(cleaned).length > 0) newSplits[pid] = cleaned;
       }
+      // Clean splitStatuses targeting removed track
+      const newSplitStatuses = {};
+      for (const [pid, ts] of Object.entries(vs.splitStatuses || {})) {
+        const cleaned = { ...ts }; delete cleaned[track.key];
+        if (Object.keys(cleaned).length > 0) newSplitStatuses[pid] = cleaned;
+      }
       // Clean timeline data
       const prefix = track.key + ':';
       const newTO = {}; for (const [k, v] of Object.entries(vs.timelineOverrides || {})) { if (!k.startsWith(prefix)) newTO[k] = v; }
       const newTLA = {}; for (const [k, v] of Object.entries(vs.timelineLaneAssignments || {})) { if (!k.startsWith(prefix)) newTLA[k] = v; }
       const newState = { ...prev, [activeVertical]: {
         ...vs, trackConfig: newConfig, tracks: newTracks, trackCapacity: newTC,
-        trackBlockOrder: newTBO, trackSubLaneCounts: newSLC, splits: newSplits,
+        trackBlockOrder: newTBO, trackSubLaneCounts: newSLC, splits: newSplits, splitStatuses: newSplitStatuses,
         timelineOverrides: newTO, timelineLaneAssignments: newTLA,
       }};
       debouncedSave(activeVertical, newState[activeVertical]);
@@ -2432,6 +2417,17 @@ function App({ onLogout, user: authUser }) {
     });
   };
 
+  const saveSplitStatus = (projectId, targetTrack, status, percentComplete) => {
+    setVerticalStatesWithUndo(prev => {
+      const prevSS = { ...(prev[activeVertical].splitStatuses || {}) };
+      if (!prevSS[projectId]) prevSS[projectId] = {};
+      prevSS[projectId] = { ...prevSS[projectId], [targetTrack]: { status, percentComplete } };
+      const newState = { ...prev, [activeVertical]: { ...prev[activeVertical], splitStatuses: prevSS } };
+      debouncedSave(activeVertical, newState[activeVertical]);
+      return newState;
+    });
+  };
+
   const removeSplit = (projectId, targetTrack) => {
     setVerticalStatesWithUndo(prev => {
       const prevSplits = { ...(prev[activeVertical].splits || {}) };
@@ -2441,7 +2437,15 @@ function App({ onLogout, user: authUser }) {
         if (Object.keys(updated).length === 0) delete prevSplits[projectId];
         else prevSplits[projectId] = updated;
       }
-      const newState = { ...prev, [activeVertical]: { ...prev[activeVertical], splits: prevSplits } };
+      // Also clean up splitStatuses for this split
+      const prevSS = { ...(prev[activeVertical].splitStatuses || {}) };
+      if (prevSS[projectId]) {
+        const updatedSS = { ...prevSS[projectId] };
+        delete updatedSS[targetTrack];
+        if (Object.keys(updatedSS).length === 0) delete prevSS[projectId];
+        else prevSS[projectId] = updatedSS;
+      }
+      const newState = { ...prev, [activeVertical]: { ...prev[activeVertical], splits: prevSplits, splitStatuses: prevSS } };
       debouncedSave(activeVertical, newState[activeVertical]);
       return newState;
     });
@@ -2778,9 +2782,12 @@ function App({ onLogout, user: authUser }) {
     // Check overflow for ghost blocks too
     const overflowDisciplines = (trackOverflow[trackKey] && trackOverflow[trackKey][`ghost-${p.id}`]) || null;
     const isOverflow = overflowDisciplines && overflowDisciplines.length > 0;
+    // Independent ghost status
+    const ghostStatus = CP.getSplitStatus(splitStatuses, p.id, trackKey);
+    const ghostPct = CP.getSplitPercentComplete(splitStatuses, p.id, trackKey);
     return (
       <div key={`ghost-${p.id}`}
-        className={`project-block ghost-block ${isOverflow ? 'overflow-block' : ''}`}
+        className={`project-block ghost-block ${isOverflow ? 'overflow-block' : ''} ${ghostStatus === 'in_progress' ? 'in-progress' : ''} ${ghostStatus === 'paused' ? 'paused' : ''}`}
         style={{ width: w, height: BLOCK_HEIGHT, background: getBlockBg(p.pillar, pillarColorMap), cursor: isEditor ? 'grab' : 'default' }}
         draggable={isEditor}
         onDragStart={isEditor ? (e) => { dragItem.current = `ghost:${p.id}`; dragSource.current = 'roadmap'; e.dataTransfer.effectAllowed = 'move'; setTimeout(() => e.target.classList.add('dragging'), 0); } : undefined}
@@ -2804,6 +2811,19 @@ function App({ onLogout, user: authUser }) {
           </div>
         </div>
         <div className="ghost-origin">↗ {homeLabel}</div>
+        {ghostStatus === 'paused' && <div className="pause-overlay">⏸</div>}
+        {(ghostStatus === 'in_progress' || ghostStatus === 'paused') && ghostPct > 0 && (
+          <div className="block-progress-bar">
+            <div className={`block-progress-fill ${ghostStatus === 'paused' ? 'paused' : ''}`} style={{width: `${ghostPct}%`}} />
+          </div>
+        )}
+        {isEditor && (
+          <button className="block-settings"
+            onClick={(e) => { e.stopPropagation(); setSettingsModal({ projectId: p.id, projectName: p.subTask, homeTrack: homeTrack, tab: 'general', isGhost: true, ghostTargetTrack: trackKey }); }}
+            title="Split settings">
+            ⚙
+          </button>
+        )}
         {isEditor && <button className="block-move"
           onClick={(e) => { e.stopPropagation(); removeSplit(p.id, trackKey); }}
           title="Remove split">
@@ -4374,9 +4394,12 @@ function App({ onLogout, user: authUser }) {
                           const dF = d.frontend||0;
                           const dN = d.natives||0;
                           const dQ = d.qa||0;
+                          // Use split-specific status for ghost bars, project-level for regular bars
+                          const barStatus = bar.ghost ? CP.getSplitStatus(splitStatuses, bar.project.id, bar.trackKey) : CP.getProjectStatus(bar.project);
+                          const barPct = bar.ghost ? CP.getSplitPercentComplete(splitStatuses, bar.project.id, bar.trackKey) : CP.getPercentComplete(bar.project);
                           return (
                           <div key={bar.ghost ? `g-${bar.project.id}` : bar.project.id}
-                            className={`tl-bar ${bar.ghost ? 'ghost' : ''} ${CP.getProjectStatus(bar.project) === 'in_progress' ? 'in-progress' : ''} ${CP.getProjectStatus(bar.project) === 'paused' ? 'paused' : ''} ${bar.hasOverride ? 'has-override' : ''}`}
+                            className={`tl-bar ${bar.ghost ? 'ghost' : ''} ${barStatus === 'in_progress' ? 'in-progress' : ''} ${barStatus === 'paused' ? 'paused' : ''} ${bar.hasOverride ? 'has-override' : ''}`}
                             style={{left: bar.left, width: bar.width, top: bar.laneIndex * 46 + 4, background: getBlockBg(bar.project.pillar, pillarColorMap), cursor: isEditor ? 'grab' : 'default'}}
                             data-name={bar.project.subTask}
                             onMouseEnter={(e) => handleMouseEnter(e, bar.project)}
@@ -4389,10 +4412,10 @@ function App({ onLogout, user: authUser }) {
                             </div>
                             {isEditor && <div className="tl-bar-handle right"
                               onMouseDown={e => handleBarDragStart(e, bar, 'right')} />}
-                            {CP.getProjectStatus(bar.project) === 'paused' && <div className="pause-overlay">⏸</div>}
-                            {(CP.getProjectStatus(bar.project) === 'in_progress' || CP.getProjectStatus(bar.project) === 'paused') && CP.getPercentComplete(bar.project) > 0 && (
+                            {barStatus === 'paused' && <div className="pause-overlay">⏸</div>}
+                            {(barStatus === 'in_progress' || barStatus === 'paused') && barPct > 0 && (
                               <div className="tl-progress-bar">
-                                <div className={`tl-progress-fill ${CP.getProjectStatus(bar.project) === 'paused' ? 'paused' : ''}`} style={{width: `${CP.getPercentComplete(bar.project)}%`}} />
+                                <div className={`tl-progress-fill ${barStatus === 'paused' ? 'paused' : ''}`} style={{width: `${barPct}%`}} />
                               </div>
                             )}
                           </div>
@@ -4548,7 +4571,7 @@ function App({ onLogout, user: authUser }) {
       )}
 
       {settingsModal && (() => {
-        const { projectId, projectName, homeTrack } = settingsModal;
+        const { projectId, projectName, homeTrack, isGhost, ghostTargetTrack } = settingsModal;
         const proj = projectById[projectId];
         if (!proj) return null;
         const activeTab = settingsModal.tab || 'general';
@@ -4579,35 +4602,48 @@ function App({ onLogout, user: authUser }) {
         const hasOverSplit = remaining.backend < 0 || remaining.frontend < 0 || remaining.natives < 0 || remaining.qa < 0;
         const homeLabel = TRACKS.find(t => t.key === homeTrack)?.label || homeTrack;
 
-        // General tab helpers
-        const currentStatus = CP.getProjectStatus(proj);
-        const currentPct = CP.getPercentComplete(proj);
+        // General tab helpers — ghost-aware
+        const currentStatus = isGhost
+          ? CP.getSplitStatus(splitStatuses, projectId, ghostTargetTrack)
+          : CP.getProjectStatus(proj);
+        const currentPct = isGhost
+          ? CP.getSplitPercentComplete(splitStatuses, projectId, ghostTargetTrack)
+          : CP.getPercentComplete(proj);
         const updateProjectFields = (updates) => {
           const updated = currentData.map(p => p.id === projectId ? { ...p, ...updates } : p);
           setVerticalData(prev => ({ ...prev, [activeVertical]: updated }));
           debouncedSaveProjects(activeVertical, updated);
         };
         const setStatus = (newStatus) => {
-          const updates = { status: newStatus, inProgress: (newStatus === 'in_progress' || newStatus === 'paused') };
-          if (newStatus === 'not_started') { updates.percentComplete = 0; }
-          updateProjectFields(updates);
+          if (isGhost) {
+            const newPct = newStatus === 'not_started' ? 0 : currentPct;
+            saveSplitStatus(projectId, ghostTargetTrack, newStatus, newPct);
+          } else {
+            const updates = { status: newStatus, inProgress: (newStatus === 'in_progress' || newStatus === 'paused') };
+            if (newStatus === 'not_started') { updates.percentComplete = 0; }
+            updateProjectFields(updates);
+          }
         };
         const setPct = (val) => {
           const clamped = Math.max(0, Math.min(100, parseInt(val) || 0));
-          updateProjectFields({ percentComplete: clamped });
+          if (isGhost) {
+            saveSplitStatus(projectId, ghostTargetTrack, currentStatus, clamped);
+          } else {
+            updateProjectFields({ percentComplete: clamped });
+          }
         };
 
         return (
           <div className="split-modal-overlay" onClick={() => setSettingsModal(null)}>
             <div className="split-modal" onClick={e => e.stopPropagation()} style={{minWidth: 380}}>
-              <h3 style={{display:'flex',alignItems:'center',gap:6}}>⚙ {projectName}</h3>
+              <h3 style={{display:'flex',alignItems:'center',gap:6}}>⚙ {projectName} {isGhost && <span style={{fontSize:11,color:'var(--text2)',fontWeight:400}}>(Split)</span>}</h3>
 
               {/* Tab bar */}
               <div className="settings-tabs">
                 <button className={`settings-tab ${activeTab === 'general' ? 'active' : ''}`}
                   onClick={() => setSettingsModal(prev => ({...prev, tab: 'general'}))}>General</button>
-                <button className={`settings-tab ${activeTab === 'split' ? 'active' : ''}`}
-                  onClick={() => setSettingsModal(prev => ({...prev, tab: 'split'}))}>Split</button>
+                {!isGhost && <button className={`settings-tab ${activeTab === 'split' ? 'active' : ''}`}
+                  onClick={() => setSettingsModal(prev => ({...prev, tab: 'split'}))}>Split</button>}
               </div>
 
               {/* ── General Tab ── */}

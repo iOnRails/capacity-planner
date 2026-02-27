@@ -325,6 +325,21 @@ function getPercentComplete(p) {
   return (p && typeof p.percentComplete === 'number') ? p.percentComplete : 0;
 }
 
+// ── Split Status Helpers ──
+
+function getSplitStatus(splitStatuses, projectId, targetTrack) {
+  if (!splitStatuses || !splitStatuses[projectId] || !splitStatuses[projectId][targetTrack])
+    return 'not_started';
+  return splitStatuses[projectId][targetTrack].status || 'not_started';
+}
+
+function getSplitPercentComplete(splitStatuses, projectId, targetTrack) {
+  if (!splitStatuses || !splitStatuses[projectId] || !splitStatuses[projectId][targetTrack])
+    return 0;
+  var pct = splitStatuses[projectId][targetTrack].percentComplete;
+  return (typeof pct === 'number') ? pct : 0;
+}
+
 // ── UI Helpers ──
 
 function getCapColor(pct) {
@@ -351,6 +366,7 @@ return {
   filterProjects, sortProjects,
   getCapColor, getBlockBg,
   getProjectStatus, getPercentComplete,
+  getSplitStatus, getSplitPercentComplete,
 };
 
 })();

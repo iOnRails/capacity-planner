@@ -279,6 +279,19 @@ describe('POST /api/verticals/:key/state', () => {
     expect(res.body.error).toContain('No state fields');
   });
 
+  test('accepts splitStatuses field in state', async () => {
+    const res = await request(app)
+      .post('/api/verticals/growth/state')
+      .set('X-User-Email', 'test@novibet.com')
+      .send({ splitStatuses: { 1: { gateway: { status: 'in_progress', percentComplete: 50 } } }, _loadedAt: 0 });
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+
+    const stateRes = await request(app).get('/api/verticals/growth/state');
+    expect(stateRes.body.splitStatuses).toBeDefined();
+    expect(stateRes.body.splitStatuses['1']).toBeDefined();
+  });
+
   test('accepts partial state (only changed fields)', async () => {
     // Save initial state
     await request(app)

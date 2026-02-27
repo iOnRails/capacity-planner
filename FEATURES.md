@@ -92,15 +92,16 @@ Blocks within each swimlane track can be reordered via drag-and-drop.
 
 ### 6. Project Settings Modal & Splits
 
-A gear icon (`⚙`) on each track block opens a tabbed **Project Settings Modal** with two tabs:
+A gear icon (`⚙`) on each track block **and ghost block** opens a tabbed **Project Settings Modal**:
 
 **General Tab — Status & Progress:**
 - Three status options via radio buttons: **Not Started** (default), **In Progress**, **Paused**
 - When In Progress or Paused, a **% Complete** field (0-100) appears
 - Status changes are saved immediately to the project data
 - `inProgress` boolean is kept in sync for backward compatibility
+- **Ghost blocks have independent status** — a parent project can be 80% in-progress while its split hasn't started
 
-**Split Tab — Track Allocation:**
+**Split Tab — Track Allocation (hidden for ghost blocks):**
 - A project can be "split" across two swimlane tracks
 - Split configuration: target track + SP allocation per discipline
 - Creates a "ghost block" in the target track representing the split portion
@@ -111,13 +112,13 @@ A gear icon (`⚙`) on each track block opens a tabbed **Project Settings Modal*
 - **Not Started**: Default appearance, no special styling
 - **In Progress**: Green inset border (`box-shadow: inset 0 0 0 2px var(--green)`) + purple progress bar (`var(--accent)`) at block bottom
 - **Paused**: Desaturated (`filter: saturate(0.3) brightness(0.85)`), diagonal stripe overlay (`::before` pseudo-element), yellow/amber border (`var(--yellow)`), centered pause icon (`⏸`) overlay (26px roadmap, 18px timeline/quarterly), yellow (`#fdcb6e`) progress bar
-- **Overflow + In Progress**: Red pulsing outer border coexists with green inset ring via compound CSS selectors (`.project-block.in-progress.overflow-block`); similarly for paused + overflow with yellow inset ring
+- **Overflow**: Badge only (`⚠ BE·FE`) showing which disciplines exceed capacity — no red border styling
 - **Progress bar**: 5-6px bar at the bottom of each block, purple fill for in-progress, yellow for paused, fills proportionally based on % complete
 
 **Project fields:** `status` (`not_started` | `in_progress` | `paused`), `percentComplete` (0-100)
-**State field:** `splits` — `{ projectId: { targetTrack, backend, frontend, natives, qa } }`
+**State fields:** `splits` — `{ projectId: { targetTrack: { backend, frontend, natives, qa } } }`, `splitStatuses` — `{ projectId: { targetTrack: { status, percentComplete } } }`
 
-**Files:** `index.html` (settings modal, block rendering), `shared/computations.js` (`getProjectStatus`, `getPercentComplete`)
+**Files:** `index.html` (settings modal, block rendering), `shared/computations.js` (`getProjectStatus`, `getPercentComplete`, `getSplitStatus`, `getSplitPercentComplete`)
 
 ### 7. Timeline View
 

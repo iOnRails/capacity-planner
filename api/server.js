@@ -153,7 +153,7 @@ function logAudit(req, action, details) {
 }
 
 function describeStateChanges(body, existing, vertical) {
-  const fields = ['capacity', 'tracks', 'trackCapacity', 'splits', 'timelineConfig', 'milestones', 'timelineOverrides', 'sizeMap', 'trackSubLaneCounts', 'timelineLaneAssignments', 'trackBlockOrder', 'buffer'];
+  const fields = ['capacity', 'tracks', 'trackCapacity', 'splits', 'splitStatuses', 'timelineConfig', 'milestones', 'timelineOverrides', 'sizeMap', 'trackSubLaneCounts', 'timelineLaneAssignments', 'trackBlockOrder', 'buffer'];
   const changed = fields.filter(f => {
     if (body[f] === undefined) return false;
     if (!existing || existing[f] === undefined) return true;
@@ -628,7 +628,7 @@ app.get('/api/verticals/:key/poll', (req, res) => {
 });
 
 // ── Merge-safe fields list ──
-const STATE_FIELDS = ['capacity', 'tracks', 'trackCapacity', 'splits', 'timelineConfig', 'milestones', 'timelineOverrides', 'sizeMap', 'trackSubLaneCounts', 'timelineLaneAssignments', 'trackBlockOrder', 'buffer', 'trackConfig'];
+const STATE_FIELDS = ['capacity', 'tracks', 'trackCapacity', 'splits', 'splitStatuses', 'timelineConfig', 'milestones', 'timelineOverrides', 'sizeMap', 'trackSubLaneCounts', 'timelineLaneAssignments', 'trackBlockOrder', 'buffer', 'trackConfig'];
 
 // ── Get state for a vertical ──
 app.get('/api/verticals/:key/state', (req, res) => {
