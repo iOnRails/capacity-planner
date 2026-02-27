@@ -30,6 +30,7 @@ function saveJSON(filename, data) {
 
 function getProjectsFile(key) { return `projects_${key}.json`; }
 function getStateFile(key) { return `state_${key}.json`; }
+function getSignoffsFile(key) { return `signoffs_${key}.json`; }
 const AUDIT_FILE = 'audit_log.json';
 const AUDIT_MAX_DAYS = 30;
 const EDITORS_FILE = 'editors.json';
@@ -517,6 +518,40 @@ if (!fs.existsSync(path.join(DATA_DIR, getProjectsFile('growth')))) {
   console.log(`Seeded ${SEED.length} Growth projects`);
 }
 
+// ── One-time migration: move signedOff snapshots → signoffs file ──
+for (const vertical of VALID_VERTICALS) {
+  const snapshotsFile = `snapshots_${vertical}.json`;
+  const signoffsFile = `signoffs_${vertical}.json`;
+  const snapshots = loadJSON(snapshotsFile, []);
+  const signedSnapshots = snapshots.filter(s => s.signedOff);
+  if (signedSnapshots.length > 0) {
+    const existingSignoffs = loadJSON(signoffsFile, []);
+    const existingIds = new Set(existingSignoffs.map(s => s.id));
+    let migrated = 0;
+    for (const s of signedSnapshots) {
+      if (!existingIds.has(s.id)) {
+        existingSignoffs.unshift({
+          id: s.id,
+          label: s.name,
+          createdAt: s.createdAt,
+          signedOff: s.signedOff,
+          quarterlyBlocks: s.quarterlyBlocks || [],
+          state: s.state,
+          projects: s.projects,
+        });
+        migrated++;
+      }
+    }
+    if (migrated > 0) {
+      saveJSON(signoffsFile, existingSignoffs);
+      // Remove signedOff snapshots from the snapshots file
+      const cleaned = snapshots.filter(s => !s.signedOff);
+      saveJSON(snapshotsFile, cleaned);
+      console.log(`[migration] Moved ${migrated} signed-off snapshot(s) from ${snapshotsFile} → ${signoffsFile}`);
+    }
+  }
+}
+
 // ── Express App ──
 const app = express();
 app.use(cors({
@@ -537,13 +572,11 @@ app.use((req, res, next) => {
   if (['POST', 'PUT', 'DELETE'].includes(req.method)) {
     if (req.path === '/api/test-post' || req.path === '/api/health' || req.path === '/api/editors/request') return next();
     // Sign-off uses its own ExCo auth check
-    if (req.path.match(/^\/api\/verticals\/[^/]+\/signoff$/)) return next();
+    if (req.path.match(/^\/api\/verticals\/[^/]+\/signoffs/)) return next();
     const email = req.headers['x-user-email'] || '';
     // Check per-vertical access for vertical routes
     const verticalMatch = req.path.match(/^\/api\/verticals\/([^/]+)/);
     if (verticalMatch) {
-      // ExCo members can delete signed-off snapshots (guard inside handler)
-      if (req.method === 'DELETE' && req.path.match(/\/snapshots\//) && isExCoUser(email)) return next();
       if (!isEditorForVertical(email, verticalMatch[1])) {
         return res.status(403).json({ error: 'No editor access for this vertical.' });
       }
@@ -790,7 +823,6 @@ app.get('/api/verticals/:key/snapshots', (req, res) => {
     id: s.id, name: s.name, description: s.description || '',
     createdAt: s.createdAt, createdBy: s.createdBy,
     projectCount: (s.projects || []).length,
-    signedOff: s.signedOff || null,
   }));
   res.json({ snapshots: meta });
 });
@@ -804,9 +836,19 @@ app.post('/api/verticals/:key/snapshots', (req, res) => {
       return res.status(400).json({ error: 'Snapshot name is required' });
     }
     const key = req.params.key;
-    const state = loadJSON(getStateFile(key), {});
-    const projects = loadJSON(getProjectsFile(key), []);
     const snapshots = loadJSON(getSnapshotsFile(key), []);
+
+    // Source: another snapshot or current Masterplan
+    let sourceState, sourceProjects;
+    if (req.body.sourceSnapshotId) {
+      const src = snapshots.find(s => s.id === req.body.sourceSnapshotId);
+      if (!src) return res.status(404).json({ error: 'Source snapshot not found' });
+      sourceState = src.state;
+      sourceProjects = src.projects;
+    } else {
+      sourceState = loadJSON(getStateFile(key), {});
+      sourceProjects = loadJSON(getProjectsFile(key), []);
+    }
 
     const snapshot = {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
@@ -814,13 +856,13 @@ app.post('/api/verticals/:key/snapshots', (req, res) => {
       description: sanitizedDesc.trim(),
       createdAt: new Date().toISOString(),
       createdBy: req.headers['x-user-email'] || 'unknown',
-      state: JSON.parse(JSON.stringify(state)),
-      projects: JSON.parse(JSON.stringify(projects)),
+      state: JSON.parse(JSON.stringify(sourceState)),
+      projects: JSON.parse(JSON.stringify(sourceProjects)),
     };
 
     snapshots.unshift(snapshot); // newest first
     saveJSON(getSnapshotsFile(key), snapshots);
-    logAudit(req, 'Saved snapshot', `Snapshot "${snapshot.name}" saved (${projects.length} projects)`);
+    logAudit(req, 'Saved snapshot', `Snapshot "${snapshot.name}" saved (${sourceProjects.length} projects)`);
 
     res.json({ success: true, snapshot: { id: snapshot.id, name: snapshot.name, createdAt: snapshot.createdAt } });
   } catch (err) {
@@ -865,13 +907,6 @@ app.delete('/api/verticals/:key/snapshots/:id', (req, res) => {
     if (idx === -1) {
       return res.status(404).json({ error: 'Snapshot not found' });
     }
-    const target = snapshots[idx];
-    if (target.signedOff) {
-      const email = (req.headers['x-user-email'] || '').toLowerCase();
-      if (!isExCoUser(email)) {
-        return res.status(403).json({ error: 'Only ExCo members can delete signed-off snapshots' });
-      }
-    }
     const removed = snapshots.splice(idx, 1)[0];
     saveJSON(getSnapshotsFile(key), snapshots);
     logAudit(req, 'Deleted snapshot', `Deleted snapshot "${removed.name}"`);
@@ -879,6 +914,65 @@ app.delete('/api/verticals/:key/snapshots/:id', (req, res) => {
   } catch (err) {
     console.error('Delete snapshot error:', err);
     res.status(500).json({ error: 'Failed to delete snapshot' });
+  }
+});
+
+// ── Snapshot workspace endpoints ──
+
+// Get full snapshot (state + projects) for workspace loading
+app.get('/api/verticals/:key/snapshots/:id', (req, res) => {
+  const snapshots = loadJSON(getSnapshotsFile(req.params.key), []);
+  const snapshot = snapshots.find(s => s.id === req.params.id);
+  if (!snapshot) {
+    return res.status(404).json({ error: 'Snapshot not found' });
+  }
+  res.json({ id: snapshot.id, name: snapshot.name, state: snapshot.state, projects: snapshot.projects });
+});
+
+// Update snapshot state+projects (full overwrite — per-user workspace, no conflict resolution)
+app.put('/api/verticals/:key/snapshots/:id', (req, res) => {
+  try {
+    const key = req.params.key;
+    const snapshots = loadJSON(getSnapshotsFile(key), []);
+    const idx = snapshots.findIndex(s => s.id === req.params.id);
+    if (idx === -1) {
+      return res.status(404).json({ error: 'Snapshot not found' });
+    }
+    if (req.body.state) snapshots[idx].state = req.body.state;
+    if (req.body.projects) snapshots[idx].projects = req.body.projects;
+    snapshots[idx].updatedAt = new Date().toISOString();
+    saveJSON(getSnapshotsFile(key), snapshots);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Update snapshot error:', err);
+    res.status(500).json({ error: 'Failed to update snapshot' });
+  }
+});
+
+// Promote snapshot → overwrite Masterplan
+app.post('/api/verticals/:key/snapshots/:id/promote', (req, res) => {
+  try {
+    const key = req.params.key;
+    const snapshots = loadJSON(getSnapshotsFile(key), []);
+    const snapshot = snapshots.find(s => s.id === req.params.id);
+    if (!snapshot) {
+      return res.status(404).json({ error: 'Snapshot not found' });
+    }
+    const state = { ...JSON.parse(JSON.stringify(snapshot.state)), updatedAt: new Date().toISOString() };
+    const projects = JSON.parse(JSON.stringify(snapshot.projects));
+    saveJSON(getStateFile(key), state);
+    saveJSON(getProjectsFile(key), projects);
+    logAudit(req, 'Promoted snapshot', `Promoted snapshot "${snapshot.name}" to Masterplan (${projects.length} projects)`);
+
+    // Broadcast to WS clients so Masterplan users see the update
+    const senderId = req.headers['x-ws-id'] || '';
+    broadcastUpdate(key, state.updatedAt, senderId);
+
+    state._loadedAt = Date.now();
+    res.json({ success: true, state, projects });
+  } catch (err) {
+    console.error('Promote snapshot error:', err);
+    res.status(500).json({ error: 'Failed to promote snapshot' });
   }
 });
 
@@ -909,8 +1003,39 @@ app.post('/api/exco', (req, res) => {
   res.json({ success: true, exco: cleaned });
 });
 
-// ── Sign-off endpoints ──
-app.post('/api/verticals/:key/signoff', (req, res) => {
+// ── Sign-off endpoints (separate storage in signoffs_{key}.json) ──
+
+// List all sign-off versions
+app.get('/api/verticals/:key/signoffs', (req, res) => {
+  const signoffs = loadJSON(getSignoffsFile(req.params.key), []);
+  const meta = signoffs.map(s => ({
+    id: s.id, label: s.label, signedOff: s.signedOff, createdAt: s.createdAt,
+  }));
+  res.json({ signoffs: meta });
+});
+
+// Get a specific sign-off (or 'latest')
+app.get('/api/verticals/:key/signoffs/:id', (req, res) => {
+  const signoffs = loadJSON(getSignoffsFile(req.params.key), []);
+  let entry;
+  if (req.params.id === 'latest') {
+    entry = signoffs[0]; // newest first
+  } else {
+    entry = signoffs.find(s => s.id === req.params.id);
+  }
+  if (!entry) {
+    return res.json({ signedOff: null, quarterlyBlocks: [] });
+  }
+  res.json({
+    id: entry.id,
+    label: entry.label,
+    signedOff: entry.signedOff,
+    quarterlyBlocks: entry.quarterlyBlocks || [],
+  });
+});
+
+// Create a new sign-off version
+app.post('/api/verticals/:key/signoffs', (req, res) => {
   try {
     const email = (req.headers['x-user-email'] || '').toLowerCase();
     if (!isExCoUser(email)) {
@@ -919,16 +1044,14 @@ app.post('/api/verticals/:key/signoff', (req, res) => {
     const key = req.params.key;
     const state = loadJSON(getStateFile(key), {});
     const projects = loadJSON(getProjectsFile(key), []);
-    const snapshots = loadJSON(getSnapshotsFile(key), []);
+    const signoffs = loadJSON(getSignoffsFile(key), []);
 
     const now = new Date();
     const curQ = Math.floor(now.getMonth() / 3) + 1;
-    const snapshot = {
+    const entry = {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-      name: `Q${curQ} ${now.getFullYear()} Sign-Off`,
-      description: `Signed off by ${req.headers['x-user-name'] || email}`,
+      label: `Q${curQ} ${now.getFullYear()} Sign-Off`,
       createdAt: now.toISOString(),
-      createdBy: email,
       signedOff: {
         by: email,
         name: req.headers['x-user-name'] || email,
@@ -939,27 +1062,15 @@ app.post('/api/verticals/:key/signoff', (req, res) => {
       projects: JSON.parse(JSON.stringify(projects)),
     };
 
-    snapshots.unshift(snapshot);
-    saveJSON(getSnapshotsFile(key), snapshots);
+    signoffs.unshift(entry);
+    saveJSON(getSignoffsFile(key), signoffs);
     logAudit(req, 'Signed off quarterly', `Q${curQ} ${now.getFullYear()} signed off (${projects.length} projects)`);
 
-    res.json({ success: true, snapshot: { id: snapshot.id, name: snapshot.name, createdAt: snapshot.createdAt, signedOff: snapshot.signedOff } });
+    res.json({ success: true, signoff: { id: entry.id, label: entry.label, createdAt: entry.createdAt, signedOff: entry.signedOff } });
   } catch (err) {
     console.error('Sign-off error:', err);
     res.status(500).json({ error: 'Failed to sign off' });
   }
-});
-
-app.get('/api/verticals/:key/signoff/latest', (req, res) => {
-  const snapshots = loadJSON(getSnapshotsFile(req.params.key), []);
-  const signedOff = snapshots.find(s => s.signedOff);
-  if (!signedOff) {
-    return res.json({ signedOff: null, quarterlyBlocks: [] });
-  }
-  res.json({
-    signedOff: signedOff.signedOff,
-    quarterlyBlocks: signedOff.quarterlyBlocks || [],
-  });
 });
 
 // ── Audit log endpoint ──
@@ -1176,6 +1287,7 @@ module.exports = {
   verticalClients,
   keepaliveInterval,
   getSnapshotsFile,
+  getSignoffsFile,
   stripHtmlTags,
   sanitizeString,
   sanitizeProject,

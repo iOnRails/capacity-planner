@@ -1372,9 +1372,16 @@ function App({ onLogout, user: authUser }) {
     if (isAdmin) return true;
     return excoList.some(e => e.toLowerCase() === authUser.email.toLowerCase());
   }, [excoList, isAdmin]);
-  const [latestSignOff, setLatestSignOff] = useState(null);
-  const [diffMode, setDiffMode] = useState(false);
+  // Workspace: Masterplan (default) or snapshot
+  const [activeWorkspace, setActiveWorkspace] = useState({ type: 'masterplan' });
+  const isOnMasterplan = activeWorkspace.type === 'masterplan';
+  const activeWorkspaceRef = useRef(activeWorkspace);
+  useEffect(() => { activeWorkspaceRef.current = activeWorkspace; }, [activeWorkspace]);
+  // Sign-off versions for diff dropdown
+  const [signoffVersions, setSignoffVersions] = useState([]);
+  const [selectedSignoffId, setSelectedSignoffId] = useState(null);
   const [signedOffBlocks, setSignedOffBlocks] = useState(null);
+  const diffMode = selectedSignoffId !== null;
   const [settingsTab, setSettingsTab] = useState(() => localStorage.getItem('cp_settings_tab') || 'none');
   const toggleSettingsTab = (tab) => {
     const next = settingsTab === tab ? 'none' : tab;
@@ -1561,6 +1568,20 @@ function App({ onLogout, user: authUser }) {
   }, []);
 
   const saveState = useCallback(async (key, state, capturedLoadedAt, capturedSnapshot) => {
+    // Snapshot workspace: full overwrite to snapshot endpoint, no conflict resolution
+    if (activeWorkspaceRef.current.type === 'snapshot') {
+      try {
+        setSaving(true);
+        savingRef.current = true;
+        const snapshotId = activeWorkspaceRef.current.id;
+        await fetch(`${API_URL}/api/verticals/${key}/snapshots/${snapshotId}`, {
+          method: 'PUT', headers: getAuthHeaders(),
+          body: JSON.stringify({ state }),
+        });
+      } catch (e) { console.error('Save snapshot state error:', e); }
+      finally { setSaving(false); savingRef.current = false; }
+      return;
+    }
     try {
       setSaving(true);
       savingRef.current = true;
@@ -1726,9 +1747,18 @@ function App({ onLogout, user: authUser }) {
     const onBeforeUnload = () => {
       if (pendingSave.current) {
         const { key, state } = pendingSave.current;
-        const beaconPayload = { capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides, trackSubLaneCounts: state.trackSubLaneCounts, timelineLaneAssignments: state.timelineLaneAssignments, trackBlockOrder: state.trackBlockOrder, sizeMap: sizeMapRef.current, buffer: state.buffer, _loadedAt: loadedAtRef.current[key] || 0 };
-        try { const u = JSON.parse(localStorage.getItem('cp_google_auth') || '{}'); if (u.email) { beaconPayload._userEmail = u.email; beaconPayload._userName = u.name; } } catch {}
-        navigator.sendBeacon(`${API_URL}/api/verticals/${key}/state`, new Blob([JSON.stringify(beaconPayload)], { type: 'application/json' }));
+        if (activeWorkspaceRef.current.type === 'snapshot') {
+          // Snapshot: use fetch with keepalive (sendBeacon only POSTs)
+          const snapshotId = activeWorkspaceRef.current.id;
+          fetch(`${API_URL}/api/verticals/${key}/snapshots/${snapshotId}`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json', ...Object.fromEntries(Object.entries(getAuthHeaders()).filter(([k]) => k !== 'Content-Type')) },
+            body: JSON.stringify({ state }), keepalive: true,
+          }).catch(() => {});
+        } else {
+          const beaconPayload = { capacity: state.capacity, tracks: state.tracks, trackCapacity: state.trackCapacity, splits: state.splits, timelineConfig: state.timelineConfig, milestones: state.milestones, timelineOverrides: state.timelineOverrides, trackSubLaneCounts: state.trackSubLaneCounts, timelineLaneAssignments: state.timelineLaneAssignments, trackBlockOrder: state.trackBlockOrder, sizeMap: sizeMapRef.current, buffer: state.buffer, _loadedAt: loadedAtRef.current[key] || 0 };
+          try { const u = JSON.parse(localStorage.getItem('cp_google_auth') || '{}'); if (u.email) { beaconPayload._userEmail = u.email; beaconPayload._userName = u.name; } } catch {}
+          navigator.sendBeacon(`${API_URL}/api/verticals/${key}/state`, new Blob([JSON.stringify(beaconPayload)], { type: 'application/json' }));
+        }
         pendingSave.current = null;
       }
     };
@@ -1794,6 +1824,8 @@ function App({ onLogout, user: authUser }) {
             if (msg.type === 'update' && msg.vertical === activeVertical) {
               // Skip updates we triggered ourselves
               if (msg.senderId === wsIdRef.current) return;
+              // Ignore Masterplan updates when working on a snapshot
+              if (activeWorkspaceRef.current.type === 'snapshot') return;
               console.log('[ws] Received full state update from another user');
               // Cancel any pending debounced save — server has newer data
               if (saveTimer.current) {
@@ -1841,6 +1873,7 @@ function App({ onLogout, user: authUser }) {
     // ── Slow fallback poll (in case WS is down) ──
     const fallbackPoll = async () => {
       if (cancelled || dragItem.current || savingRef.current) return;
+      if (activeWorkspaceRef.current.type === 'snapshot') return;
       try {
         const _t = Date.now();
         const pollRes = await fetch(`${API_URL}/api/verticals/${activeVertical}/poll?_t=${_t}`, { cache: 'no-store' }).then(r => r.json());
@@ -1855,6 +1888,7 @@ function App({ onLogout, user: authUser }) {
     // Immediately sync when tab becomes visible
     const onVisibilityChange = () => {
       if (!document.hidden && !cancelled) {
+        if (activeWorkspaceRef.current.type === 'snapshot') return;
         fetchAndApply('tab visible');
         // Re-subscribe in case WS reconnected to a different vertical
         if (wsRef.current && wsRef.current.readyState === 1) {
@@ -1892,6 +1926,19 @@ function App({ onLogout, user: authUser }) {
   const projectSaveTimer = useRef(null);
   const saveStatusTimer = useRef(null);
   const saveProjects = useCallback(async (key, projects) => {
+    // Snapshot workspace: save projects to snapshot endpoint
+    if (activeWorkspaceRef.current.type === 'snapshot') {
+      try {
+        setSaving(true);
+        const snapshotId = activeWorkspaceRef.current.id;
+        await fetch(`${API_URL}/api/verticals/${key}/snapshots/${snapshotId}`, {
+          method: 'PUT', headers: getAuthHeaders(),
+          body: JSON.stringify({ projects }),
+        });
+      } catch (e) { console.error('Save snapshot projects error:', e); }
+      finally { setSaving(false); }
+      return;
+    }
     try {
       setSaving(true);
       setSaveStatus(null);
@@ -1943,17 +1990,25 @@ function App({ onLogout, user: authUser }) {
     if (!snapshotName.trim()) return;
     try {
       setSnapshotLoading(true);
+      const payload = { name: snapshotName.trim(), description: snapshotDesc.trim() };
+      // When on a snapshot, create from that snapshot
+      if (activeWorkspace.type === 'snapshot') payload.sourceSnapshotId = activeWorkspace.id;
       const res = await fetch(`${API_URL}/api/verticals/${activeVertical}/snapshots`, {
         method: 'POST', headers: getAuthHeaders(),
-        body: JSON.stringify({ name: snapshotName.trim(), description: snapshotDesc.trim() }),
+        body: JSON.stringify(payload),
       });
       if (res.ok) {
+        const data = await res.json();
         setSnapshotName(''); setSnapshotDesc('');
         await loadSnapshots();
+        // Auto-switch to the new snapshot
+        if (data.snapshot && data.snapshot.id) {
+          switchToSnapshot(data.snapshot.id, data.snapshot.name);
+        }
       }
     } catch (e) { console.error('Save snapshot error:', e); }
     finally { setSnapshotLoading(false); }
-  }, [activeVertical, snapshotName, snapshotDesc, loadSnapshots]);
+  }, [activeVertical, snapshotName, snapshotDesc, loadSnapshots, activeWorkspace, switchToSnapshot]);
 
   const restoreSnapshot = useCallback(async (id, name) => {
     if (!confirm(`Restore snapshot "${name}"? This will overwrite the current state and projects.`)) return;
@@ -1985,23 +2040,92 @@ function App({ onLogout, user: authUser }) {
     finally { setSnapshotLoading(false); }
   }, [activeVertical, loadSnapshots]);
 
-  // Load latest sign-off for the active vertical
-  const loadLatestSignOff = useCallback(async () => {
+  // ── Workspace switching ──
+  const switchToSnapshot = useCallback(async (id, name) => {
+    // Flush pending saves
+    if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
+    if (pendingSave.current) {
+      const ps = pendingSave.current;
+      pendingSave.current = null;
+      await saveState(ps.key, ps.state);
+    }
     try {
-      const res = await fetch(`${API_URL}/api/verticals/${activeVertical}/signoff/latest`, { headers: getAuthHeaders() });
+      const res = await fetch(`${API_URL}/api/verticals/${activeVertical}/snapshots/${id}`, { headers: getAuthHeaders() });
+      if (!res.ok) { alert('Failed to load snapshot'); return; }
+      const data = await res.json();
+      if (data.state) applyStateFromServer(activeVertical, data.state);
+      if (data.projects) setVerticalData(prev => ({ ...prev, [activeVertical]: data.projects }));
+      setActiveWorkspace({ type: 'snapshot', id, name: data.name || name });
+      undoStackRef.current = []; redoStackRef.current = [];
+      setUndoLen(0); setRedoLen(0);
+      setShowSnapshots(false);
+    } catch (e) { console.error('Switch to snapshot error:', e); }
+  }, [activeVertical, saveState, applyStateFromServer]);
+
+  const switchToMasterplan = useCallback(async () => {
+    // Flush pending saves
+    if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
+    if (pendingSave.current) {
+      const ps = pendingSave.current;
+      pendingSave.current = null;
+      await saveState(ps.key, ps.state);
+    }
+    await loadVertical(activeVertical);
+    setActiveWorkspace({ type: 'masterplan' });
+    undoStackRef.current = []; redoStackRef.current = [];
+    setUndoLen(0); setRedoLen(0);
+  }, [activeVertical, saveState, loadVertical]);
+
+  const promoteSnapshot = useCallback(async () => {
+    if (activeWorkspace.type !== 'snapshot') return;
+    if (!confirm(`Promote snapshot "${activeWorkspace.name}" to Masterplan? This will overwrite the current Masterplan.`)) return;
+    try {
+      const res = await fetch(`${API_URL}/api/verticals/${activeVertical}/snapshots/${activeWorkspace.id}/promote`, {
+        method: 'POST', headers: getAuthHeaders(),
+      });
       if (res.ok) {
         const data = await res.json();
-        setLatestSignOff(data.signedOff ? data : null);
+        if (data.state) applyStateFromServer(activeVertical, data.state);
+        if (data.projects) setVerticalData(prev => ({ ...prev, [activeVertical]: data.projects }));
+        setActiveWorkspace({ type: 'masterplan' });
+        undoStackRef.current = []; redoStackRef.current = [];
+        setUndoLen(0); setRedoLen(0);
+        alert('Snapshot promoted to Masterplan!');
       } else {
-        setLatestSignOff(null);
+        const err = await res.json();
+        alert('Promote failed: ' + (err.error || 'Unknown error'));
       }
-    } catch (e) { console.error('Load sign-off error:', e); setLatestSignOff(null); }
+    } catch (e) { alert('Promote error: ' + e.message); }
+  }, [activeVertical, activeWorkspace, applyStateFromServer]);
+
+  // Load all sign-off versions for the active vertical
+  const loadSignoffVersions = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/verticals/${activeVertical}/signoffs`, { headers: getAuthHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        setSignoffVersions(data.signoffs || []);
+      }
+    } catch (e) { console.error('Load signoff versions error:', e); }
+  }, [activeVertical]);
+
+  // Load signed-off blocks for a specific sign-off version
+  const loadSignoffBlocks = useCallback(async (id) => {
+    if (!id) { setSelectedSignoffId(null); setSignedOffBlocks(null); return; }
+    try {
+      const res = await fetch(`${API_URL}/api/verticals/${activeVertical}/signoffs/${id}`, { headers: getAuthHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        setSignedOffBlocks(data.quarterlyBlocks || []);
+        setSelectedSignoffId(id);
+      }
+    } catch (e) { console.error('Load signoff blocks error:', e); }
   }, [activeVertical]);
 
   // Reset sign-off state when vertical changes
   useEffect(() => {
-    setLatestSignOff(null);
-    setDiffMode(false);
+    setSignoffVersions([]);
+    setSelectedSignoffId(null);
     setSignedOffBlocks(null);
   }, [activeVertical]);
 
@@ -2224,6 +2348,7 @@ function App({ onLogout, user: authUser }) {
 
   const handleVerticalChange = (key) => {
     setActiveVertical(key);
+    setActiveWorkspace({ type: 'masterplan' });
     setSearch('');
     setFilters({ pillar: [], market: [], epic: [], kpi: [], impact: [] });
     setLoading(true);
@@ -2998,7 +3123,7 @@ function App({ onLogout, user: authUser }) {
 
   // Perform sign-off (must be after quarterlyData is computed)
   const performSignOff = useCallback(async () => {
-    if (!confirm('Sign off the current quarterly plan? This creates a signed snapshot for comparison.')) return;
+    if (!confirm('Sign off the current Masterplan? This creates a versioned sign-off for comparison.')) return;
     try {
       const serializedBlocks = quarterlyData.blocks.map(b => ({
         projectId: b.project.id, subTask: b.project.subTask, pillar: b.project.pillar,
@@ -3008,39 +3133,20 @@ function App({ onLogout, user: authUser }) {
         startsBeforeWindow: b.startsBeforeWindow, endsAfterWindow: b.endsAfterWindow,
         globalLeft: b.globalLeft, globalRight: b.globalRight,
       }));
-      const res = await fetch(`${API_URL}/api/verticals/${activeVertical}/signoff`, {
+      const res = await fetch(`${API_URL}/api/verticals/${activeVertical}/signoffs`, {
         method: 'POST', headers: getAuthHeaders(),
         body: JSON.stringify({ quarterlyBlocks: serializedBlocks }),
       });
       if (res.ok) {
-        const data = await res.json();
-        setLatestSignOff({ signedOff: data.signedOff, quarterlyBlocks: serializedBlocks });
         setSignedOffBlocks(serializedBlocks);
-        alert('Quarterly plan signed off successfully!');
+        await loadSignoffVersions();
+        alert('Masterplan signed off successfully!');
       } else {
         const err = await res.json();
         alert('Sign-off failed: ' + (err.error || 'Unknown error'));
       }
     } catch (e) { alert('Sign-off error: ' + e.message); }
-  }, [activeVertical, quarterlyData]);
-
-  // Toggle diff mode — loads signed-off blocks on first activation
-  const toggleDiffMode = useCallback(async () => {
-    if (diffMode) { setDiffMode(false); return; }
-    if (!signedOffBlocks) {
-      try {
-        const res = await fetch(`${API_URL}/api/verticals/${activeVertical}/signoff/latest`, { headers: getAuthHeaders() });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.signedOff && data.quarterlyBlocks) {
-            setSignedOffBlocks(data.quarterlyBlocks);
-            setLatestSignOff(data);
-          }
-        }
-      } catch (e) { console.error('Load signed-off blocks error:', e); }
-    }
-    setDiffMode(true);
-  }, [activeVertical, diffMode, signedOffBlocks]);
+  }, [activeVertical, quarterlyData, loadSignoffVersions]);
 
   // Drag handlers for timeline bars (resize left/right + move with lane support)
   const handleBarDragStart = useCallback((e, bar, side) => {
@@ -3577,12 +3683,22 @@ function App({ onLogout, user: authUser }) {
               ))}
             </select>
           </div>
+          {/* Workspace indicator */}
+          {isOnMasterplan ? (
+            <span style={{fontSize:10,fontWeight:700,color:'#00b894',background:'rgba(0,184,148,0.1)',border:'1px solid rgba(0,184,148,0.3)',borderRadius:4,padding:'2px 8px'}}>Masterplan</span>
+          ) : (
+            <div style={{display:'flex',alignItems:'center',gap:4}}>
+              <span style={{fontSize:10,fontWeight:700,color:'#74b9ff',background:'rgba(116,185,255,0.1)',border:'1px solid rgba(116,185,255,0.3)',borderRadius:4,padding:'2px 8px'}}>{activeWorkspace.name}</span>
+              <button onClick={switchToMasterplan} style={{fontSize:9,color:'#00b894',background:'none',border:'1px solid rgba(0,184,148,0.3)',borderRadius:4,padding:'2px 6px',cursor:'pointer',fontWeight:600}}>Back to Masterplan</button>
+              {isEditor && <button onClick={promoteSnapshot} style={{fontSize:9,color:'#e17055',background:'none',border:'1px solid rgba(225,112,85,0.3)',borderRadius:4,padding:'2px 6px',cursor:'pointer',fontWeight:600}}>Promote</button>}
+            </div>
+          )}
           {saving && <span style={{fontSize:11, color:'var(--accent2)'}}>Saving...</span>}
           {authUser && (
             <div style={{display:'flex',alignItems:'center',gap:6,marginLeft:8}}>
               <button onClick={() => { setShowSnapshots(true); loadSnapshots(); }}
                 style={{fontSize:10,color:'var(--text2)',background:'none',border:'1px solid var(--border)',borderRadius:4,padding:'2px 6px',cursor:'pointer'}}
-                title="Scenario Snapshots">📸 Snapshots</button>
+                title="Workspaces">Workspaces</button>
               {isAdmin && <button onClick={() => setShowEditorPanel(true)} style={{fontSize:10,color:'var(--text2)',background:'none',border:'1px solid var(--border)',borderRadius:4,padding:'2px 6px',cursor:'pointer'}} title="Manage editor access">👥 Editors</button>}
               {isAdmin && <a href="/audit.html" target="_blank" rel="noopener" style={{fontSize:10,color:'var(--text2)',textDecoration:'none',border:'1px solid var(--border)',borderRadius:4,padding:'2px 6px'}} title="View activity log">📋 Log</a>}
               {authUser.picture && <img src={authUser.picture} style={{width:24,height:24,borderRadius:'50%'}} referrerPolicy="no-referrer" />}
@@ -3801,7 +3917,7 @@ function App({ onLogout, user: authUser }) {
                 </span>
               ))}
               <button className="btn-timeline" onClick={() => setShowTimeline(true)}>📊 Timeline</button>
-              <button className="btn-timeline" onClick={() => { setShowQuarterly(true); loadLatestSignOff(); }}>📅 Quarterly</button>
+              <button className="btn-timeline" onClick={() => { setShowQuarterly(true); loadSignoffVersions(); }}>📅 Quarterly</button>
             </div>
           </div>
           <div className="track-group">
@@ -4144,25 +4260,22 @@ function App({ onLogout, user: authUser }) {
       )}
 
       {showQuarterly && (
-        <div className="timeline-overlay" onClick={() => { setShowQuarterly(false); setQTip(null); setDiffMode(false); }}>
+        <div className="timeline-overlay" onClick={() => { setShowQuarterly(false); setQTip(null); setSelectedSignoffId(null); setSignedOffBlocks(null); }}>
           <div className="timeline-modal" onClick={e => e.stopPropagation()}>
             <div className="tl-header">
               <h2>📅 Quarterly</h2>
-              {latestSignOff && latestSignOff.signedOff && (
-                <span style={{fontSize:11,color:'#00b894',display:'flex',alignItems:'center',gap:4,marginLeft:8}}>
-                  ✓ Signed off by {latestSignOff.signedOff.name || latestSignOff.signedOff.by.split('@')[0]} on {new Date(latestSignOff.signedOff.at).toLocaleDateString()}
-                </span>
-              )}
               <div className="tl-controls">
-                {latestSignOff && latestSignOff.signedOff && (
-                  <button className="tl-btn" onClick={toggleDiffMode}
-                    style={{fontSize:11,padding:'4px 10px',background: diffMode ? 'rgba(116,185,255,0.2)' : 'transparent',
-                      color: diffMode ? '#74b9ff' : 'var(--text2)',border: diffMode ? '1px solid rgba(116,185,255,0.4)' : '1px solid var(--border)',
-                      borderRadius:4,fontWeight:600,cursor:'pointer'}}>
-                    {diffMode ? 'Diff ✓' : 'Diff'}
-                  </button>
-                )}
-                {isExCo && (
+                {/* Diff dropdown — lists all sign-off versions */}
+                <select value={selectedSignoffId || ''} onChange={e => loadSignoffBlocks(e.target.value || null)}
+                  style={{fontSize:11,padding:'4px 8px',background:'var(--surface2)',color:'var(--text1)',border:'1px solid var(--border)',borderRadius:4,cursor:'pointer',maxWidth:220}}>
+                  <option value="">Diff: Off</option>
+                  {signoffVersions.map(v => (
+                    <option key={v.id} value={v.id}>
+                      {v.label} — {new Date(v.createdAt).toLocaleDateString()}
+                    </option>
+                  ))}
+                </select>
+                {isOnMasterplan && isExCo && (
                   <button className="tl-btn" onClick={performSignOff}
                     style={{fontSize:11,padding:'4px 10px',background:'rgba(0,184,148,0.15)',color:'#00b894',
                       border:'1px solid rgba(0,184,148,0.3)',borderRadius:4,fontWeight:600,cursor:'pointer'}}>
@@ -4175,7 +4288,7 @@ function App({ onLogout, user: authUser }) {
                 if (document.fullscreenElement) document.exitFullscreen();
                 else if (el && el.closest('.timeline-modal')) el.closest('.timeline-modal').requestFullscreen();
               }} title="Toggle fullscreen" style={{fontSize:16,padding:'2px 6px'}}>⛶</button>
-              <button className="tl-close" onClick={() => { setShowQuarterly(false); setQTip(null); setDiffMode(false); }} title="Close">✕</button>
+              <button className="tl-close" onClick={() => { setShowQuarterly(false); setQTip(null); setSelectedSignoffId(null); setSignedOffBlocks(null); }} title="Close">✕</button>
             </div>
             <div className="quarterly-modal-body" style={{flex:1,overflow:'auto',padding:'12px 16px',position:'relative'}}>
               {(() => {
@@ -4566,15 +4679,39 @@ function App({ onLogout, user: authUser }) {
           <div style={{background:'var(--surface1)',border:'1px solid var(--border)',borderRadius:12,padding:24,width:520,maxHeight:'80vh',overflow:'auto',boxShadow:'0 8px 32px rgba(0,0,0,0.4)'}}
             onClick={e => e.stopPropagation()}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-              <h3 style={{margin:0,fontSize:16,color:'var(--text1)'}}>📸 Scenario Snapshots</h3>
+              <h3 style={{margin:0,fontSize:16,color:'var(--text1)'}}>Workspaces</h3>
               <button onClick={() => setShowSnapshots(false)}
                 style={{background:'none',border:'none',color:'var(--text2)',fontSize:18,cursor:'pointer'}}>✕</button>
             </div>
 
-            {/* Save New Snapshot */}
+            {/* Masterplan — always first, non-deletable */}
+            <div style={{background:'var(--surface2)',borderRadius:6,padding:'10px 12px',marginBottom:12,
+              border: isOnMasterplan ? '1px solid rgba(0,184,148,0.4)' : '1px solid var(--border)'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <div>
+                  <div style={{display:'flex',alignItems:'center',gap:6}}>
+                    <span style={{fontSize:13,fontWeight:700,color:'var(--text1)'}}>Masterplan</span>
+                    {isOnMasterplan && (
+                      <span style={{fontSize:9,padding:'2px 6px',background:'rgba(0,184,148,0.12)',color:'#00b894',borderRadius:8,fontWeight:600}}>Active</span>
+                    )}
+                  </div>
+                  <div style={{fontSize:10,color:'var(--text2)',marginTop:2}}>The live roadmap. Only the Masterplan can be signed off.</div>
+                </div>
+                {!isOnMasterplan && (
+                  <button onClick={switchToMasterplan}
+                    style={{padding:'4px 10px',background:'#00b894',color:'#fff',border:'none',borderRadius:4,fontSize:10,fontWeight:600,cursor:'pointer'}}>
+                    Open
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Create New Snapshot */}
             {isEditor && (
-            <div style={{background:'var(--surface2)',borderRadius:8,padding:12,marginBottom:16}}>
-              <div style={{fontSize:11,fontWeight:600,color:'var(--text2)',marginBottom:8,textTransform:'uppercase'}}>Save Current State</div>
+            <div style={{background:'var(--surface2)',borderRadius:8,padding:12,marginBottom:12}}>
+              <div style={{fontSize:11,fontWeight:600,color:'var(--text2)',marginBottom:8,textTransform:'uppercase'}}>
+                Create Snapshot {!isOnMasterplan && <span style={{fontWeight:400,textTransform:'none'}}>(from {activeWorkspace.name})</span>}
+              </div>
               <input value={snapshotName} onChange={e => setSnapshotName(e.target.value)}
                 placeholder="Snapshot name (e.g., Sprint 5 Plan)"
                 style={{width:'100%',padding:'6px 10px',background:'var(--bg)',border:'1px solid var(--border)',borderRadius:4,color:'var(--text1)',fontSize:12,marginBottom:6,boxSizing:'border-box'}} />
@@ -4583,54 +4720,52 @@ function App({ onLogout, user: authUser }) {
                 style={{width:'100%',padding:'6px 10px',background:'var(--bg)',border:'1px solid var(--border)',borderRadius:4,color:'var(--text1)',fontSize:12,marginBottom:8,boxSizing:'border-box'}} />
               <button onClick={saveSnapshot} disabled={!snapshotName.trim() || snapshotLoading}
                 style={{padding:'6px 16px',background:'var(--accent1)',color:'#fff',border:'none',borderRadius:4,fontSize:11,fontWeight:600,cursor:snapshotName.trim()?'pointer':'default',opacity:snapshotName.trim()?1:0.5}}>
-                {snapshotLoading ? 'Saving...' : 'Save Snapshot'}
+                {snapshotLoading ? 'Creating...' : 'Create Snapshot'}
               </button>
             </div>
             )}
 
             {/* Snapshot List */}
             <div style={{fontSize:11,fontWeight:600,color:'var(--text2)',marginBottom:8,textTransform:'uppercase'}}>
-              Saved Snapshots ({snapshots.length})
+              Snapshots ({snapshots.length})
             </div>
             {snapshots.length === 0 ? (
               <div style={{textAlign:'center',padding:20,color:'var(--text2)',fontSize:12}}>
-                No snapshots saved yet. Save one above to get started.
+                No snapshots yet. Create one above to get started.
               </div>
             ) : (
               <div style={{display:'flex',flexDirection:'column',gap:8}}>
                 {snapshots.map(s => (
-                  <div key={s.id} style={{background:'var(--surface2)',borderRadius:6,padding:'10px 12px',border: s.signedOff ? '1px solid rgba(0,184,148,0.3)' : '1px solid var(--border)'}}>
+                  <div key={s.id} style={{background:'var(--surface2)',borderRadius:6,padding:'10px 12px',
+                    border: activeWorkspace.type === 'snapshot' && activeWorkspace.id === s.id ? '1px solid rgba(116,185,255,0.4)' : '1px solid var(--border)'}}>
                     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                       <div>
                         <div style={{display:'flex',alignItems:'center',gap:6}}>
                           <span style={{fontSize:13,fontWeight:600,color:'var(--text1)'}}>{s.name}</span>
-                          {s.signedOff && (
-                            <span style={{fontSize:9,padding:'2px 6px',background:'rgba(0,184,148,0.12)',color:'#00b894',borderRadius:8,fontWeight:600}}>
-                              ✓ Signed Off
-                            </span>
+                          {activeWorkspace.type === 'snapshot' && activeWorkspace.id === s.id && (
+                            <span style={{fontSize:9,padding:'2px 6px',background:'rgba(116,185,255,0.12)',color:'#74b9ff',borderRadius:8,fontWeight:600}}>Active</span>
                           )}
                         </div>
                         {s.description && <div style={{fontSize:11,color:'var(--text2)',marginTop:2}}>{s.description}</div>}
-                        {s.signedOff && (
-                          <div style={{fontSize:10,color:'#00b894',marginTop:2}}>
-                            Signed off by {s.signedOff.name || s.signedOff.by.split('@')[0]} on {new Date(s.signedOff.at).toLocaleDateString()}
-                          </div>
-                        )}
                         <div style={{fontSize:10,color:'var(--text2)',marginTop:4}}>
                           {new Date(s.createdAt).toLocaleDateString()} {new Date(s.createdAt).toLocaleTimeString()}
                           {' · '}{s.projectCount} projects · by {s.createdBy?.split('@')[0]}
                         </div>
                       </div>
-                      {isEditor && <div style={{display:'flex',gap:6}}>
-                        <button onClick={() => restoreSnapshot(s.id, s.name)}
-                          style={{padding:'4px 10px',background:'#0984e3',color:'#fff',border:'none',borderRadius:4,fontSize:10,fontWeight:600,cursor:'pointer'}}>
-                          Restore
-                        </button>
-                        <button onClick={() => deleteSnapshot(s.id, s.name)}
-                          style={{padding:'4px 10px',background:'none',color:'#e74c3c',border:'1px solid #e74c3c',borderRadius:4,fontSize:10,fontWeight:600,cursor:'pointer'}}>
-                          Delete
-                        </button>
-                      </div>}
+                      <div style={{display:'flex',gap:6}}>
+                        {!(activeWorkspace.type === 'snapshot' && activeWorkspace.id === s.id) && (
+                          <button onClick={() => switchToSnapshot(s.id, s.name)}
+                            style={{padding:'4px 10px',background:'#0984e3',color:'#fff',border:'none',borderRadius:4,fontSize:10,fontWeight:600,cursor:'pointer'}}>
+                            Open
+                          </button>
+                        )}
+                        {isEditor && (
+                          <button onClick={() => deleteSnapshot(s.id, s.name)}
+                            style={{padding:'4px 10px',background:'none',color:'#e74c3c',border:'1px solid #e74c3c',borderRadius:4,fontSize:10,fontWeight:600,cursor:'pointer'}}>
+                            Delete
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}

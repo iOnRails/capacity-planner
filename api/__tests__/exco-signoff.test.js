@@ -4,13 +4,13 @@
  * Tests cover:
  * - GET /api/exco returns empty list initially
  * - POST /api/exco (admin-only, validates array, dedupes, filters admin email)
- * - POST /api/verticals/:key/signoff (ExCo-only, creates signed snapshot)
- * - GET /api/verticals/:key/signoff/latest (returns latest signed-off snapshot)
- * - Snapshot metadata includes signedOff field
- * - Delete guard: non-ExCo can't delete signed-off snapshot
- * - Delete guard: ExCo can delete signed-off snapshot
- * - Delete guard: admin can delete signed-off snapshot
+ * - POST /api/verticals/:key/signoffs (ExCo-only, creates sign-off version)
+ * - GET /api/verticals/:key/signoffs (lists all sign-off versions)
+ * - GET /api/verticals/:key/signoffs/:id (returns specific sign-off blocks)
+ * - GET /api/verticals/:key/signoffs/latest (returns latest sign-off)
+ * - Multiple sign-off versions work independently
  * - Non-ExCo cannot sign off
+ * - Sign-offs are separate from snapshots
  */
 
 const fs = require('fs');
@@ -23,7 +23,7 @@ process.env.DATA_DIR = TEST_DATA_DIR;
 
 if (!fs.existsSync(TEST_DATA_DIR)) fs.mkdirSync(TEST_DATA_DIR, { recursive: true });
 
-const { app, keepaliveInterval, EXCO_FILE, ADMIN_EMAIL, getSnapshotsFile, getStateFile, getProjectsFile } = require('../server');
+const { app, keepaliveInterval, EXCO_FILE, ADMIN_EMAIL, getSnapshotsFile, getSignoffsFile, getStateFile, getProjectsFile } = require('../server');
 
 // ── Setup / Teardown ──
 afterAll(() => {
@@ -114,10 +114,10 @@ describe('POST /api/exco', () => {
 });
 
 // ═══════════════════════════════════════════════
-// Sign-off
+// Sign-off (separate storage in signoffs file)
 // ═══════════════════════════════════════════════
 
-describe('POST /api/verticals/:key/signoff', () => {
+describe('POST /api/verticals/:key/signoffs', () => {
   beforeEach(() => {
     // Set up ExCo list
     fs.writeFileSync(path.join(TEST_DATA_DIR, EXCO_FILE), JSON.stringify(['exco1@novibet.com']));
@@ -128,20 +128,20 @@ describe('POST /api/verticals/:key/signoff', () => {
 
   test('ExCo member can sign off', async () => {
     const res = await request(app)
-      .post('/api/verticals/growth/signoff')
+      .post('/api/verticals/growth/signoffs')
       .set('x-user-email', 'exco1@novibet.com')
       .set('x-user-name', 'ExCo One')
       .send({ quarterlyBlocks: [{ projectId: 1, subTask: 'Test', leftPct: 10, widthPct: 30 }] });
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
-    expect(res.body.snapshot.signedOff).toBeDefined();
-    expect(res.body.snapshot.signedOff.by).toBe('exco1@novibet.com');
-    expect(res.body.snapshot.signedOff.name).toBe('ExCo One');
+    expect(res.body.signoff.signedOff).toBeDefined();
+    expect(res.body.signoff.signedOff.by).toBe('exco1@novibet.com');
+    expect(res.body.signoff.signedOff.name).toBe('ExCo One');
   });
 
   test('admin can sign off', async () => {
     const res = await request(app)
-      .post('/api/verticals/growth/signoff')
+      .post('/api/verticals/growth/signoffs')
       .set('x-user-email', ADMIN_EMAIL)
       .set('x-user-name', 'Admin')
       .send({ quarterlyBlocks: [] });
@@ -151,132 +151,131 @@ describe('POST /api/verticals/:key/signoff', () => {
 
   test('non-ExCo member cannot sign off', async () => {
     const res = await request(app)
-      .post('/api/verticals/growth/signoff')
+      .post('/api/verticals/growth/signoffs')
       .set('x-user-email', 'test@novibet.com')
       .send({ quarterlyBlocks: [] });
     expect(res.status).toBe(403);
   });
 
-  test('sign-off creates a snapshot with signedOff metadata', async () => {
-    await request(app)
-      .post('/api/verticals/growth/signoff')
-      .set('x-user-email', 'exco1@novibet.com')
-      .set('x-user-name', 'ExCo One')
-      .send({ quarterlyBlocks: [{ projectId: 1 }] });
-
-    // Check snapshot list includes signedOff metadata
-    const listRes = await request(app).get('/api/verticals/growth/snapshots');
-    expect(listRes.status).toBe(200);
-    expect(listRes.body.snapshots.length).toBe(1);
-    expect(listRes.body.snapshots[0].signedOff).toBeDefined();
-    expect(listRes.body.snapshots[0].signedOff.by).toBe('exco1@novibet.com');
-  });
-
-  test('sign-off saves quarterlyBlocks in snapshot', async () => {
+  test('sign-off saves quarterlyBlocks', async () => {
     const blocks = [{ projectId: 1, subTask: 'Test', leftPct: 10, widthPct: 30, lane: 0 }];
     await request(app)
-      .post('/api/verticals/growth/signoff')
+      .post('/api/verticals/growth/signoffs')
       .set('x-user-email', 'exco1@novibet.com')
       .send({ quarterlyBlocks: blocks });
 
-    // Verify via signoff/latest endpoint
-    const latestRes = await request(app).get('/api/verticals/growth/signoff/latest');
+    // Verify via signoffs/latest endpoint
+    const latestRes = await request(app).get('/api/verticals/growth/signoffs/latest');
     expect(latestRes.status).toBe(200);
     expect(latestRes.body.quarterlyBlocks).toEqual(blocks);
+  });
+
+  test('sign-offs are stored separately from snapshots', async () => {
+    await request(app)
+      .post('/api/verticals/growth/signoffs')
+      .set('x-user-email', 'exco1@novibet.com')
+      .send({ quarterlyBlocks: [] });
+
+    // Signoffs file should have the entry
+    const signoffsFile = path.join(TEST_DATA_DIR, getSignoffsFile('growth'));
+    const signoffs = JSON.parse(fs.readFileSync(signoffsFile, 'utf8'));
+    expect(signoffs).toHaveLength(1);
+
+    // Snapshots file should be empty (or not exist)
+    const snapshotsFile = path.join(TEST_DATA_DIR, getSnapshotsFile('growth'));
+    const snapshots = fs.existsSync(snapshotsFile) ? JSON.parse(fs.readFileSync(snapshotsFile, 'utf8')) : [];
+    expect(snapshots).toHaveLength(0);
   });
 });
 
 // ═══════════════════════════════════════════════
-// Get latest sign-off
+// List + Get sign-off versions
 // ═══════════════════════════════════════════════
 
-describe('GET /api/verticals/:key/signoff/latest', () => {
-  test('returns null when no sign-off exists', async () => {
-    const res = await request(app).get('/api/verticals/growth/signoff/latest');
+describe('GET /api/verticals/:key/signoffs', () => {
+  test('returns empty list when no sign-offs exist', async () => {
+    const res = await request(app).get('/api/verticals/growth/signoffs');
+    expect(res.status).toBe(200);
+    expect(res.body.signoffs).toEqual([]);
+  });
+
+  test('lists all sign-off versions with metadata', async () => {
+    fs.writeFileSync(path.join(TEST_DATA_DIR, EXCO_FILE), JSON.stringify(['exco1@novibet.com']));
+    fs.writeFileSync(path.join(TEST_DATA_DIR, getStateFile('growth')), JSON.stringify({}));
+    fs.writeFileSync(path.join(TEST_DATA_DIR, getProjectsFile('growth')), JSON.stringify([]));
+
+    // Create two sign-offs
+    await request(app)
+      .post('/api/verticals/growth/signoffs')
+      .set('x-user-email', 'exco1@novibet.com')
+      .set('x-user-name', 'ExCo One')
+      .send({ quarterlyBlocks: [{ projectId: 1 }] });
+
+    await request(app)
+      .post('/api/verticals/growth/signoffs')
+      .set('x-user-email', 'exco1@novibet.com')
+      .set('x-user-name', 'ExCo One')
+      .send({ quarterlyBlocks: [{ projectId: 2 }] });
+
+    const res = await request(app).get('/api/verticals/growth/signoffs');
+    expect(res.status).toBe(200);
+    expect(res.body.signoffs).toHaveLength(2);
+    // Newest first
+    expect(res.body.signoffs[0].signedOff.by).toBe('exco1@novibet.com');
+    expect(res.body.signoffs[0].id).toBeDefined();
+    expect(res.body.signoffs[0].label).toBeDefined();
+    expect(res.body.signoffs[0].createdAt).toBeDefined();
+  });
+});
+
+describe('GET /api/verticals/:key/signoffs/:id', () => {
+  test('returns null when no sign-offs exist (latest)', async () => {
+    const res = await request(app).get('/api/verticals/growth/signoffs/latest');
     expect(res.status).toBe(200);
     expect(res.body.signedOff).toBeNull();
     expect(res.body.quarterlyBlocks).toEqual([]);
   });
 
-  test('returns latest signed-off snapshot', async () => {
+  test('returns latest sign-off', async () => {
     fs.writeFileSync(path.join(TEST_DATA_DIR, EXCO_FILE), JSON.stringify(['exco1@novibet.com']));
     fs.writeFileSync(path.join(TEST_DATA_DIR, getStateFile('growth')), JSON.stringify({}));
     fs.writeFileSync(path.join(TEST_DATA_DIR, getProjectsFile('growth')), JSON.stringify([]));
 
     const blocks = [{ projectId: 1, subTask: 'Test' }];
     await request(app)
-      .post('/api/verticals/growth/signoff')
+      .post('/api/verticals/growth/signoffs')
       .set('x-user-email', 'exco1@novibet.com')
       .set('x-user-name', 'ExCo One')
       .send({ quarterlyBlocks: blocks });
 
-    const res = await request(app).get('/api/verticals/growth/signoff/latest');
+    const res = await request(app).get('/api/verticals/growth/signoffs/latest');
     expect(res.status).toBe(200);
     expect(res.body.signedOff.by).toBe('exco1@novibet.com');
     expect(res.body.signedOff.name).toBe('ExCo One');
     expect(res.body.quarterlyBlocks).toEqual(blocks);
   });
-});
 
-// ═══════════════════════════════════════════════
-// Delete guard for signed-off snapshots
-// ═══════════════════════════════════════════════
-
-describe('DELETE signed-off snapshot guard', () => {
-  let signedOffSnapshotId;
-
-  beforeEach(async () => {
+  test('returns specific sign-off by id', async () => {
     fs.writeFileSync(path.join(TEST_DATA_DIR, EXCO_FILE), JSON.stringify(['exco1@novibet.com']));
     fs.writeFileSync(path.join(TEST_DATA_DIR, getStateFile('growth')), JSON.stringify({}));
     fs.writeFileSync(path.join(TEST_DATA_DIR, getProjectsFile('growth')), JSON.stringify([]));
 
-    // Create a signed-off snapshot
-    const signOffRes = await request(app)
-      .post('/api/verticals/growth/signoff')
+    const blocks1 = [{ projectId: 1 }];
+    const blocks2 = [{ projectId: 2 }];
+
+    const res1 = await request(app)
+      .post('/api/verticals/growth/signoffs')
       .set('x-user-email', 'exco1@novibet.com')
-      .set('x-user-name', 'ExCo One')
-      .send({ quarterlyBlocks: [] });
-    signedOffSnapshotId = signOffRes.body.snapshot.id;
-  });
+      .send({ quarterlyBlocks: blocks1 });
 
-  test('non-ExCo editor cannot delete signed-off snapshot', async () => {
-    const res = await request(app)
-      .delete(`/api/verticals/growth/snapshots/${signedOffSnapshotId}`)
-      .set('x-user-email', 'test@novibet.com');
-    expect(res.status).toBe(403);
-    expect(res.body.error).toContain('ExCo');
-  });
+    await request(app)
+      .post('/api/verticals/growth/signoffs')
+      .set('x-user-email', 'exco1@novibet.com')
+      .send({ quarterlyBlocks: blocks2 });
 
-  test('ExCo member can delete signed-off snapshot', async () => {
-    const res = await request(app)
-      .delete(`/api/verticals/growth/snapshots/${signedOffSnapshotId}`)
-      .set('x-user-email', 'exco1@novibet.com');
+    // Get the first sign-off by ID
+    const res = await request(app).get(`/api/verticals/growth/signoffs/${res1.body.signoff.id}`);
     expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
-  });
-
-  test('admin can delete signed-off snapshot', async () => {
-    const res = await request(app)
-      .delete(`/api/verticals/growth/snapshots/${signedOffSnapshotId}`)
-      .set('x-user-email', ADMIN_EMAIL);
-    expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
-  });
-
-  test('regular editor can still delete non-signed-off snapshots', async () => {
-    // Create a regular snapshot
-    const saveRes = await request(app)
-      .post('/api/verticals/growth/snapshots')
-      .set('x-user-email', 'test@novibet.com')
-      .send({ name: 'Regular Snapshot' });
-    expect(saveRes.status).toBe(200);
-
-    const listRes = await request(app).get('/api/verticals/growth/snapshots');
-    const regularSnap = listRes.body.snapshots.find(s => !s.signedOff);
-
-    const res = await request(app)
-      .delete(`/api/verticals/growth/snapshots/${regularSnap.id}`)
-      .set('x-user-email', 'test@novibet.com');
-    expect(res.status).toBe(200);
+    expect(res.body.quarterlyBlocks).toEqual(blocks1);
   });
 });
