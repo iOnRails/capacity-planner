@@ -857,15 +857,6 @@
   }
 
   /* Quarterly View */
-  .quarterly-wrapper {
-    padding: 12px 28px; height: calc(100vh - 120px); display: flex; flex-direction: column;
-  }
-  .quarterly-wrapper:fullscreen {
-    height: 100vh; padding: 16px; background: var(--bg);
-  }
-  .quarterly-toolbar {
-    display: flex; justify-content: flex-end; margin-bottom: 8px; gap: 6px;
-  }
   .quarterly-container {
     display: grid; grid-template-columns: repeat(4, 1fr); row-gap: 6px;
     grid-auto-rows: 72px; grid-template-rows: auto;
@@ -1371,6 +1362,7 @@ function App({ onLogout, user: authUser }) {
   // buffer is now stored inside verticalStates and persisted to the server
   const [splitModal, setSplitModal] = useState(null); // { projectId, projectName, existing: {...} }
   const [showTimeline, setShowTimeline] = useState(false);
+  const [showQuarterly, setShowQuarterly] = useState(false);
   const [tlSidebarOpen, setTlSidebarOpen] = useState(true);
   const [showSnapshots, setShowSnapshots] = useState(false);
   const [snapshots, setSnapshots] = useState([]);
@@ -3475,56 +3467,6 @@ function App({ onLogout, user: authUser }) {
           sizeMap={sizeMap}
           pillarColorMap={pillarColorMap}
         />
-      ) : activeTab === 'quarterly' ? (
-        <div className="quarterly-wrapper" id="quarterly-wrapper">
-          <div className="quarterly-toolbar">
-            <button className="btn" style={{fontSize:12,padding:'4px 10px'}} onClick={() => {
-              const el = document.getElementById('quarterly-wrapper');
-              if (document.fullscreenElement) document.exitFullscreen();
-              else if (el) el.requestFullscreen();
-            }} title="Toggle fullscreen">&#x26F6;</button>
-          </div>
-          <div className="quarterly-container" style={{position:'relative'}}>
-            {/* Quarter divider lines */}
-            {[1,2,3].map(i => <div key={`div-${i}`} style={{position:'absolute',top:0,bottom:0,left:`${i*25}%`,width:'1px',background:'var(--border)',zIndex:1,pointerEvents:'none'}} />)}
-            {/* Column headers */}
-            {quarterlyData.quarters.map((q, qi) => (
-              <div key={qi} className="quarter-header" style={{gridColumn: qi + 1, gridRow: 1}}>
-                <span>{q.label}</span>
-                <span className="q-count">{q.projects.length}</span>
-              </div>
-            ))}
-            {/* Project blocks — each spans its quarter range as a single element */}
-            {quarterlyData.blocks.map((block) => {
-              const {project: p, startQi, endQi, leftPct, widthPct, lane, startDate, endDate, startsBeforeWindow, endsAfterWindow} = block;
-              const fmtDate = d => d.toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'});
-              const cls = ['q-block', p.inProgress ? 'in-progress' : '',
-                endsAfterWindow ? 'continues-right' : '',
-                startsBeforeWindow ? 'continues-left' : ''].filter(Boolean).join(' ');
-              return (
-                <div key={p.id} className="q-cell"
-                  style={{gridColumn: `${startQi + 1} / ${endQi + 2}`, gridRow: lane + 2}}>
-                  <div className={cls}
-                    style={{left: `calc(${leftPct}% + 3px)`, width: `calc(${widthPct}% - 6px)`, background: CP.getBlockBg(p.pillar, pillarColorMap)}}
-                    onMouseEnter={(e) => setQTip({text: p.subTask, start: fmtDate(startDate), end: fmtDate(endDate), x: e.clientX, y: e.clientY})}
-                    onMouseMove={(e) => setQTip(t => t ? {...t, x: e.clientX, y: e.clientY} : t)}
-                    onMouseLeave={() => setQTip(null)}>
-                    <div className="block-content">
-                      <div className="block-title">{p.subTask}</div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-            {quarterlyData.blocks.length === 0 && (
-              <div style={{gridColumn:'1/5',gridRow:2,textAlign:'center',padding:'48px',color:'var(--text2)',fontSize:12}}>No roadmap projects in the current 4 quarters</div>
-            )}
-          </div>
-          {qTip && <div className="q-tip" style={{left: qTip.x + 12, top: qTip.y - 40}}>
-            <div>{qTip.text}</div>
-            <div style={{fontSize:10,fontWeight:400,color:'var(--text2)',marginTop:3}}>{qTip.start} → {qTip.end}</div>
-          </div>}
-        </div>
       ) : activeTab === 'projects' ? (
         projectsTableJSX
       ) : currentData.length === 0 ? (
@@ -3709,7 +3651,7 @@ function App({ onLogout, user: authUser }) {
                 </span>
               ))}
               <button className="btn-timeline" onClick={() => setShowTimeline(true)}>📊 Timeline</button>
-              <button className="btn-timeline" onClick={() => setActiveTab('quarterly')}>📅 Quarterly</button>
+              <button className="btn-timeline" onClick={() => setShowQuarterly(true)}>📅 Quarterly</button>
             </div>
           </div>
           <div className="track-group">
@@ -4057,6 +3999,63 @@ function App({ onLogout, user: authUser }) {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showQuarterly && (
+        <div className="timeline-overlay" onClick={() => { setShowQuarterly(false); setQTip(null); }}>
+          <div className="timeline-modal" onClick={e => e.stopPropagation()}>
+            <div className="tl-header">
+              <h2>📅 Quarterly</h2>
+              <div className="tl-controls">
+                <button className="btn" style={{fontSize:12,padding:'4px 10px'}} onClick={() => {
+                  const el = document.querySelector('.quarterly-modal-body');
+                  if (document.fullscreenElement) document.exitFullscreen();
+                  else if (el && el.closest('.timeline-modal')) el.closest('.timeline-modal').requestFullscreen();
+                }} title="Toggle fullscreen">&#x26F6;</button>
+                <button className="btn" style={{fontSize:16,padding:'2px 10px',lineHeight:'24px'}} onClick={() => { setShowQuarterly(false); setQTip(null); }}>&times;</button>
+              </div>
+            </div>
+            <div className="quarterly-modal-body" style={{flex:1,overflow:'auto',padding:'12px 16px',position:'relative'}}>
+              <div className="quarterly-container" style={{position:'relative',height:'100%'}}>
+                {[1,2,3].map(i => <div key={`div-${i}`} style={{position:'absolute',top:0,bottom:0,left:`${i*25}%`,width:'1px',background:'var(--border)',zIndex:1,pointerEvents:'none'}} />)}
+                {quarterlyData.quarters.map((q, qi) => (
+                  <div key={qi} className="quarter-header" style={{gridColumn: qi + 1, gridRow: 1}}>
+                    <span>{q.label}</span>
+                    <span className="q-count">{q.projects.length}</span>
+                  </div>
+                ))}
+                {quarterlyData.blocks.map((block) => {
+                  const {project: p, startQi, endQi, leftPct, widthPct, lane, startDate, endDate, startsBeforeWindow, endsAfterWindow} = block;
+                  const fmtDate = d => d.toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'});
+                  const cls = ['q-block', p.inProgress ? 'in-progress' : '',
+                    endsAfterWindow ? 'continues-right' : '',
+                    startsBeforeWindow ? 'continues-left' : ''].filter(Boolean).join(' ');
+                  return (
+                    <div key={p.id} className="q-cell"
+                      style={{gridColumn: `${startQi + 1} / ${endQi + 2}`, gridRow: lane + 2}}>
+                      <div className={cls}
+                        style={{left: `calc(${leftPct}% + 3px)`, width: `calc(${widthPct}% - 6px)`, background: CP.getBlockBg(p.pillar, pillarColorMap)}}
+                        onMouseEnter={(e) => setQTip({text: p.subTask, start: fmtDate(startDate), end: fmtDate(endDate), x: e.clientX, y: e.clientY})}
+                        onMouseMove={(e) => setQTip(t => t ? {...t, x: e.clientX, y: e.clientY} : t)}
+                        onMouseLeave={() => setQTip(null)}>
+                        <div className="block-content">
+                          <div className="block-title">{p.subTask}</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                {quarterlyData.blocks.length === 0 && (
+                  <div style={{gridColumn:'1/5',gridRow:2,textAlign:'center',padding:'48px',color:'var(--text2)',fontSize:12}}>No roadmap projects in the current 4 quarters</div>
+                )}
+              </div>
+            </div>
+            {qTip && <div className="q-tip" style={{left: qTip.x + 12, top: qTip.y - 40}}>
+              <div>{qTip.text}</div>
+              <div style={{fontSize:10,fontWeight:400,color:'var(--text2)',marginTop:3}}>{qTip.start} → {qTip.end}</div>
+            </div>}
           </div>
         </div>
       )}
