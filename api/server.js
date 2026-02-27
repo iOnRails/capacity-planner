@@ -558,7 +558,7 @@ const app = express();
 app.use(cors({
   origin: CORS_ORIGIN === '*' ? true : CORS_ORIGIN.split(','),
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-User-Email', 'X-User-Name', 'X-WS-ID'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-User-Email', 'X-User-Name', 'X-User-Picture', 'X-WS-ID'],
 }));
 app.use(express.json({ limit: '5mb' }));
 
