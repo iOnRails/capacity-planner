@@ -13,13 +13,13 @@ A web-based capacity planning tool for managing engineering team workload across
 ## Architecture
 
 ```
-index.html          (4900+ lines) — Single-file React 18 app via CDN + Babel
+index.html          (5200+ lines) — Single-file React 18 app via CDN + Babel
 audit.html          — Standalone audit log viewer
 vercel.json         — SPA routing config
 api/
-  server.js         (1320+ lines) — Express.js API with WebSocket support
+  server.js         (1420+ lines) — Express.js API with WebSocket support
   package.json      — Dependencies: express, cors, ws; devDeps: jest, supertest
-  __tests__/        — Test suite (340+ tests across 7 files)
+  __tests__/        — Test suite (365+ tests across 8 files)
 shared/
   computations.js   — Pure computation functions shared by frontend + tests
 ```
@@ -160,6 +160,15 @@ Valid KPIs: Revenue, Efficiency, Experience
 | POST | `/api/editors` | Save editor list (admin-only) |
 | POST | `/api/editors/request` | Request editor access |
 
+### Comments
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/verticals/:key/projects/:projectId/comments` | Get all comments for a project |
+| POST | `/api/verticals/:key/projects/:projectId/comments` | Add a top-level comment (`{ text }`) |
+| POST | `/api/verticals/:key/projects/:projectId/comments/:commentId/replies` | Add a reply to a comment (`{ text }`) |
+| DELETE | `/api/verticals/:key/projects/:projectId/comments/:commentId` | Delete a comment (author or admin only) |
+| GET | `/api/verticals/:key/comments/counts` | Get comment counts for all projects (for badges) |
+
 ### Other
 | Method | Path | Description |
 |--------|------|-------------|
@@ -296,6 +305,18 @@ The **Masterplan** is the permanent, non-deletable live roadmap per vertical (st
 - **Sign-off button**: Only visible when on Masterplan and user is ExCo
 - **Diff overlay**: Ghost blocks from signed-off version with comparison badges
 
+### Comments Sidebar
+- **Click to open**: Clicking any project block (roadmap, backlog, ghost, timeline, quarterly) opens a 400px sidebar from the right
+- **Comment threads**: Each project has its own comment thread with author avatar, name, and relative timestamps
+- **Replies**: Single-level threaded replies under each comment; inline reply input with Enter-to-submit
+- **Delete**: Authors can delete their own comments; admin can delete any
+- **Comment badges**: `💬 N` badge on blocks showing comment count across all views
+- **Click vs drag**: Roadmap/backlog use HTML5 drag (auto-suppresses `onClick`); timeline uses 5px movement threshold in `handleBarDragStart`; quarterly has no drag conflict
+- **Data isolation**: Comments stored per-vertical in `comments_{vertical}.json`, not included in snapshots/workspaces
+- **Auth headers**: `X-User-Email`, `X-User-Name`, `X-User-Picture` sent on every request (picture used for avatar storage)
+- **Keyboard**: Enter to submit (Shift+Enter for newline), Escape to close (settings modal takes priority)
+- **Auto-close**: Sidebar closes on vertical switch; counts re-fetched on vertical load
+
 ### Auth
 - Google Sign-In with @novibet.com domain restriction
 - JWT decode (no server-side verification)
@@ -317,7 +338,7 @@ The **Masterplan** is the permanent, non-deletable live roadmap per vertical (st
 ## Verticals & Tracks
 
 **5 Verticals**: Growth, Sportsbook, Casino, Account, Payments
-**3 Tracks per vertical**: Core Bonus (yellow), Gateway (pink), SEO & AFF (green)
+**3 Tracks per vertical**: Core Bonus, Gateway, SEO & AFF — all use neutral gray (`#636e72`) headers to avoid clashing with vibrant pillar colors on project blocks
 **4 Disciplines**: Backend, Frontend, Natives, QA
 
 Each vertical has independent projects, state, and capacity configuration.
@@ -335,11 +356,12 @@ The entire frontend is in `index.html` — no build system, no bundler. React an
 ### Data Persistence
 - JSON files on Railway's persistent volume (`DATA_DIR=/data`)
 - No database — reads/writes are synchronous `fs.readFileSync`/`fs.writeFileSync`
-- File naming: `projects_{vertical}.json`, `state_{vertical}.json`, `snapshots_{vertical}.json`, `signoffs_{vertical}.json`, `exco.json`, `editors.json`, `audit_log.json`
+- File naming: `projects_{vertical}.json`, `state_{vertical}.json`, `snapshots_{vertical}.json`, `signoffs_{vertical}.json`, `comments_{vertical}.json`, `exco.json`, `editors.json`, `audit_log.json`
 
 ### Migration Functions
 - `migrateTracks()`: Renames legacy 'gamification' → 'gateway', ensures all 3 track keys exist
 - `migrateTrackCapacity()`: Ensures all 3 track keys exist with zero defaults
+- `migrateTrackConfigColors()`: Converts old vibrant track colors (`#fdcb6e`, `#e84393`, `#00b894`) to neutral gray (`#636e72`); applied during state loading
 
 ### Known Issues / In Progress
 - **Multi-tab sync**: WebSocket notifications work but the underlying conflict resolution for simultaneous edits to the same object field (e.g., two users reordering different tracks within `trackBlockOrder`) can still lose changes in edge cases. The sub-key merge on both client and server handles most cases but rapid concurrent edits to the same field remain challenging.
@@ -371,13 +393,14 @@ All state and project changes are logged to `audit_log.json` with:
 
 ## Testing
 
-- **340+ tests** across 7 test files in `api/__tests__/`
+- **365+ tests** across 8 test files in `api/__tests__/`
 - `computations.test.js` (131+ tests) — Shared pure functions (sizeToSprints, projectSprints, effectiveSprints, deepMerge, migration, capacity, overflow, filter/sort, getProjectStatus, getPercentComplete, getSplitStatus, getSplitPercentComplete)
 - `helpers.test.js` (62 tests) — loadJSON, saveJSON, buildNarratives, findMovedItem, summarizeValue, describeStateChanges, logAudit
 - `api.test.js` (62+ tests) — All REST endpoints, validation, conflict resolution (incl. mixed accept/reject, force overwrite, status/percentComplete validation)
 - `sanitization.test.js` (30 tests) — Input sanitization and XSS prevention
 - `snapshots.test.js` (23 tests) — Snapshot CRUD, workspace GET/PUT, promote, sourceSnapshotId, audit logging
 - `exco-signoff.test.js` (21 tests) — ExCo CRUD, sign-off creation/listing/retrieval, admin-only sign-off deletion
+- `comments.test.js` (25 tests) — Comments CRUD, replies, deletion permissions (author/admin), counts, validation, text sanitization, per-project and per-vertical isolation
 - `websocket.test.js` (11 tests) — WS subscribe, broadcast, sender exclusion, multi-client, disconnect
 - Run: `npm test` (or `npm run test:unit`, `test:integration`, `test:ws`, `test:snapshots`, `test:computations`)
 - `require.main === module` guard on server allows test imports without starting the listener
