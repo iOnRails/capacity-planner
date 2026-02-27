@@ -34,6 +34,7 @@ const AUDIT_FILE = 'audit_log.json';
 const AUDIT_MAX_DAYS = 30;
 const EDITORS_FILE = 'editors.json';
 const ACCESS_REQUESTS_FILE = 'access_requests.json';
+const EXCO_FILE = 'exco.json';
 const ADMIN_EMAIL = 'kmermigkas@novibet.com';
 
 const VALID_VERTICALS = new Set(['growth', 'sportsbook', 'casino', 'account', 'payments']);
@@ -62,6 +63,17 @@ function isEditorForVertical(email, vertical) {
   const ed = loadEditors().find(ed => ed.email === e);
   if (!ed) return false;
   return ed.verticals.includes('all') || ed.verticals.includes(vertical);
+}
+
+function loadExCo() {
+  return loadJSON(EXCO_FILE, []).map(e => (typeof e === 'string' ? e : e.email || '').toLowerCase().trim()).filter(Boolean);
+}
+
+function isExCoUser(email) {
+  if (!email) return false;
+  const e = email.toLowerCase();
+  if (e === ADMIN_EMAIL) return true;
+  return loadExCo().includes(e);
 }
 
 // ── Input Sanitization ──
@@ -524,10 +536,14 @@ app.use((req, res, next) => {
 app.use((req, res, next) => {
   if (['POST', 'PUT', 'DELETE'].includes(req.method)) {
     if (req.path === '/api/test-post' || req.path === '/api/health' || req.path === '/api/editors/request') return next();
+    // Sign-off uses its own ExCo auth check
+    if (req.path.match(/^\/api\/verticals\/[^/]+\/signoff$/)) return next();
     const email = req.headers['x-user-email'] || '';
     // Check per-vertical access for vertical routes
     const verticalMatch = req.path.match(/^\/api\/verticals\/([^/]+)/);
     if (verticalMatch) {
+      // ExCo members can delete signed-off snapshots (guard inside handler)
+      if (req.method === 'DELETE' && req.path.match(/\/snapshots\//) && isExCoUser(email)) return next();
       if (!isEditorForVertical(email, verticalMatch[1])) {
         return res.status(403).json({ error: 'No editor access for this vertical.' });
       }
@@ -774,6 +790,7 @@ app.get('/api/verticals/:key/snapshots', (req, res) => {
     id: s.id, name: s.name, description: s.description || '',
     createdAt: s.createdAt, createdBy: s.createdBy,
     projectCount: (s.projects || []).length,
+    signedOff: s.signedOff || null,
   }));
   res.json({ snapshots: meta });
 });
@@ -848,6 +865,13 @@ app.delete('/api/verticals/:key/snapshots/:id', (req, res) => {
     if (idx === -1) {
       return res.status(404).json({ error: 'Snapshot not found' });
     }
+    const target = snapshots[idx];
+    if (target.signedOff) {
+      const email = (req.headers['x-user-email'] || '').toLowerCase();
+      if (!isExCoUser(email)) {
+        return res.status(403).json({ error: 'Only ExCo members can delete signed-off snapshots' });
+      }
+    }
     const removed = snapshots.splice(idx, 1)[0];
     saveJSON(getSnapshotsFile(key), snapshots);
     logAudit(req, 'Deleted snapshot', `Deleted snapshot "${removed.name}"`);
@@ -856,6 +880,86 @@ app.delete('/api/verticals/:key/snapshots/:id', (req, res) => {
     console.error('Delete snapshot error:', err);
     res.status(500).json({ error: 'Failed to delete snapshot' });
   }
+});
+
+// ── ExCo endpoints ──
+app.get('/api/exco', (req, res) => {
+  res.json({ exco: loadExCo() });
+});
+
+app.post('/api/exco', (req, res) => {
+  const email = (req.headers['x-user-email'] || '').toLowerCase();
+  if (email !== ADMIN_EMAIL) {
+    return res.status(403).json({ error: 'Only admin can manage ExCo list' });
+  }
+  const { exco } = req.body;
+  if (!Array.isArray(exco)) {
+    return res.status(400).json({ error: 'ExCo must be an array' });
+  }
+  const seen = new Set();
+  const cleaned = [];
+  for (const entry of exco) {
+    const e = (typeof entry === 'string' ? entry : entry.email || '').toLowerCase().trim();
+    if (!e || !e.endsWith('@novibet.com') || e === ADMIN_EMAIL || seen.has(e)) continue;
+    seen.add(e);
+    cleaned.push(e);
+  }
+  saveJSON(EXCO_FILE, cleaned);
+  logAudit(req, 'Updated ExCo', `ExCo list updated: ${cleaned.length} members`);
+  res.json({ success: true, exco: cleaned });
+});
+
+// ── Sign-off endpoints ──
+app.post('/api/verticals/:key/signoff', (req, res) => {
+  try {
+    const email = (req.headers['x-user-email'] || '').toLowerCase();
+    if (!isExCoUser(email)) {
+      return res.status(403).json({ error: 'Only ExCo members can sign off' });
+    }
+    const key = req.params.key;
+    const state = loadJSON(getStateFile(key), {});
+    const projects = loadJSON(getProjectsFile(key), []);
+    const snapshots = loadJSON(getSnapshotsFile(key), []);
+
+    const now = new Date();
+    const curQ = Math.floor(now.getMonth() / 3) + 1;
+    const snapshot = {
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      name: `Q${curQ} ${now.getFullYear()} Sign-Off`,
+      description: `Signed off by ${req.headers['x-user-name'] || email}`,
+      createdAt: now.toISOString(),
+      createdBy: email,
+      signedOff: {
+        by: email,
+        name: req.headers['x-user-name'] || email,
+        at: now.toISOString(),
+      },
+      quarterlyBlocks: req.body.quarterlyBlocks || [],
+      state: JSON.parse(JSON.stringify(state)),
+      projects: JSON.parse(JSON.stringify(projects)),
+    };
+
+    snapshots.unshift(snapshot);
+    saveJSON(getSnapshotsFile(key), snapshots);
+    logAudit(req, 'Signed off quarterly', `Q${curQ} ${now.getFullYear()} signed off (${projects.length} projects)`);
+
+    res.json({ success: true, snapshot: { id: snapshot.id, name: snapshot.name, createdAt: snapshot.createdAt, signedOff: snapshot.signedOff } });
+  } catch (err) {
+    console.error('Sign-off error:', err);
+    res.status(500).json({ error: 'Failed to sign off' });
+  }
+});
+
+app.get('/api/verticals/:key/signoff/latest', (req, res) => {
+  const snapshots = loadJSON(getSnapshotsFile(req.params.key), []);
+  const signedOff = snapshots.find(s => s.signedOff);
+  if (!signedOff) {
+    return res.json({ signedOff: null, quarterlyBlocks: [] });
+  }
+  res.json({
+    signedOff: signedOff.signedOff,
+    quarterlyBlocks: signedOff.quarterlyBlocks || [],
+  });
 });
 
 // ── Audit log endpoint ──
@@ -1084,4 +1188,7 @@ module.exports = {
   normalizeEditor,
   loadEditors,
   VALID_VERTICALS,
+  EXCO_FILE,
+  loadExCo,
+  isExCoUser,
 };
