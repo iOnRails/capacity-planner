@@ -405,13 +405,14 @@ npm run test:ws         # WebSocket tests only
 npm run test:coverage   # Run with coverage report
 ```
 
-**Test coverage (330+ tests across 7 files):**
-- **computations.test.js** (121+ tests) — Shared pure functions (sizeToSprints, projectSprints, effectiveSprints, deepMerge, migration, capacity, overflow, filter/sort, getProjectStatus, getPercentComplete)
+**Test coverage (365+ tests across 8 files):**
+- **computations.test.js** (131+ tests) — Shared pure functions (sizeToSprints, projectSprints, effectiveSprints, deepMerge, migration, capacity, overflow, filter/sort, getProjectStatus, getPercentComplete, getSplitStatus, getSplitPercentComplete)
 - **helpers.test.js** (62 tests) — Unit tests for buildNarratives (all 12 field types), findMovedItem, describeStateChanges, summarizeValue, loadJSON/saveJSON, logAudit
 - **api.test.js** (62+ tests) — Integration tests for all endpoints, project validation (incl. status/percentComplete), track cleanup, state merge with conflict resolution, audit log filtering
 - **sanitization.test.js** (30 tests) — Input sanitization and XSS prevention
 - **snapshots.test.js** (23 tests) — Snapshot CRUD, workspace GET/PUT, promote, sourceSnapshotId, audit log integration
 - **exco-signoff.test.js** (21 tests) — ExCo CRUD, sign-off creation/listing/retrieval, admin-only sign-off deletion
+- **comments.test.js** (25 tests) — Comments CRUD, replies, deletion permissions (author/admin), counts, validation, text sanitization, per-project and per-vertical isolation
 - **websocket.test.js** (11 tests) — WebSocket connection, subscribe/unsubscribe, broadcast on state and project saves, sender exclusion, multi-client sync, disconnection cleanup, invalid message handling
 
 ---
