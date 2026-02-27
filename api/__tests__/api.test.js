@@ -861,3 +861,71 @@ describe('Per-vertical editor access', () => {
     expect(res.body.editors[0].verticals).toEqual(['growth','casino']);
   });
 });
+
+// ═══════════════════════════════════════════════════════════
+// Project status and percentComplete validation
+// ═══════════════════════════════════════════════════════════
+describe('Project status validation', () => {
+  test('accepts valid status values', async () => {
+    const projects = [
+      { id: 1, subTask: 'A', status: 'not_started', percentComplete: 0 },
+      { id: 2, subTask: 'B', status: 'in_progress', percentComplete: 50 },
+      { id: 3, subTask: 'C', status: 'paused', percentComplete: 25 },
+    ];
+    const res = await request(app).post('/api/verticals/growth/projects')
+      .set('X-User-Email', 'test@novibet.com')
+      .send({ projects });
+    expect(res.status).toBe(200);
+  });
+
+  test('rejects invalid status value', async () => {
+    const projects = [{ id: 1, subTask: 'A', status: 'invalid_status' }];
+    const res = await request(app).post('/api/verticals/growth/projects')
+      .set('X-User-Email', 'test@novibet.com')
+      .send({ projects });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('invalid status');
+  });
+
+  test('rejects percentComplete over 100', async () => {
+    const projects = [{ id: 1, subTask: 'A', percentComplete: 150 }];
+    const res = await request(app).post('/api/verticals/growth/projects')
+      .set('X-User-Email', 'test@novibet.com')
+      .send({ projects });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('percentComplete');
+  });
+
+  test('rejects negative percentComplete', async () => {
+    const projects = [{ id: 1, subTask: 'A', percentComplete: -10 }];
+    const res = await request(app).post('/api/verticals/growth/projects')
+      .set('X-User-Email', 'test@novibet.com')
+      .send({ projects });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('percentComplete');
+  });
+
+  test('accepts projects without status (backward compatible)', async () => {
+    const projects = [{ id: 1, subTask: 'A', inProgress: true }];
+    const res = await request(app).post('/api/verticals/growth/projects')
+      .set('X-User-Email', 'test@novibet.com')
+      .send({ projects });
+    expect(res.status).toBe(200);
+  });
+
+  test('accepts projects without percentComplete', async () => {
+    const projects = [{ id: 1, subTask: 'A', status: 'in_progress' }];
+    const res = await request(app).post('/api/verticals/growth/projects')
+      .set('X-User-Email', 'test@novibet.com')
+      .send({ projects });
+    expect(res.status).toBe(200);
+  });
+
+  test('normalizes percentComplete to number', async () => {
+    const projects = [{ id: 1, subTask: 'A', percentComplete: '50' }];
+    const res = await request(app).post('/api/verticals/growth/projects')
+      .set('X-User-Email', 'test@novibet.com')
+      .send({ projects });
+    expect(res.status).toBe(200);
+  });
+});

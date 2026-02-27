@@ -19,7 +19,7 @@ vercel.json         — SPA routing config
 api/
   server.js         (1320+ lines) — Express.js API with WebSocket support
   package.json      — Dependencies: express, cors, ws; devDeps: jest, supertest
-  __tests__/        — Test suite (313 tests across 7 files)
+  __tests__/        — Test suite (330+ tests across 7 files)
 shared/
   computations.js   — Pure computation functions shared by frontend + tests
 ```
@@ -51,9 +51,14 @@ shared/
   "frontend": "XS",
   "natives": "S",
   "qa": "S",
-  "inProgress": true
+  "inProgress": true,
+  "status": "in_progress",
+  "percentComplete": 45
 }
 ```
+
+Valid statuses: `not_started` (default), `in_progress`, `paused`
+`percentComplete`: 0-100 integer (only meaningful when status is `in_progress` or `paused`)
 
 Valid sizes: `""`, `XS`, `S`, `M`, `L`, `XL`, `XXL`, `XXXL`
 Valid pillars: Expansion, Acquisition, Core Platform, Comms, Gamification, Core Bonus
@@ -221,10 +226,16 @@ The `serverSnapshotRef` stores **migrated/defaulted** values (matching what Reac
 - **Milestones**: Vertical lines with flags, CRUD operations
 - **Auto-layout**: Default positioning based on sprint count, overridable
 
-### Split Allocation Modal
-- Allocate partial project work to other tracks
-- Per-discipline sizing with validation (can't over-split)
-- Ghost blocks appear in target tracks
+### Project Settings Modal (⚙)
+- **Tabbed interface**: Gear icon (`⚙`) on track blocks opens a tabbed modal
+- **General tab**: Set project status (Not Started / In Progress / Paused) + percentage complete (0-100%)
+- **Split tab**: Allocate partial project work to other tracks (per-discipline sizing with validation)
+- **Status visuals** applied across all views (roadmap, timeline, quarterly):
+  - **Not Started**: Default appearance, no special styling
+  - **In Progress**: Green inset border + progress bar below the block
+  - **Paused**: Faded opacity (0.55) + pause icon (⏸) overlay + yellow progress bar
+- **Progress bar**: Thin bar at the bottom of each block, fills proportionally to the block's width based on % complete
+- **Backward compatible**: Projects without `status` field derive it from `inProgress` boolean
 
 ### Projects Table View
 - **Editable grid**: Click to edit any cell inline
@@ -354,10 +365,10 @@ All state and project changes are logged to `audit_log.json` with:
 
 ## Testing
 
-- **313 tests** across 7 test files in `api/__tests__/`
-- `computations.test.js` (111 tests) — Shared pure functions (sizeToSprints, projectSprints, effectiveSprints, deepMerge, migration, capacity, overflow, filter/sort)
+- **330+ tests** across 7 test files in `api/__tests__/`
+- `computations.test.js` (121+ tests) — Shared pure functions (sizeToSprints, projectSprints, effectiveSprints, deepMerge, migration, capacity, overflow, filter/sort, getProjectStatus, getPercentComplete)
 - `helpers.test.js` (62 tests) — loadJSON, saveJSON, buildNarratives, findMovedItem, summarizeValue, describeStateChanges, logAudit
-- `api.test.js` (55 tests) — All REST endpoints, validation, conflict resolution (incl. mixed accept/reject, force overwrite)
+- `api.test.js` (62+ tests) — All REST endpoints, validation, conflict resolution (incl. mixed accept/reject, force overwrite, status/percentComplete validation)
 - `sanitization.test.js` (30 tests) — Input sanitization and XSS prevention
 - `snapshots.test.js` (23 tests) — Snapshot CRUD, workspace GET/PUT, promote, sourceSnapshotId, audit logging
 - `exco-signoff.test.js` (21 tests) — ExCo CRUD, sign-off creation/listing/retrieval, admin-only sign-off deletion

@@ -324,6 +324,43 @@
   }
   .project-block.dragging { opacity: 0.3; transform: scale(0.95); }
   .project-block.in-progress { box-shadow: inset 0 0 0 2px var(--green); }
+  .project-block.paused { opacity: 0.55; box-shadow: inset 0 0 0 2px rgba(255,255,255,0.3); }
+  .tl-bar.paused { opacity: 0.55; box-shadow: 0 2px 6px rgba(0,0,0,0.2), inset 0 0 0 2px rgba(255,255,255,0.3); }
+  .q-block.paused { opacity: 0.55; box-shadow: inset 0 0 0 2px rgba(255,255,255,0.3); }
+
+  /* ── Pause overlay icon ── */
+  .pause-overlay {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    font-size: 22px; color: rgba(255,255,255,0.6); pointer-events: none;
+    z-index: 8; text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+  }
+  .tl-bar .pause-overlay { font-size: 14px; }
+  .q-block .pause-overlay { font-size: 16px; }
+
+  /* ── Progress bar below blocks ── */
+  .block-progress-bar {
+    position: absolute; bottom: 0; left: 0; right: 0; height: 4px;
+    background: rgba(0,0,0,0.3); overflow: hidden;
+    border-radius: 0 0 8px 8px;
+  }
+  .block-progress-fill { height: 100%; background: var(--green); transition: width 0.3s ease; border-radius: 0 0 0 8px; }
+  .block-progress-fill.paused { background: #fdcb6e; }
+
+  .tl-progress-bar {
+    position: absolute; bottom: 0; left: 0; right: 0; height: 3px;
+    background: rgba(0,0,0,0.3); overflow: hidden;
+    border-radius: 0 0 8px 8px;
+  }
+  .tl-progress-fill { height: 100%; background: var(--green); transition: width 0.3s ease; }
+  .tl-progress-fill.paused { background: #fdcb6e; }
+
+  .q-progress-bar {
+    position: absolute; bottom: 0; left: 0; right: 0; height: 3px;
+    background: rgba(0,0,0,0.2); overflow: hidden;
+    border-radius: 0 0 6px 6px;
+  }
+  .q-progress-fill { height: 100%; background: var(--green); transition: width 0.3s ease; }
+  .q-progress-fill.paused { background: #fdcb6e; }
 
   /* ── Overflow indicator ── */
   .project-block.overflow-block {
@@ -388,16 +425,16 @@
     pointer-events: none;
   }
 
-  /* ── Split button on block ── */
-  .block-split {
+  /* ── Settings button on block ── */
+  .block-settings {
     position: absolute; top: 4px; right: 26px; width: 20px; height: 20px;
     border-radius: 50%; border: none; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
-    font-size: 10px; opacity: 0; transition: opacity 0.15s;
+    font-size: 11px; opacity: 0; transition: opacity 0.15s;
     background: rgba(0,0,0,0.5); color: white;
   }
-  .project-block:hover .block-split { opacity: 1; }
-  .block-split:hover { background: var(--accent); }
+  .project-block:hover .block-settings { opacity: 1; }
+  .block-settings:hover { background: var(--accent); }
 
   /* ── Split modal ── */
   .split-modal-overlay {
@@ -432,6 +469,42 @@
   .split-existing-item {
     display: flex; justify-content: space-between; align-items: center;
     padding: 4px 0; font-size: 11px;
+  }
+
+  /* ── Settings modal tabs ── */
+  .settings-tabs {
+    display: flex; gap: 0; margin-bottom: 16px; border-bottom: 2px solid var(--border);
+  }
+  .settings-tab {
+    padding: 8px 16px; font-size: 12px; font-weight: 600; cursor: pointer;
+    border: none; background: none; color: var(--text2); transition: all 0.15s;
+    border-bottom: 2px solid transparent; margin-bottom: -2px;
+  }
+  .settings-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .settings-tab:hover:not(.active) { color: var(--text); }
+
+  /* ── Status radio group ── */
+  .status-radio-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+  .status-radio-option {
+    display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+    border-radius: 8px; border: 1px solid var(--border); cursor: pointer;
+    transition: all 0.15s;
+  }
+  .status-radio-option.selected { border-color: var(--accent); background: rgba(108, 92, 231, 0.1); }
+  .status-radio-option input[type="radio"] { accent-color: var(--accent); }
+  .status-radio-label { font-size: 12px; font-weight: 500; }
+  .status-radio-desc { font-size: 10px; color: var(--text2); }
+
+  /* ── Percent complete field ── */
+  .percent-field {
+    display: flex; align-items: center; gap: 8px; margin-top: 12px;
+    padding: 10px 12px; background: var(--bg); border-radius: 8px;
+  }
+  .percent-field label { font-size: 12px; font-weight: 500; white-space: nowrap; }
+  .percent-field input {
+    width: 70px; padding: 6px 8px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 4px;
+    color: var(--text); font-size: 12px; text-align: center;
   }
 
   /* ── Move button on block ── */
@@ -1109,12 +1182,16 @@ function DashboardView({ capacity, buffer, usedCapacity, bufferedUsed, totalDema
 
   // Projects by status (in roadmap vs backlog, in-progress vs not)
   const statusCounts = useMemo(() => {
-    let inRoadmap = 0, inBacklog = 0, inProgress = 0;
+    let inRoadmap = 0, inBacklog = 0, inProgress = 0, paused = 0;
     currentData.forEach(p => {
-      if (roadmapIds.has(p.id)) { inRoadmap++; if (p.inProgress) inProgress++; }
-      else inBacklog++;
+      if (roadmapIds.has(p.id)) {
+        inRoadmap++;
+        const s = CP.getProjectStatus(p);
+        if (s === 'in_progress') inProgress++;
+        else if (s === 'paused') paused++;
+      } else inBacklog++;
     });
-    return { inRoadmap, inBacklog, inProgress, total: currentData.length };
+    return { inRoadmap, inBacklog, inProgress, paused, total: currentData.length };
   }, [currentData, roadmapIds]);
 
   const barStyle = (used, total, color) => {
@@ -1142,7 +1219,7 @@ function DashboardView({ capacity, buffer, usedCapacity, bufferedUsed, totalDema
   return (
     <div style={{padding: '20px 24px', maxWidth: 1200, margin: '0 auto'}}>
       {/* Summary Cards */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(4, 1fr)',gap:12,marginBottom:20}}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(5, 1fr)',gap:12,marginBottom:20}}>
         <div style={{...cardStyle,textAlign:'center'}}>
           <div style={{fontSize:28,fontWeight:700,color:'var(--accent1)'}}>{statusCounts.total}</div>
           <div style={{fontSize:11,color:'var(--text2)'}}>Total Projects</div>
@@ -1154,6 +1231,10 @@ function DashboardView({ capacity, buffer, usedCapacity, bufferedUsed, totalDema
         <div style={{...cardStyle,textAlign:'center'}}>
           <div style={{fontSize:28,fontWeight:700,color:'#0984e3'}}>{statusCounts.inProgress}</div>
           <div style={{fontSize:11,color:'var(--text2)'}}>In Progress</div>
+        </div>
+        <div style={{...cardStyle,textAlign:'center'}}>
+          <div style={{fontSize:28,fontWeight:700,color:'#fdcb6e'}}>{statusCounts.paused}</div>
+          <div style={{fontSize:11,color:'var(--text2)'}}>Paused</div>
         </div>
         <div style={{...cardStyle,textAlign:'center'}}>
           <div style={{fontSize:28,fontWeight:700,color:'#e67e22'}}>{statusCounts.inBacklog}</div>
@@ -1395,7 +1476,7 @@ function App({ onLogout, user: authUser }) {
   const [bulkValue, setBulkValue] = useState('');
   const [saveStatus, setSaveStatus] = useState(null); // {type: 'ok'|'error', msg: '...'}
   // buffer is now stored inside verticalStates and persisted to the server
-  const [splitModal, setSplitModal] = useState(null); // { projectId, projectName, existing: {...} }
+  const [settingsModal, setSettingsModal] = useState(null); // { projectId, projectName, existing: {...} }
   const [showTimeline, setShowTimeline] = useState(false);
   const [showQuarterly, setShowQuarterly] = useState(false);
   const [tlSidebarOpen, setTlSidebarOpen] = useState(true);
@@ -2598,7 +2679,7 @@ function App({ onLogout, user: authUser }) {
     const isOverflow = overflowDisciplines && overflowDisciplines.length > 0;
     return (
       <div key={p.id}
-        className={`project-block ${p.inProgress ? 'in-progress' : ''} ${isOverflow ? 'overflow-block' : ''}`}
+        className={`project-block ${CP.getProjectStatus(p) === 'in_progress' ? 'in-progress' : ''} ${CP.getProjectStatus(p) === 'paused' ? 'paused' : ''} ${isOverflow ? 'overflow-block' : ''}`}
         style={{ width: w, height: BLOCK_HEIGHT, background: getBlockBg(p.pillar, pillarColorMap), cursor: isEditor ? 'grab' : 'default' }}
         draggable={isEditor}
         onDragStart={isEditor ? (e) => handleDragStart(e, p.id, lane) : undefined}
@@ -2623,11 +2704,17 @@ function App({ onLogout, user: authUser }) {
             <span className="block-sprints">{hasSplits && isTrack ? `${eff.total}/${s.total}sp` : `${s.total}sp`}</span>
           </div>
         </div>
+        {CP.getProjectStatus(p) === 'paused' && <div className="pause-overlay">⏸</div>}
+        {(CP.getProjectStatus(p) === 'in_progress' || CP.getProjectStatus(p) === 'paused') && CP.getPercentComplete(p) > 0 && (
+          <div className="block-progress-bar">
+            <div className={`block-progress-fill ${CP.getProjectStatus(p) === 'paused' ? 'paused' : ''}`} style={{width: `${CP.getPercentComplete(p)}%`}} />
+          </div>
+        )}
         {isTrack && isEditor && (
-          <button className="block-split"
-            onClick={(e) => { e.stopPropagation(); setSplitModal({ projectId: p.id, projectName: p.subTask, homeTrack: trackKey }); }}
-            title="Split to another swimlane">
-            ⑂
+          <button className="block-settings"
+            onClick={(e) => { e.stopPropagation(); setSettingsModal({ projectId: p.id, projectName: p.subTask, homeTrack: trackKey, tab: 'general' }); }}
+            title="Project settings">
+            ⚙
           </button>
         )}
         {isEditor && <button className="block-move"
@@ -3109,7 +3196,7 @@ function App({ onLogout, user: authUser }) {
     const laneOffset = quarterlyData.laneCount;
     for (const b of removed) {
       result.push({
-        project: { id: b.projectId, subTask: b.subTask, pillar: b.pillar, inProgress: b.inProgress },
+        project: { id: b.projectId, subTask: b.subTask, pillar: b.pillar, inProgress: b.inProgress, status: b.status, percentComplete: b.percentComplete },
         startQi: b.startQi, endQi: b.endQi, leftPct: b.leftPct, widthPct: b.widthPct,
         lane: laneOffset + b._lane,
         startDate: new Date(b.startDate), endDate: new Date(b.endDate),
@@ -3127,7 +3214,8 @@ function App({ onLogout, user: authUser }) {
     try {
       const serializedBlocks = quarterlyData.blocks.map(b => ({
         projectId: b.project.id, subTask: b.project.subTask, pillar: b.project.pillar,
-        inProgress: b.project.inProgress, startQi: b.startQi, endQi: b.endQi,
+        inProgress: b.project.inProgress, status: b.project.status, percentComplete: b.project.percentComplete,
+        startQi: b.startQi, endQi: b.endQi,
         leftPct: b.leftPct, widthPct: b.widthPct, lane: b.lane,
         startDate: b.startDate.toISOString(), endDate: b.endDate.toISOString(),
         startsBeforeWindow: b.startsBeforeWindow, endsAfterWindow: b.endsAfterWindow,
@@ -3239,6 +3327,7 @@ function App({ onLogout, user: authUser }) {
       id: maxId + 1, nvrd: '', masterEpic: '', subTask: 'New Project',
       pillar: '', targetMarket: '', targetKPI: '', impact: 'M',
       backend: '', frontend: '', natives: '', qa: '', inProgress: false,
+      status: 'not_started', percentComplete: 0,
     };
     const updated = [...currentData, newProject];
     setVerticalData(prev => ({ ...prev, [activeVertical]: updated }));
@@ -3272,7 +3361,9 @@ function App({ onLogout, user: authUser }) {
           'frontend': 'frontend', 'fe': 'frontend',
           'natives': 'natives', 'native': 'natives', 'mobile': 'natives',
           'qa': 'qa', 'quality': 'qa',
-          'inprogress': 'inProgress', 'progress': 'inProgress', 'status': 'inProgress',
+          'inprogress': 'inProgress', 'progress': 'inProgress',
+          'status': 'status',
+          'percentcomplete': 'percentComplete', 'percent': 'percentComplete', 'complete': 'percentComplete',
         };
 
         const normalize = (s) => s.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -3290,6 +3381,13 @@ function App({ onLogout, user: authUser }) {
             let val = String(row[excelCol] ?? '').trim();
             if (field === 'inProgress') {
               vals[field] = ['true', 'yes', '1', 'x'].includes(val.toLowerCase());
+            } else if (field === 'status') {
+              const lower = val.toLowerCase();
+              if (['in_progress', 'inprogress', 'in progress', 'started'].includes(lower)) vals[field] = 'in_progress';
+              else if (['paused', 'on hold', 'hold'].includes(lower)) vals[field] = 'paused';
+              else vals[field] = 'not_started';
+            } else if (field === 'percentComplete') {
+              vals[field] = Math.max(0, Math.min(100, parseInt(val) || 0));
             } else if (['backend', 'frontend', 'natives', 'qa'].includes(field)) {
               const upper = val.toUpperCase();
               vals[field] = VALID_SIZES.includes(upper) ? upper : '';
@@ -3332,6 +3430,7 @@ function App({ onLogout, user: authUser }) {
               id: maxId, nvrd: '', masterEpic: '', subTask: '',
               pillar: '', targetMarket: '', targetKPI: '', impact: 'M',
               backend: '', frontend: '', natives: '', qa: '', inProgress: false,
+              status: 'not_started', percentComplete: 0,
               ...vals,
             });
             addedCount++;
@@ -3627,6 +3726,12 @@ function App({ onLogout, user: authUser }) {
                 const total = (sz.backend||0) + (sz.frontend||0) + (sz.natives||0) + (sz.qa||0);
                 return `${label} ${total}sp`;
               }).join(', ')}
+            </div>
+          )}
+          {CP.getProjectStatus(p) !== 'not_started' && (
+            <div style={{fontSize:10,color: CP.getProjectStatus(p) === 'paused' ? '#fdcb6e' : 'var(--green)',marginTop:4,borderTop:'1px solid var(--border)',paddingTop:4}}>
+              {CP.getProjectStatus(p) === 'in_progress' ? '● In Progress' : '⏸ Paused'}
+              {CP.getPercentComplete(p) > 0 && ` — ${CP.getPercentComplete(p)}% complete`}
             </div>
           )}
         </div>
@@ -4227,7 +4332,7 @@ function App({ onLogout, user: authUser }) {
                           const dQ = d.qa||0;
                           return (
                           <div key={bar.ghost ? `g-${bar.project.id}` : bar.project.id}
-                            className={`tl-bar ${bar.ghost ? 'ghost' : ''} ${bar.project.inProgress ? 'in-progress' : ''} ${bar.hasOverride ? 'has-override' : ''}`}
+                            className={`tl-bar ${bar.ghost ? 'ghost' : ''} ${CP.getProjectStatus(bar.project) === 'in_progress' ? 'in-progress' : ''} ${CP.getProjectStatus(bar.project) === 'paused' ? 'paused' : ''} ${bar.hasOverride ? 'has-override' : ''}`}
                             style={{left: bar.left, width: bar.width, top: bar.laneIndex * 46 + 4, background: getBlockBg(bar.project.pillar, pillarColorMap), cursor: isEditor ? 'grab' : 'default'}}
                             data-name={bar.project.subTask}
                             onMouseEnter={(e) => handleMouseEnter(e, bar.project)}
@@ -4240,6 +4345,12 @@ function App({ onLogout, user: authUser }) {
                             </div>
                             {isEditor && <div className="tl-bar-handle right"
                               onMouseDown={e => handleBarDragStart(e, bar, 'right')} />}
+                            {CP.getProjectStatus(bar.project) === 'paused' && <div className="pause-overlay">⏸</div>}
+                            {(CP.getProjectStatus(bar.project) === 'in_progress' || CP.getProjectStatus(bar.project) === 'paused') && CP.getPercentComplete(bar.project) > 0 && (
+                              <div className="tl-progress-bar">
+                                <div className={`tl-progress-fill ${CP.getProjectStatus(bar.project) === 'paused' ? 'paused' : ''}`} style={{width: `${CP.getPercentComplete(bar.project)}%`}} />
+                              </div>
+                            )}
                           </div>
                           );
                         })}
@@ -4326,8 +4437,10 @@ function App({ onLogout, user: authUser }) {
                     )}
                     {blocksToRender.map((block) => {
                       const {project: p, startQi, endQi, leftPct, widthPct, lane, startDate, endDate, startsBeforeWindow, endsAfterWindow, diffType, oldBlock} = block;
+                      const pStatus = CP.getProjectStatus(p);
                       const cls = ['q-block',
-                        p.inProgress && diffType !== 'removed' ? 'in-progress' : '',
+                        pStatus === 'in_progress' && diffType !== 'removed' ? 'in-progress' : '',
+                        pStatus === 'paused' && diffType !== 'removed' ? 'paused' : '',
                         endsAfterWindow ? 'continues-right' : '',
                         startsBeforeWindow ? 'continues-left' : '',
                         diffType === 'removed' ? 'diff-removed' : '',
@@ -4362,6 +4475,12 @@ function App({ onLogout, user: authUser }) {
                             <div className="block-content">
                               <div className="block-title">{p.subTask}</div>
                             </div>
+                            {pStatus === 'paused' && diffType !== 'removed' && <div className="pause-overlay">⏸</div>}
+                            {(pStatus === 'in_progress' || pStatus === 'paused') && diffType !== 'removed' && CP.getPercentComplete(p) > 0 && (
+                              <div className="q-progress-bar">
+                                <div className={`q-progress-fill ${pStatus === 'paused' ? 'paused' : ''}`} style={{width: `${CP.getPercentComplete(p)}%`}} />
+                              </div>
+                            )}
                           </div>
                         </div>
                       );
@@ -4384,104 +4503,167 @@ function App({ onLogout, user: authUser }) {
         </div>
       )}
 
-      {splitModal && (() => {
-        const { projectId, projectName, homeTrack } = splitModal;
+      {settingsModal && (() => {
+        const { projectId, projectName, homeTrack } = settingsModal;
         const proj = projectById[projectId];
-        const fullSprints = proj ? projectSprints(proj) : { backend:0,frontend:0,natives:0,qa:0,total:0 };
+        if (!proj) return null;
+        const activeTab = settingsModal.tab || 'general';
+        const fullSprints = projectSprints(proj);
         const existingSplits = splits[projectId] || {};
         const otherTracks = TRACKS.filter(t => t.key !== homeTrack);
-        const [targetTrack, setTargetTrack] = [
-          splitModal._targetTrack || otherTracks[0]?.key,
-          (v) => setSplitModal(prev => ({ ...prev, _targetTrack: v }))
-        ];
-        const [splitSizing, setSplitSizing] = [
-          splitModal._sizing || existingSplits[targetTrack] || { backend: 0, frontend: 0, natives: 0, qa: 0 },
-          (v) => setSplitModal(prev => ({ ...prev, _sizing: typeof v === 'function' ? v(prev._sizing || existingSplits[prev._targetTrack || otherTracks[0]?.key] || { backend:0,frontend:0,natives:0,qa:0 }) : v }))
-        ];
-        // Calculate total split-out per discipline (existing + current form)
+
+        // Split tab state (preserved across tab switches)
+        const targetTrack = settingsModal._targetTrack || otherTracks[0]?.key;
+        const splitSizing = settingsModal._sizing || existingSplits[targetTrack] || { backend: 0, frontend: 0, natives: 0, qa: 0 };
+        const setSplitSizing = (v) => setSettingsModal(prev => ({ ...prev, _sizing: typeof v === 'function' ? v(prev._sizing || existingSplits[prev._targetTrack || otherTracks[0]?.key] || { backend:0,frontend:0,natives:0,qa:0 }) : v }));
+
+        // Split overflow calculations
         const allSplitOut = { backend:0, frontend:0, natives:0, qa:0 };
         for (const [tk, sz] of Object.entries(existingSplits)) {
-          if (tk === targetTrack) continue; // current form replaces this track's split
-          allSplitOut.backend += (sz.backend||0);
-          allSplitOut.frontend += (sz.frontend||0);
-          allSplitOut.natives += (sz.natives||0);
-          allSplitOut.qa += (sz.qa||0);
+          if (tk === targetTrack) continue;
+          allSplitOut.backend += (sz.backend||0); allSplitOut.frontend += (sz.frontend||0);
+          allSplitOut.natives += (sz.natives||0); allSplitOut.qa += (sz.qa||0);
         }
-        // Add current form values
         const totalOut = {
-          backend: allSplitOut.backend + (splitSizing.backend||0),
-          frontend: allSplitOut.frontend + (splitSizing.frontend||0),
-          natives: allSplitOut.natives + (splitSizing.natives||0),
-          qa: allSplitOut.qa + (splitSizing.qa||0),
+          backend: allSplitOut.backend + (splitSizing.backend||0), frontend: allSplitOut.frontend + (splitSizing.frontend||0),
+          natives: allSplitOut.natives + (splitSizing.natives||0), qa: allSplitOut.qa + (splitSizing.qa||0),
         };
         const remaining = {
-          backend: fullSprints.backend - totalOut.backend,
-          frontend: fullSprints.frontend - totalOut.frontend,
-          natives: fullSprints.natives - totalOut.natives,
-          qa: fullSprints.qa - totalOut.qa,
+          backend: fullSprints.backend - totalOut.backend, frontend: fullSprints.frontend - totalOut.frontend,
+          natives: fullSprints.natives - totalOut.natives, qa: fullSprints.qa - totalOut.qa,
         };
         const hasOverSplit = remaining.backend < 0 || remaining.frontend < 0 || remaining.natives < 0 || remaining.qa < 0;
         const homeLabel = TRACKS.find(t => t.key === homeTrack)?.label || homeTrack;
+
+        // General tab helpers
+        const currentStatus = CP.getProjectStatus(proj);
+        const currentPct = CP.getPercentComplete(proj);
+        const updateProjectFields = (updates) => {
+          const updated = currentData.map(p => p.id === projectId ? { ...p, ...updates } : p);
+          setVerticalData(prev => ({ ...prev, [activeVertical]: updated }));
+          debouncedSaveProjects(activeVertical, updated);
+        };
+        const setStatus = (newStatus) => {
+          const updates = { status: newStatus, inProgress: (newStatus === 'in_progress' || newStatus === 'paused') };
+          if (newStatus === 'not_started') { updates.percentComplete = 0; }
+          updateProjectFields(updates);
+        };
+        const setPct = (val) => {
+          const clamped = Math.max(0, Math.min(100, parseInt(val) || 0));
+          updateProjectFields({ percentComplete: clamped });
+        };
+
         return (
-          <div className="split-modal-overlay" onClick={() => setSplitModal(null)}>
-            <div className="split-modal" onClick={e => e.stopPropagation()}>
-              <h3>Split: {projectName}</h3>
-              <div style={{fontSize:11,color:'var(--text2)',marginBottom:8}}>
-                Full sizing: B{fullSprints.backend} F{fullSprints.frontend} N{fullSprints.natives} Q{fullSprints.qa} = {fullSprints.total}sp
+          <div className="split-modal-overlay" onClick={() => setSettingsModal(null)}>
+            <div className="split-modal" onClick={e => e.stopPropagation()} style={{minWidth: 380}}>
+              <h3 style={{display:'flex',alignItems:'center',gap:6}}>⚙ {projectName}</h3>
+
+              {/* Tab bar */}
+              <div className="settings-tabs">
+                <button className={`settings-tab ${activeTab === 'general' ? 'active' : ''}`}
+                  onClick={() => setSettingsModal(prev => ({...prev, tab: 'general'}))}>General</button>
+                <button className={`settings-tab ${activeTab === 'split' ? 'active' : ''}`}
+                  onClick={() => setSettingsModal(prev => ({...prev, tab: 'split'}))}>Split</button>
               </div>
-              {Object.keys(existingSplits).length > 0 && (
-                <div className="split-existing">
-                  <div style={{fontSize:10,color:'var(--text2)',marginBottom:4,fontWeight:600}}>EXISTING SPLITS</div>
-                  {Object.entries(existingSplits).map(([tk, sz]) => {
-                    const tLabel = TRACKS.find(t => t.key === tk)?.label || tk;
-                    const total = (sz.backend||0) + (sz.frontend||0) + (sz.natives||0) + (sz.qa||0);
-                    return (
-                      <div key={tk} className="split-existing-item">
-                        <span>{tLabel}: B{sz.backend||0} F{sz.frontend||0} N{sz.natives||0} Q{sz.qa||0} = {total}sp</span>
-                        <button className="btn-sm" style={{fontSize:10,padding:'2px 6px',background:'var(--red)',color:'white',border:'none',borderRadius:3,cursor:'pointer'}}
-                          onClick={() => { removeSplit(projectId, tk); setSplitModal(prev => ({...prev})); }}>Remove</button>
+
+              {/* ── General Tab ── */}
+              {activeTab === 'general' && (
+                <div>
+                  <div style={{fontSize:11, color:'var(--text2)', marginBottom:8, fontWeight:600}}>STATUS</div>
+                  <div className="status-radio-group">
+                    {[
+                      { value: 'not_started', label: 'Not Started', desc: 'Work has not begun', icon: '○' },
+                      { value: 'in_progress', label: 'In Progress', desc: 'Actively being worked on', icon: '●' },
+                      { value: 'paused', label: 'Paused', desc: 'Work temporarily halted', icon: '⏸' },
+                    ].map(opt => (
+                      <label key={opt.value} className={`status-radio-option ${currentStatus === opt.value ? 'selected' : ''}`}>
+                        <input type="radio" name="project-status" value={opt.value}
+                          checked={currentStatus === opt.value} onChange={() => setStatus(opt.value)} />
+                        <div>
+                          <div className="status-radio-label">{opt.icon} {opt.label}</div>
+                          <div className="status-radio-desc">{opt.desc}</div>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                  {(currentStatus === 'in_progress' || currentStatus === 'paused') && (
+                    <div className="percent-field">
+                      <label>% Complete</label>
+                      <input type="number" min="0" max="100" value={currentPct}
+                        onChange={e => setPct(e.target.value)} />
+                      <span style={{fontSize:11, color:'var(--text2)'}}>%</span>
+                      <div style={{flex:1, height:6, background:'rgba(0,0,0,0.2)', borderRadius:3, overflow:'hidden', marginLeft:8}}>
+                        <div style={{height:'100%', width:`${currentPct}%`, background: currentStatus === 'paused' ? '#fdcb6e' : 'var(--green)', transition:'width 0.2s', borderRadius:3}} />
                       </div>
-                    );
-                  })}
+                    </div>
+                  )}
+                  <div className="split-modal-actions" style={{marginTop: 16}}>
+                    <button className="btn-cancel" onClick={() => setSettingsModal(null)}>Close</button>
+                  </div>
                 </div>
               )}
-              <div className="split-modal-fields">
-                <div className="split-field-row">
-                  <label>Target Lane</label>
-                  <select value={targetTrack} onChange={e => {
-                    const newTrack = e.target.value;
-                    setSplitModal(prev => ({ ...prev, _targetTrack: newTrack, _sizing: existingSplits[newTrack] || { backend:0, frontend:0, natives:0, qa:0 } }));
-                  }}>
-                    {otherTracks.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
-                  </select>
-                </div>
-                {['backend','frontend','natives','qa'].map(d => {
-                  const max = fullSprints[d] - allSplitOut[d];
-                  const isOver = (splitSizing[d]||0) > max;
-                  return (
-                    <div key={d} className="split-field-row">
-                      <label>{d.charAt(0).toUpperCase()+d.slice(1)}</label>
-                      <input type="number" min="0" max={max} step="0.5" value={splitSizing[d] || 0}
-                        style={isOver ? {borderColor:'var(--red)',color:'var(--red)'} : {}}
-                        onChange={e => setSplitSizing(prev => ({...prev, [d]: parseFloat(e.target.value)||0}))} />
-                      <span style={{fontSize:10,color: isOver ? 'var(--red)' : 'var(--text2)'}}> / {max}sp max</span>
+
+              {/* ── Split Tab ── */}
+              {activeTab === 'split' && (
+                <div>
+                  <div style={{fontSize:11,color:'var(--text2)',marginBottom:8}}>
+                    Full sizing: B{fullSprints.backend} F{fullSprints.frontend} N{fullSprints.natives} Q{fullSprints.qa} = {fullSprints.total}sp
+                  </div>
+                  {Object.keys(existingSplits).length > 0 && (
+                    <div className="split-existing">
+                      <div style={{fontSize:10,color:'var(--text2)',marginBottom:4,fontWeight:600}}>EXISTING SPLITS</div>
+                      {Object.entries(existingSplits).map(([tk, sz]) => {
+                        const tLabel = TRACKS.find(t => t.key === tk)?.label || tk;
+                        const total = (sz.backend||0) + (sz.frontend||0) + (sz.natives||0) + (sz.qa||0);
+                        return (
+                          <div key={tk} className="split-existing-item">
+                            <span>{tLabel}: B{sz.backend||0} F{sz.frontend||0} N{sz.natives||0} Q{sz.qa||0} = {total}sp</span>
+                            <button className="btn-sm" style={{fontSize:10,padding:'2px 6px',background:'var(--red)',color:'white',border:'none',borderRadius:3,cursor:'pointer'}}
+                              onClick={() => { removeSplit(projectId, tk); setSettingsModal(prev => ({...prev})); }}>Remove</button>
+                          </div>
+                        );
+                      })}
                     </div>
-                  );
-                })}
-              </div>
-              <div style={{fontSize:11,margin:'8px 0',padding:'6px 8px',borderRadius:6,background: hasOverSplit ? 'rgba(225,112,85,0.15)' : 'rgba(0,184,148,0.1)',border: `1px solid ${hasOverSplit ? 'var(--red)' : 'var(--green)'}`}}>
-                Remaining in <strong>{homeLabel}</strong>: B{remaining.backend} F{remaining.frontend} N{remaining.natives} Q{remaining.qa}
-                {hasOverSplit && <span style={{color:'var(--red)',fontWeight:600}}> — over-split!</span>}
-              </div>
-              <div className="split-modal-actions">
-                <button className="btn-cancel" onClick={() => setSplitModal(null)}>Cancel</button>
-                <button className="btn-save" onClick={() => {
-                  const finalTarget = splitModal._targetTrack || otherTracks[0]?.key;
-                  const finalSizing = splitModal._sizing || existingSplits[finalTarget] || { backend:0,frontend:0,natives:0,qa:0 };
-                  saveSplit(projectId, finalTarget, finalSizing);
-                  setSplitModal(null);
-                }}>Save Split</button>
-              </div>
+                  )}
+                  <div className="split-modal-fields">
+                    <div className="split-field-row">
+                      <label>Target Lane</label>
+                      <select value={targetTrack} onChange={e => {
+                        const newTrack = e.target.value;
+                        setSettingsModal(prev => ({ ...prev, _targetTrack: newTrack, _sizing: existingSplits[newTrack] || { backend:0, frontend:0, natives:0, qa:0 } }));
+                      }}>
+                        {otherTracks.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+                      </select>
+                    </div>
+                    {['backend','frontend','natives','qa'].map(d => {
+                      const max = fullSprints[d] - allSplitOut[d];
+                      const isOver = (splitSizing[d]||0) > max;
+                      return (
+                        <div key={d} className="split-field-row">
+                          <label>{d.charAt(0).toUpperCase()+d.slice(1)}</label>
+                          <input type="number" min="0" max={max} step="0.5" value={splitSizing[d] || 0}
+                            style={isOver ? {borderColor:'var(--red)',color:'var(--red)'} : {}}
+                            onChange={e => setSplitSizing(prev => ({...prev, [d]: parseFloat(e.target.value)||0}))} />
+                          <span style={{fontSize:10,color: isOver ? 'var(--red)' : 'var(--text2)'}}> / {max}sp max</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{fontSize:11,margin:'8px 0',padding:'6px 8px',borderRadius:6,background: hasOverSplit ? 'rgba(225,112,85,0.15)' : 'rgba(0,184,148,0.1)',border: `1px solid ${hasOverSplit ? 'var(--red)' : 'var(--green)'}`}}>
+                    Remaining in <strong>{homeLabel}</strong>: B{remaining.backend} F{remaining.frontend} N{remaining.natives} Q{remaining.qa}
+                    {hasOverSplit && <span style={{color:'var(--red)',fontWeight:600}}> — over-split!</span>}
+                  </div>
+                  <div className="split-modal-actions">
+                    <button className="btn-cancel" onClick={() => setSettingsModal(null)}>Cancel</button>
+                    <button className="btn-save" onClick={() => {
+                      const finalTarget = settingsModal._targetTrack || otherTracks[0]?.key;
+                      const finalSizing = settingsModal._sizing || existingSplits[finalTarget] || { backend:0,frontend:0,natives:0,qa:0 };
+                      saveSplit(projectId, finalTarget, finalSizing);
+                      setSettingsModal(null);
+                    }}>Save Split</button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         );

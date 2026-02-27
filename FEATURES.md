@@ -49,7 +49,9 @@ Projects are the core data entity. Each project has metadata fields and size est
 - `targetKPI` — target metric (Revenue, Experience, Efficiency)
 - `impact` — estimated impact size (XS to XXXL)
 - `backend`, `frontend`, `natives`, `qa` — discipline size estimates (XS to XXXL)
-- `inProgress` — whether work has started
+- `inProgress` — whether work has started (kept in sync with `status` for backward compatibility)
+- `status` — project status: `not_started` (default), `in_progress`, or `paused`
+- `percentComplete` — completion percentage (0-100), only meaningful when status is `in_progress` or `paused`
 
 **Validation:** Size fields accept only: empty, XS, S, M, L, XL, XXL, XXXL.
 
@@ -88,16 +90,33 @@ Blocks within each swimlane track can be reordered via drag-and-drop.
 
 **State field:** `trackBlockOrder`
 
-### 6. Project Splits
+### 6. Project Settings Modal & Splits
 
-A project can be "split" across two swimlane tracks. When split, a portion of its story points is allocated to a target track while the remainder stays in the original track.
+A gear icon (`⚙`) on each track block opens a tabbed **Project Settings Modal** with two tabs:
 
+**General Tab — Status & Progress:**
+- Three status options via radio buttons: **Not Started** (default), **In Progress**, **Paused**
+- When In Progress or Paused, a **% Complete** field (0-100) appears
+- Status changes are saved immediately to the project data
+- `inProgress` boolean is kept in sync for backward compatibility
+
+**Split Tab — Track Allocation:**
+- A project can be "split" across two swimlane tracks
 - Split configuration: target track + SP allocation per discipline
 - Creates a "ghost block" in the target track representing the split portion
 - Ghost blocks appear in the ordering as `ghost:{projectId}`
 - Split can be created, modified, or removed
 
+**Visual indicators** (applied in roadmap, timeline, and quarterly views):
+- **Not Started**: Default appearance, no special styling
+- **In Progress**: Green inset border (`box-shadow: inset 0 0 0 2px var(--green)`) + green progress bar at block bottom
+- **Paused**: Reduced opacity (0.55), muted border, centered pause icon (`⏸`) overlay, yellow (`#fdcb6e`) progress bar
+- **Progress bar**: Thin bar (3-4px) at the bottom of each block, fills proportionally based on % complete
+
+**Project fields:** `status` (`not_started` | `in_progress` | `paused`), `percentComplete` (0-100)
 **State field:** `splits` — `{ projectId: { targetTrack, backend, frontend, natives, qa } }`
+
+**Files:** `index.html` (settings modal, block rendering), `shared/computations.js` (`getProjectStatus`, `getPercentComplete`)
 
 ### 7. Timeline View
 
@@ -383,10 +402,10 @@ npm run test:ws         # WebSocket tests only
 npm run test:coverage   # Run with coverage report
 ```
 
-**Test coverage (313 tests across 7 files):**
-- **computations.test.js** (111 tests) — Shared pure functions (sizeToSprints, projectSprints, effectiveSprints, deepMerge, migration, capacity, overflow, filter/sort)
+**Test coverage (330+ tests across 7 files):**
+- **computations.test.js** (121+ tests) — Shared pure functions (sizeToSprints, projectSprints, effectiveSprints, deepMerge, migration, capacity, overflow, filter/sort, getProjectStatus, getPercentComplete)
 - **helpers.test.js** (62 tests) — Unit tests for buildNarratives (all 12 field types), findMovedItem, describeStateChanges, summarizeValue, loadJSON/saveJSON, logAudit
-- **api.test.js** (55 tests) — Integration tests for all endpoints, project validation, track cleanup, state merge with conflict resolution, audit log filtering
+- **api.test.js** (62+ tests) — Integration tests for all endpoints, project validation (incl. status/percentComplete), track cleanup, state merge with conflict resolution, audit log filtering
 - **sanitization.test.js** (30 tests) — Input sanitization and XSS prevention
 - **snapshots.test.js** (23 tests) — Snapshot CRUD, workspace GET/PUT, promote, sourceSnapshotId, audit log integration
 - **exco-signoff.test.js** (21 tests) — ExCo CRUD, sign-off creation/listing/retrieval, admin-only sign-off deletion

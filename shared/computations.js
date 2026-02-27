@@ -314,6 +314,17 @@ function sortProjects(projects, sortBy, sizeMap) {
   });
 }
 
+// ── Project Status Helpers ──
+
+function getProjectStatus(p) {
+  if (p && p.status) return p.status;
+  return (p && p.inProgress) ? 'in_progress' : 'not_started';
+}
+
+function getPercentComplete(p) {
+  return (p && typeof p.percentComplete === 'number') ? p.percentComplete : 0;
+}
+
 // ── UI Helpers ──
 
 function getCapColor(pct) {
@@ -339,6 +350,7 @@ return {
   computeGhostsByTrack, computeTrackUsed, computeTrackOverflow,
   filterProjects, sortProjects,
   getCapColor, getBlockBg,
+  getProjectStatus, getPercentComplete,
 };
 
 })();

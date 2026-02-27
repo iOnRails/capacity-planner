@@ -970,3 +970,60 @@ describe('buildPillarColorMap', () => {
     expect(map1).toEqual(map2);
   });
 });
+
+// ═══════════════════════════════════════════════════════════
+// getProjectStatus
+// ═══════════════════════════════════════════════════════════
+describe('getProjectStatus', () => {
+  test('returns status field when present', () => {
+    expect(CP.getProjectStatus({ status: 'in_progress' })).toBe('in_progress');
+    expect(CP.getProjectStatus({ status: 'paused' })).toBe('paused');
+    expect(CP.getProjectStatus({ status: 'not_started' })).toBe('not_started');
+  });
+
+  test('falls back to inProgress boolean when no status field', () => {
+    expect(CP.getProjectStatus({ inProgress: true })).toBe('in_progress');
+    expect(CP.getProjectStatus({ inProgress: false })).toBe('not_started');
+  });
+
+  test('defaults to not_started for empty/missing fields', () => {
+    expect(CP.getProjectStatus({})).toBe('not_started');
+    expect(CP.getProjectStatus({ inProgress: undefined })).toBe('not_started');
+  });
+
+  test('status field takes precedence over inProgress boolean', () => {
+    expect(CP.getProjectStatus({ status: 'paused', inProgress: true })).toBe('paused');
+    expect(CP.getProjectStatus({ status: 'not_started', inProgress: true })).toBe('not_started');
+  });
+
+  test('handles null/undefined project gracefully', () => {
+    expect(CP.getProjectStatus(null)).toBe('not_started');
+    expect(CP.getProjectStatus(undefined)).toBe('not_started');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════
+// getPercentComplete
+// ═══════════════════════════════════════════════════════════
+describe('getPercentComplete', () => {
+  test('returns percentComplete when present', () => {
+    expect(CP.getPercentComplete({ percentComplete: 75 })).toBe(75);
+    expect(CP.getPercentComplete({ percentComplete: 0 })).toBe(0);
+    expect(CP.getPercentComplete({ percentComplete: 100 })).toBe(100);
+  });
+
+  test('defaults to 0 when absent', () => {
+    expect(CP.getPercentComplete({})).toBe(0);
+    expect(CP.getPercentComplete({ percentComplete: undefined })).toBe(0);
+  });
+
+  test('defaults to 0 for non-number values', () => {
+    expect(CP.getPercentComplete({ percentComplete: 'fifty' })).toBe(0);
+    expect(CP.getPercentComplete({ percentComplete: null })).toBe(0);
+  });
+
+  test('handles null/undefined project gracefully', () => {
+    expect(CP.getPercentComplete(null)).toBe(0);
+    expect(CP.getPercentComplete(undefined)).toBe(0);
+  });
+});

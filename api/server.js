@@ -779,6 +779,19 @@ function saveProjectsHandler(req, res) {
         return res.status(400).json({ error: `Project ${p.id}: invalid ${f} size "${p[f]}"` });
       }
     }
+    // Validate status field if present
+    const VALID_STATUSES = new Set(['not_started', 'in_progress', 'paused']);
+    if (p.status && !VALID_STATUSES.has(p.status)) {
+      return res.status(400).json({ error: `Project ${p.id}: invalid status "${p.status}"` });
+    }
+    // Validate percentComplete if present
+    if (p.percentComplete != null) {
+      const pct = Number(p.percentComplete);
+      if (isNaN(pct) || pct < 0 || pct > 100) {
+        return res.status(400).json({ error: `Project ${p.id}: percentComplete must be 0-100` });
+      }
+      p.percentComplete = pct;
+    }
   }
 
   try {
