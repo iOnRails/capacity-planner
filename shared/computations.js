@@ -8,16 +8,16 @@ var CP = (function() {
 const DEFAULT_SIZE_MAP = { XS: 0.5, S: 1, M: 2, L: 3, XL: 5, XXL: 8, XXXL: 13 };
 const TRACK_KEYS = ['core-bonus', 'gateway', 'seo-aff'];
 const DEFAULT_TRACK_CONFIG = [
-  { key: 'core-bonus', label: 'Core Bonus', color: '#fdcb6e' },
-  { key: 'gateway', label: 'Gateway', color: '#e84393' },
-  { key: 'seo-aff', label: 'SEO & AFF', color: '#00b894' },
+  { key: 'core-bonus', label: 'Core Bonus', color: '#636e72' },
+  { key: 'gateway', label: 'Gateway', color: '#636e72' },
+  { key: 'seo-aff', label: 'SEO & AFF', color: '#636e72' },
 ];
 const DISCIPLINES = ['backend', 'frontend', 'natives', 'qa'];
 const ZERO_DISC = () => ({ backend: 0, frontend: 0, natives: 0, qa: 0 });
 const IMPACT_ORDER = { XXXL: 7, XXL: 6, XL: 5, L: 4, M: 3, S: 2, XS: 1 };
 const PILLAR_PALETTE = [
-  '#00b894', '#0984e3', '#6c5ce7', '#e67e22', '#e84393', '#fdcb6e',
-  '#e74c3c', '#1abc9c', '#9b59b6', '#2ecc71', '#f39c12', '#3498db',
+  '#0984e3', '#6c5ce7', '#e67e22', '#e74c3c',
+  '#1abc9c', '#9b59b6', '#2ecc71', '#f39c12', '#3498db',
   '#d35400', '#8e44ad', '#16a085', '#c0392b',
 ];
 
